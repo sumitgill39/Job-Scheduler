@@ -51,33 +51,7 @@ def create_routes(app):
     @app.route('/jobs')
     def job_list():
         """Job list page"""
-        try:
-            scheduler = getattr(app, 'scheduler_manager', None)
-            if not scheduler:
-                flash('Scheduler not available', 'error')
-                return redirect(url_for('index'))
-            
-            jobs = scheduler.get_all_jobs()  # Returns dict {job_id: job_object}
-            job_list = []
-            
-            for job_id, job in jobs.items():
-                job_data = {
-                    'id': job.job_id,
-                    'name': job.name,
-                    'type': job.job_type,
-                    'enabled': job.enabled,
-                    'status': job.current_status.value,
-                    'last_run': job.last_run_time.strftime('%Y-%m-%d %H:%M:%S') if job.last_run_time else 'Never',
-                    'is_running': job.is_running
-                }
-                job_list.append(job_data)
-            
-            return render_template('job_list.html', jobs=job_list)
-        
-        except Exception as e:
-            logger.error(f"Job list error: {e}")
-            flash(f'Error loading jobs: {str(e)}', 'error')
-            return redirect(url_for('index'))
+        return render_template('job_list.html')
     
     @app.route('/jobs/create')
     def create_job():
