@@ -25,7 +25,7 @@ scheduler:
 
 # Logging Configuration
 logging:
-  log_file: "logs\\scheduler.log"
+  log_file: "logs/scheduler.log"
   max_file_size: "10MB"
   backup_count: 5
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -39,7 +39,7 @@ windows:
 # Job Storage (YAML-based by default)
 storage:
   type: "yaml"  # yaml or database
-  yaml_file: "config\\jobs.yaml"
+  yaml_file: "config/jobs.yaml"
   
 # Security Settings
 security:

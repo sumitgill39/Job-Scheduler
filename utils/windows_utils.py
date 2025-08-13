@@ -5,16 +5,32 @@ Windows-specific utilities for Job Scheduler
 import os
 import sys
 import subprocess
-import psutil
-import win32api
-import win32con
-import win32security
-import win32net
-import win32netcon
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import re
 from .logger import get_logger
+
+# Import Windows-specific modules with error handling
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+try:
+    import win32api
+    import win32con
+    import win32security
+    import win32net
+    import win32netcon
+    HAS_WIN32 = True
+except ImportError:
+    HAS_WIN32 = False
+    # Mock objects for when win32 is not available
+    win32api = None
+    win32con = None
+    win32security = None
+    win32net = None
+    win32netcon = None
 
 
 class WindowsUtils:
@@ -30,6 +46,13 @@ class WindowsUtils:
     
     def get_windows_version(self) -> Dict[str, str]:
         """Get Windows version information"""
+        if not HAS_WIN32 or not win32api:
+            return {
+                'error': 'Win32 API not available',
+                'platform': sys.platform,
+                'version': 'Unknown'
+            }
+        
         try:
             version_info = win32api.GetVersionEx()
             return {
@@ -37,7 +60,7 @@ class WindowsUtils:
                 'minor': str(version_info[1]),
                 'build': str(version_info[2]),
                 'platform': str(version_info[3]),
-                'version_string': win32api.GetVersion()
+                'version_string': str(win32api.GetVersion())
             }
         except Exception as e:
             self.logger.error(f"Could not get Windows version: {e}")
@@ -45,6 +68,15 @@ class WindowsUtils:
     
     def get_current_user(self) -> Dict[str, str]:
         """Get current Windows user information"""
+        if not HAS_WIN32 or not win32api:
+            username = os.getenv('USERNAME', 'Unknown')
+            domain = os.getenv('USERDOMAIN', 'Unknown')
+            return {
+                'username': username,
+                'domain': domain,
+                'full_name': f"{domain}\\{username}" if domain != 'Unknown' else username
+            }
+        
         try:
             username = win32api.GetUserName()
             domain = win32api.GetDomainName()
@@ -60,6 +92,10 @@ class WindowsUtils:
     
     def validate_domain_user(self, domain: str, username: str) -> bool:
         """Validate if domain user exists"""
+        if not HAS_WIN32 or not win32net:
+            self.logger.warning("Win32 API not available, skipping domain user validation")
+            return True  # Assume valid when can't validate
+        
         try:
             # Try to get user info
             user_info = win32net.NetUserGetInfo(domain, username, 1)
@@ -70,6 +106,17 @@ class WindowsUtils:
     
     def check_admin_privileges(self) -> bool:
         """Check if running with administrator privileges"""
+        if not HAS_WIN32 or not win32security:
+            # Fallback: check if we can write to system directories
+            try:
+                test_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'temp_admin_test')
+                with open(test_path, 'w') as f:
+                    f.write('test')
+                os.unlink(test_path)
+                return True
+            except:
+                return False
+        
         try:
             return win32security.GetTokenInformation(
                 win32security.GetCurrentProcessToken(),
@@ -228,18 +275,28 @@ class WindowsUtils:
     def get_system_info(self) -> Dict[str, any]:
         """Get Windows system information"""
         try:
-            return {
+            info = {
                 'platform': sys.platform,
                 'architecture': os.environ.get('PROCESSOR_ARCHITECTURE', 'Unknown'),
                 'computer_name': os.environ.get('COMPUTERNAME', 'Unknown'),
                 'domain': os.environ.get('USERDOMAIN', 'Unknown'),
                 'username': os.environ.get('USERNAME', 'Unknown'),
                 'cpu_count': os.cpu_count(),
-                'memory_total_gb': round(psutil.virtual_memory().total / (1024**3), 2),
                 'windows_version': self.get_windows_version(),
                 'is_admin': self.check_admin_privileges(),
                 'powershell_path': self.get_powershell_path()
             }
+            
+            # Add memory info if psutil is available
+            if psutil:
+                try:
+                    info['memory_total_gb'] = round(psutil.virtual_memory().total / (1024**3), 2)
+                except:
+                    info['memory_total_gb'] = 'Unknown'
+            else:
+                info['memory_total_gb'] = 'Unknown (psutil not available)'
+                
+            return info
         except Exception as e:
             self.logger.error(f"Could not get system info: {e}")
             return {'error': str(e)}
@@ -281,6 +338,10 @@ class WindowsUtils:
     
     def check_process_running(self, process_name: str) -> List[Dict[str, any]]:
         """Check if process is running"""
+        if not psutil:
+            self.logger.warning("psutil not available, cannot check running processes")
+            return []
+            
         try:
             processes = []
             for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline']):
@@ -303,6 +364,21 @@ class WindowsUtils:
     
     def get_available_drives(self) -> List[Dict[str, str]]:
         """Get available Windows drives"""
+        if not psutil:
+            self.logger.warning("psutil not available, cannot get drive information")
+            # Basic fallback - just list common drives
+            drives = []
+            for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+                drive_path = f"{letter}:\\"
+                if os.path.exists(drive_path):
+                    drives.append({
+                        'drive': drive_path,
+                        'mountpoint': drive_path,
+                        'fstype': 'Unknown',
+                        'status': 'Available (limited info)'
+                    })
+            return drives
+            
         try:
             drives = []
             for partition in psutil.disk_partitions():

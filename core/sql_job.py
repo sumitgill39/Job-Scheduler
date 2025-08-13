@@ -2,11 +2,18 @@
 SQL Job implementation for Windows Job Scheduler
 """
 
-import pyodbc
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
 from .job_base import JobBase, JobResult, JobStatus
 from database.connection_manager import DatabaseConnectionManager
+
+# Import pyodbc with error handling
+try:
+    import pyodbc
+    HAS_PYODBC = True
+except ImportError:
+    HAS_PYODBC = False
+    pyodbc = None
 
 
 class SqlJob(JobBase):
@@ -45,6 +52,16 @@ class SqlJob(JobBase):
     def execute(self) -> JobResult:
         """Execute SQL query"""
         start_time = datetime.now()
+        
+        if not HAS_PYODBC:
+            return JobResult(
+                job_id=self.job_id,
+                job_name=self.name,
+                status=JobStatus.FAILED,
+                start_time=start_time,
+                end_time=datetime.now(),
+                error_message="pyodbc not available - SQL Server drivers not installed"
+            )
         
         try:
             self.job_logger.info(f"Executing SQL query on connection: {self.connection_name}")

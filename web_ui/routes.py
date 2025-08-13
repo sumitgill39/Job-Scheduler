@@ -385,8 +385,12 @@ def create_routes(app):
                     return jsonify({'success': False, 'error': f'{field} is required'}), 400
             
             # Import required modules
-            import pyodbc
             import time
+            try:
+                import pyodbc
+                has_pyodbc = True
+            except ImportError:
+                has_pyodbc = False
             
             # Build connection string directly for testing
             server = data.get('server')
@@ -431,6 +435,13 @@ def create_routes(app):
             ])
             
             connection_string = ";".join(components)
+            
+            # Check if pyodbc is available
+            if not has_pyodbc:
+                return jsonify({
+                    'success': False,
+                    'error': 'pyodbc not available - ODBC drivers not installed'
+                }), 500
             
             # Test the connection
             start_time = time.time()

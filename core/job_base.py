@@ -208,56 +208,83 @@ class JobBase(ABC):
     
     def _execute_with_timeout(self) -> JobResult:
         """Execute job with timeout handling"""
+        import threading
         import signal
         
-        def timeout_handler(signum, frame):
-            raise TimeoutError(f"Job execution timed out after {self.timeout} seconds")
-        
         start_time = datetime.now()
+        result_container = [None]
+        exception_container = [None]
         
-        try:
-            # Set up timeout (Windows doesn't support SIGALRM, so we'll use threading)
-            if hasattr(signal, 'SIGALRM'):
-                # Unix-like systems
+        def execute_job():
+            try:
+                result_container[0] = self.execute()
+            except Exception as e:
+                exception_container[0] = e
+        
+        # Windows doesn't support SIGALRM, so use threading for timeout
+        if sys.platform == "win32":
+            # Use threading for timeout on Windows
+            thread = threading.Thread(target=execute_job, daemon=True)
+            thread.start()
+            thread.join(timeout=self.timeout)
+            
+            if thread.is_alive():
+                # Thread is still running, job timed out
+                self.job_logger.error(f"Job execution timed out after {self.timeout} seconds")
+                return JobResult(
+                    job_id=self.job_id,
+                    job_name=self.name,
+                    status=JobStatus.TIMEOUT,
+                    start_time=start_time,
+                    end_time=datetime.now(),
+                    error_message=f"Job execution timed out after {self.timeout} seconds",
+                    retry_count=self.retry_count,
+                    max_retries=self.max_retries
+                )
+        else:
+            # Unix-like systems can use signals
+            def timeout_handler(signum, frame):
+                raise TimeoutError(f"Job execution timed out after {self.timeout} seconds")
+            
+            try:
                 signal.signal(signal.SIGALRM, timeout_handler)
                 signal.alarm(self.timeout)
-            
-            # Execute the actual job
-            result = self.execute()
-            
-            if hasattr(signal, 'SIGALRM'):
+                execute_job()
                 signal.alarm(0)  # Cancel the alarm
-            
+            except TimeoutError as e:
+                return JobResult(
+                    job_id=self.job_id,
+                    job_name=self.name,
+                    status=JobStatus.TIMEOUT,
+                    start_time=start_time,
+                    end_time=datetime.now(),
+                    error_message=str(e),
+                    retry_count=self.retry_count,
+                    max_retries=self.max_retries
+                )
+        
+        # Check if job completed successfully
+        if exception_container[0]:
+            raise exception_container[0]
+        
+        if result_container[0]:
+            result = result_container[0]
             result.start_time = start_time
             if not result.end_time:
                 result.end_time = datetime.now()
-            
             return result
-            
-        except TimeoutError as e:
-            self.job_logger.error(f"Job execution timed out: {e}")
-            return JobResult(
-                job_id=self.job_id,
-                job_name=self.name,
-                status=JobStatus.TIMEOUT,
-                start_time=start_time,
-                end_time=datetime.now(),
-                error_message=str(e),
-                retry_count=self.retry_count,
-                max_retries=self.max_retries
-            )
-        except Exception as e:
-            self.job_logger.exception(f"Job execution failed: {e}")
-            return JobResult(
-                job_id=self.job_id,
-                job_name=self.name,
-                status=JobStatus.FAILED,
-                start_time=start_time,
-                end_time=datetime.now(),
-                error_message=str(e),
-                retry_count=self.retry_count,
-                max_retries=self.max_retries
-            )
+        
+        # If we get here, something went wrong
+        return JobResult(
+            job_id=self.job_id,
+            job_name=self.name,
+            status=JobStatus.FAILED,
+            start_time=start_time,
+            end_time=datetime.now(),
+            error_message="Job execution completed but no result returned",
+            retry_count=self.retry_count,
+            max_retries=self.max_retries
+        )
     
     def cancel(self) -> bool:
         """

@@ -90,8 +90,8 @@ class JobSchedulerApp:
             # Determine storage type from config or default to YAML
             storage_type = "yaml"  # Can be configured later
             storage_config = {
-                "yaml_file": "config/jobs.yaml",
-                "history_file": "config/job_history.yaml"
+                "yaml_file": os.path.join("config", "jobs.yaml"),
+                "history_file": os.path.join("config", "job_history.yaml")
             }
             
             self.scheduler_manager = SchedulerManager(storage_type, storage_config)
