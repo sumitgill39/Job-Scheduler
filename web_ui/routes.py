@@ -314,22 +314,110 @@ def create_routes(app):
             logger.error(f"API delete job error: {e}")
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/debug/connections', methods=['GET'])
+    def api_debug_connections():
+        """Debug endpoint to check connection manager status"""
+        try:
+            debug_info = {
+                'enhanced_manager_available': False,
+                'connections_dir_exists': False,
+                'error': None
+            }
+            
+            # Check if enhanced connection manager can be imported
+            try:
+                from database.enhanced_connection_manager import get_enhanced_connection_manager
+                debug_info['enhanced_manager_available'] = True
+                
+                # Check if connections directory exists
+                from pathlib import Path
+                connections_dir = Path("config/connections")
+                debug_info['connections_dir_exists'] = connections_dir.exists()
+                debug_info['connections_dir_path'] = str(connections_dir.absolute())
+                
+                # Try to get connection manager
+                conn_manager = get_enhanced_connection_manager()
+                debug_info['manager_initialized'] = True
+                
+                # Try to list connections
+                connections = conn_manager.list_connections()
+                debug_info['connections_count'] = len(connections)
+                debug_info['connections'] = connections
+                
+            except Exception as e:
+                debug_info['error'] = str(e)
+                logger.error(f"Debug connections error: {e}", exc_info=True)
+            
+            return jsonify({
+                'success': True,
+                'debug_info': debug_info
+            })
+            
+        except Exception as e:
+            logger.error(f"API debug connections error: {e}", exc_info=True)
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/connections', methods=['GET'])
     def api_get_connections():
         """API endpoint to get available database connections"""
         try:
-            from database.enhanced_connection_manager import enhanced_connection_manager
-            
-            connections = enhanced_connection_manager.list_connections()
-            
-            return jsonify({
-                'success': True, 
-                'connections': connections,
-                'count': len(connections)
-            })
+            # Try enhanced connection manager first
+            try:
+                from database.enhanced_connection_manager import get_enhanced_connection_manager
+                
+                # Get the connection manager instance
+                conn_manager = get_enhanced_connection_manager()
+                logger.info("Enhanced connection manager loaded successfully")
+                
+                # Get connections list
+                connections = conn_manager.list_connections()
+                logger.info(f"Found {len(connections)} connections")
+                
+                return jsonify({
+                    'success': True, 
+                    'connections': connections,
+                    'count': len(connections)
+                })
+                
+            except Exception as enhanced_error:
+                logger.warning(f"Enhanced connection manager failed, trying fallback: {enhanced_error}")
+                
+                # Fallback to legacy connection manager
+                from database.connection_manager import DatabaseConnectionManager
+                db_manager = DatabaseConnectionManager()
+                
+                connections = []
+                for conn_name in db_manager.list_connections():
+                    conn_info = db_manager.get_connection_info(conn_name)
+                    if conn_info:
+                        connections.append({
+                            'name': conn_name,
+                            'server': conn_info.get('server', ''),
+                            'database': conn_info.get('database', ''),
+                            'port': conn_info.get('port', 1433),
+                            'auth_type': 'windows' if conn_info.get('trusted_connection') else 'sql',
+                            'description': conn_info.get('description', ''),
+                            'created_date': '',
+                            'modified_date': '',
+                            'is_active': True,
+                            'last_tested': None,
+                            'status': 'unknown',
+                            'last_checked': None,
+                            'response_time': 0,
+                            'error': None
+                        })
+                
+                logger.info(f"Fallback: Found {len(connections)} connections")
+                
+                return jsonify({
+                    'success': True, 
+                    'connections': connections,
+                    'count': len(connections),
+                    'fallback': True
+                })
             
         except Exception as e:
-            logger.error(f"API get connections error: {e}")
+            logger.error(f"API get connections error: {e}", exc_info=True)
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/connections', methods=['POST'])

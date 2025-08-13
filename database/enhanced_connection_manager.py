@@ -75,7 +75,13 @@ class EnhancedConnectionManager:
         self._monitoring_thread = None
         
         self.logger.info(f"Enhanced Connection Manager initialized with storage: {storage_type}")
-        self._start_monitoring()
+        
+        # Start monitoring in a try-catch to avoid initialization failures
+        try:
+            self._start_monitoring()
+        except Exception as e:
+            self.logger.warning(f"Could not start connection monitoring: {e}")
+            self._monitoring_enabled = False
     
     def create_connection(self, connection_info: ConnectionInfo) -> Tuple[bool, str]:
         """Create a new database connection"""
@@ -650,5 +656,15 @@ class EnhancedConnectionManager:
         self._stop_monitoring()
 
 
-# Global instance
-enhanced_connection_manager = EnhancedConnectionManager()
+# Global instance - will be initialized when first accessed
+_enhanced_connection_manager = None
+
+def get_enhanced_connection_manager():
+    """Get the global enhanced connection manager instance"""
+    global _enhanced_connection_manager
+    if _enhanced_connection_manager is None:
+        _enhanced_connection_manager = EnhancedConnectionManager()
+    return _enhanced_connection_manager
+
+# For backward compatibility
+enhanced_connection_manager = get_enhanced_connection_manager()
