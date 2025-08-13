@@ -329,31 +329,25 @@ def create_routes(app):
     def api_get_connections():
         """API endpoint to get available database connections"""
         try:
-            conn_manager = get_enhanced_connection_manager()
-            connections = conn_manager.get_all_connections()
+            # Return default connection
+            default_connection = {
+                'name': 'default-sql-connection',
+                'server': 'USDF11DB197CI1\\PRD_DB01',
+                'port': 3433,
+                'database': 'master',  # Default database
+                'auth_type': 'sql',
+                'username': 'svc-con',
+                'description': 'Default SQL Server Connection',
+                'is_active': True,
+                'status': 'unknown',  # Will be updated when tested
+                'last_checked': None,
+                'response_time': None
+            }
             
-            # Convert connections to dict format and remove sensitive data
-            connection_list = []
-            for conn in connections:
-                conn_data = {
-                    'name': conn.name,
-                    'server': conn.server,
-                    'database': conn.database,
-                    'port': conn.port,
-                    'description': conn.description,
-                    'auth_type': conn.auth_type,
-                    'is_active': conn.is_active,
-                    'status': conn.status,
-                    'last_checked': conn.last_checked.isoformat() if conn.last_checked else None,
-                    'response_time': conn.response_time,
-                    'error': conn.last_error
-                }
-                connection_list.append(conn_data)
-                
             return jsonify({
                 'success': True,
-                'connections': connection_list,
-                'count': len(connection_list)
+                'connections': [default_connection],
+                'count': 1
             })
             
         except Exception as e:
