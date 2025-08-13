@@ -332,6 +332,12 @@ function showNewConnectionModal() {
     document.getElementById('testResult').style.display = 'none';
     document.getElementById('testRequiredAlert').style.display = 'none';
     
+    // Reset SQL auth section
+    document.getElementById('sqlAuthSection').classList.remove('active');
+    document.getElementById('authWindows').checked = true;
+    document.getElementById('sqlUsername').required = false;
+    document.getElementById('sqlPassword').required = false;
+    
     // Show modal
     modal.show();
 }
