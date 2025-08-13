@@ -72,6 +72,11 @@
     .auth-type-section.active {
         display: block;
     }
+
+    .test-required-alert {
+        display: none;
+        margin-top: 10px;
+    }
 </style>
 {% endblock %}
 
@@ -84,10 +89,10 @@
                 <p class="text-muted">Manage SQL Server connections for your jobs</p>
             </div>
             <div>
-                <button type="button" class="btn btn-outline-secondary me-2" onclick="refreshAllConnections()">
-                    <i class="fas fa-sync-alt me-1"></i>Refresh All
+                <button type="button" class="btn btn-outline-secondary me-2" onclick="refreshConnections()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
                 </button>
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
+                <button type="button" class="btn btn-primary" onclick="showNewConnectionModal()">
                     <i class="fas fa-plus me-1"></i>New Connection
                 </button>
             </div>
@@ -95,12 +100,7 @@
         
         <!-- Connections Grid -->
         <div id="connectionsGrid" class="row">
-            <div class="col-12 text-center py-5">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <p class="mt-2 text-muted">Loading connections...</p>
-            </div>
+            <!-- Will be populated by JavaScript -->
         </div>
         
         <!-- Empty State -->
@@ -108,9 +108,14 @@
             <i class="fas fa-database fa-3x text-muted mb-3"></i>
             <h4 class="text-muted">No Database Connections</h4>
             <p class="text-muted mb-4">Create your first database connection to start building SQL jobs.</p>
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
+            <button type="button" class="btn btn-primary" onclick="showNewConnectionModal()">
                 <i class="fas fa-plus me-1"></i>Create First Connection
             </button>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="statusMessages" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050">
+            <!-- Toast messages will be inserted here -->
         </div>
     </div>
 </div>
@@ -129,13 +134,15 @@
                 <form id="connectionForm" novalidate>
                     <input type="hidden" id="connectionId" name="connectionId">
                     <input type="hidden" id="isEdit" name="isEdit" value="false">
+                    <input type="hidden" id="connectionTested" name="connectionTested" value="false">
                     
                     <!-- Basic Information -->
                     <div class="row mb-3">
                         <div class="col-md-8">
                             <label for="connectionName" class="form-label">Connection Name *</label>
-                            <input type="text" class="form-control" id="connectionName" name="name" required>
-                            <div class="form-text">Choose a unique, descriptive name</div>
+                            <input type="text" class="form-control" id="connectionName" name="name" required 
+                                   pattern="^[a-zA-Z0-9_-]+$" title="Only letters, numbers, underscore and hyphen allowed">
+                            <div class="form-text">Choose a unique, descriptive name (letters, numbers, underscore, hyphen)</div>
                         </div>
                         <div class="col-md-4">
                             <label for="connectionStatus" class="form-label">Status</label>
@@ -157,7 +164,7 @@
                         <div class="col-md-8">
                             <label for="serverName" class="form-label">Server Name/IP *</label>
                             <input type="text" class="form-control" id="serverName" name="server" required>
-                            <div class="form-text">Examples: localhost, server.domain.com, SERVER\\INSTANCE</div>
+                            <div class="form-text">Examples: localhost, server.domain.com, SERVER\INSTANCE</div>
                         </div>
                         <div class="col-md-4">
                             <label for="serverPort" class="form-label">Port</label>
@@ -191,12 +198,13 @@
                     <div id="sqlAuthSection" class="auth-type-section mb-4">
                         <div class="row">
                             <div class="col-md-6">
-                                <label for="sqlUsername" class="form-label">Username</label>
+                                <label for="sqlUsername" class="form-label">Username *</label>
                                 <input type="text" class="form-control" id="sqlUsername" name="username">
                             </div>
                             <div class="col-md-6">
-                                <label for="sqlPassword" class="form-label">Password</label>
+                                <label for="sqlPassword" class="form-label">Password *</label>
                                 <input type="password" class="form-control" id="sqlPassword" name="password">
+                                <div class="form-text">Password will be encrypted before storage</div>
                             </div>
                         </div>
                     </div>
@@ -213,11 +221,11 @@
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <label for="connectionTimeout" class="form-label">Connection Timeout (sec)</label>
-                                    <input type="number" class="form-control" id="connectionTimeout" name="connection_timeout" value="30">
+                                    <input type="number" class="form-control" id="connectionTimeout" name="connection_timeout" value="30" min="1" max="300">
                                 </div>
                                 <div class="col-md-6">
                                     <label for="commandTimeout" class="form-label">Command Timeout (sec)</label>
-                                    <input type="number" class="form-control" id="commandTimeout" name="command_timeout" value="300">
+                                    <input type="number" class="form-control" id="commandTimeout" name="command_timeout" value="300" min="1" max="3600">
                                 </div>
                             </div>
                             
@@ -249,6 +257,12 @@
                         </button>
                         <div id="testResult" class="mt-2" style="display: none;"></div>
                     </div>
+
+                    <!-- Test Required Alert -->
+                    <div id="testRequiredAlert" class="alert alert-warning test-required-alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Please test the connection before saving.
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -265,78 +279,112 @@
 {% block extra_js %}
 <script>
 let currentConnections = [];
-let currentConnectionName = '';
+let isLoading = false;
 
-// Load connections when page loads
 document.addEventListener('DOMContentLoaded', function() {
     setupAuthTypeToggle();
-    loadConnections();
+    initializeConnectionsPage();
 });
+
+function initializeConnectionsPage() {
+    const grid = document.getElementById('connectionsGrid');
+    const emptyState = document.getElementById('emptyState');
+    
+    // Initially show empty state
+    grid.style.display = 'none';
+    emptyState.style.display = 'block';
+    
+    // Then load existing connections
+    loadConnections();
+}
 
 function setupAuthTypeToggle() {
     document.querySelectorAll('input[name="auth_type"]').forEach(radio => {
         radio.addEventListener('change', function() {
             const sqlAuthSection = document.getElementById('sqlAuthSection');
+            const sqlUsername = document.getElementById('sqlUsername');
+            const sqlPassword = document.getElementById('sqlPassword');
+            
             if (this.value === 'sql') {
                 sqlAuthSection.classList.add('active');
-                document.getElementById('sqlUsername').required = true;
-                document.getElementById('sqlPassword').required = true;
+                sqlUsername.required = true;
+                sqlPassword.required = true;
             } else {
                 sqlAuthSection.classList.remove('active');
-                document.getElementById('sqlUsername').required = false;
-                document.getElementById('sqlPassword').required = false;
+                sqlUsername.required = false;
+                sqlPassword.required = false;
+                sqlUsername.value = '';
+                sqlPassword.value = '';
             }
         });
     });
 }
 
+function showNewConnectionModal() {
+    const form = document.getElementById('connectionForm');
+    const modal = new bootstrap.Modal(document.getElementById('newConnectionModal'));
+    
+    // Reset form
+    form.reset();
+    document.getElementById('connectionId').value = '';
+    document.getElementById('isEdit').value = 'false';
+    document.getElementById('connectionTested').value = 'false';
+    document.getElementById('testResult').style.display = 'none';
+    document.getElementById('testRequiredAlert').style.display = 'none';
+    
+    // Show modal
+    modal.show();
+}
+
 function loadConnections() {
-    console.log('Starting to load connections...');
+    if (isLoading) return;
+    
+    isLoading = true;
     showLoading();
     
-    // First test basic API health
-    fetch('/api/health')
+    fetch('/api/connections')
         .then(response => {
-            console.log('Health check response status:', response.status);
-            if (!response.ok) {
-                throw new Error(`Health check failed: HTTP ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(healthData => {
-            console.log('Health check successful:', healthData);
-            
-            // Now try connections API
-            return fetch('/api/connections');
-        })
-        .then(response => {
-            console.log('Connections API response status:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             return response.json();
         })
         .then(data => {
-            console.log('Connections API data:', data);
-            
             if (data.success) {
-                currentConnections = data.connections;
-                renderConnections(data.connections);
-                
-                if (data.message) {
-                    console.log('Server message:', data.message);
-                }
+                currentConnections = data.connections || [];
+                renderConnections(currentConnections);
             } else {
-                console.error('API returned error:', data.error);
                 showError('Failed to load connections: ' + data.error);
-                renderConnections([]); // Show empty state
+                renderConnections([]);
             }
         })
         .catch(error => {
             console.error('Connection loading error:', error);
             showError('Error loading connections: ' + error.message);
-            renderConnections([]); // Show empty state on error
+            renderConnections([]);
+        })
+        .finally(() => {
+            isLoading = false;
+            hideLoading();
         });
+}
+
+function showLoading() {
+    const grid = document.getElementById('connectionsGrid');
+    grid.style.display = 'block';
+    grid.innerHTML = `
+        <div class="col-12 text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading connections...</p>
+        </div>
+    `;
+}
+
+function hideLoading() {
+    const grid = document.getElementById('connectionsGrid');
+    grid.innerHTML = '';
 }
 
 function renderConnections(connections) {
@@ -361,8 +409,14 @@ function renderConnections(connections) {
                             <i class="fas fa-database me-2"></i>${escapeHtml(conn.name)}
                         </h6>
                         <div class="connection-actions">
-                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="testConnectionById('${conn.name}')">
+                            <button type="button" class="btn btn-sm btn-outline-info me-1" onclick="testConnectionById('${conn.name}')">
                                 <i class="fas fa-plug"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editConnection('${conn.name}')">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteConnection('${conn.name}')">
+                                <i class="fas fa-trash"></i>
                             </button>
                         </div>
                     </div>
@@ -420,26 +474,13 @@ function renderConnections(connections) {
     `).join('');
 }
 
-function getStatusText(status) {
-    switch (status) {
-        case 'online': return 'Online';
-        case 'offline': return 'Offline';
-        case 'testing': return 'Testing...';
-        default: return 'Unknown';
-    }
-}
-
-function getStatusTextClass(status) {
-    switch (status) {
-        case 'online': return 'text-success';
-        case 'offline': return 'text-danger';
-        case 'testing': return 'text-warning';
-        default: return 'text-muted';
-    }
-}
-
 function testConnection() {
     const form = document.getElementById('connectionForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
     
@@ -462,6 +503,8 @@ function testConnection() {
     .then(response => response.json())
     .then(result => {
         testResult.style.display = 'block';
+        document.getElementById('connectionTested').value = 'true';
+        document.getElementById('testRequiredAlert').style.display = 'none';
         
         if (result.success) {
             testResult.innerHTML = `
@@ -496,71 +539,40 @@ function testConnection() {
     });
 }
 
-function testConnectionById(connectionName) {
-    const connection = currentConnections.find(c => c.name === connectionName);
-    if (!connection) return;
-    
-    connection.status = 'testing';
-    renderConnections(currentConnections);
-    
-    fetch(`/api/connections/${encodeURIComponent(connectionName)}/test`, {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(result => {
-        connection.status = result.success ? 'online' : 'offline';
-        connection.response_time = result.response_time;
-        connection.error = result.error || null;
-        connection.last_checked = new Date().toISOString();
-        
-        renderConnections(currentConnections);
-        
-        if (result.success) {
-            showSuccess(`Connection "${connectionName}" test successful`);
-        } else {
-            showError(`Connection "${connectionName}" test failed: ${result.error}`);
-        }
-    })
-    .catch(error => {
-        connection.status = 'offline';
-        connection.error = error.message;
-        renderConnections(currentConnections);
-        showError('Test failed: ' + error.message);
-    });
-}
-
 function saveConnection() {
     const form = document.getElementById('connectionForm');
     if (!form.checkValidity()) {
-        form.classList.add('was-validated');
+        form.reportValidity();
+        return;
+    }
+    
+    if (document.getElementById('connectionTested').value !== 'true') {
+        document.getElementById('testRequiredAlert').style.display = 'block';
         return;
     }
     
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
-    const isEdit = data.isEdit === 'true';
     
-    data.is_active = data.is_active === 'true';
     data.encrypt = data.encrypt === 'on';
     data.trust_server_certificate = data.trust_server_certificate === 'on';
     
-    delete data.connectionId;
-    delete data.isEdit;
+    const saveBtn = document.querySelector('.modal-footer .btn-primary');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+    saveBtn.disabled = true;
     
-    const url = isEdit ? `/api/connections/${encodeURIComponent(data.name)}` : '/api/connections';
-    const method = isEdit ? 'PUT' : 'POST';
-    
-    fetch(url, {
-        method: method,
+    fetch('/api/connections', {
+        method: data.isEdit === 'true' ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
     .then(response => response.json())
     .then(result => {
         if (result.success) {
-            showSuccess(isEdit ? 'Connection updated successfully' : 'Connection created successfully');
-            bootstrap.Modal.getInstance(document.getElementById('newConnectionModal')).hide();
-            resetConnectionForm();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('newConnectionModal'));
+            modal.hide();
+            showSuccess('Connection saved successfully');
             loadConnections();
         } else {
             showError('Failed to save connection: ' + result.error);
@@ -568,76 +580,174 @@ function saveConnection() {
     })
     .catch(error => {
         showError('Error saving connection: ' + error.message);
+    })
+    .finally(() => {
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
     });
 }
 
-function resetConnectionForm() {
+function deleteConnection(name) {
+    if (!confirm(`Are you sure you want to delete the connection "${name}"?`)) {
+        return;
+    }
+    
+    fetch(`/api/connections/${encodeURIComponent(name)}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showSuccess('Connection deleted successfully');
+            loadConnections();
+        } else {
+            showError('Failed to delete connection: ' + result.error);
+        }
+    })
+    .catch(error => {
+        showError('Error deleting connection: ' + error.message);
+    });
+}
+
+function refreshConnections() {
+    loadConnections();
+}
+
+function testConnectionById(name) {
+    const connection = currentConnections.find(c => c.name === name);
+    if (!connection) {
+        showError('Connection not found');
+        return;
+    }
+    
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    btn.disabled = true;
+    
+    fetch('/api/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(connection)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showSuccess(`Connection "${name}" tested successfully (${result.response_time.toFixed(0)}ms)`);
+        } else {
+            showError(`Connection "${name}" test failed: ${result.error}`);
+        }
+        loadConnections();
+    })
+    .catch(error => {
+        showError(`Error testing connection "${name}": ${error.message}`);
+    })
+    .finally(() => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    });
+}
+
+function editConnection(name) {
+    const connection = currentConnections.find(c => c.name === name);
+    if (!connection) {
+        showError('Connection not found');
+        return;
+    }
+    
     const form = document.getElementById('connectionForm');
     form.reset();
-    form.classList.remove('was-validated');
     
-    document.getElementById('isEdit').value = 'false';
-    document.getElementById('connectionId').value = '';
-    document.getElementById('sqlAuthSection').classList.remove('active');
-    document.getElementById('testResult').style.display = 'none';
-    document.getElementById('newConnectionModalLabel').innerHTML = '<i class="fas fa-database me-2"></i>New Database Connection';
-}
-
-function refreshAllConnections() {
-    showInfo('Refreshing all connections...');
-    
-    fetch('/api/connections/refresh', { method: 'POST' })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showSuccess(data.message);
-                loadConnections();
+    // Set form fields
+    Object.entries(connection).forEach(([key, value]) => {
+        const element = form.elements[key];
+        if (element) {
+            if (element.type === 'checkbox') {
+                element.checked = value;
             } else {
-                showError('Failed to refresh connections: ' + data.error);
+                element.value = value;
             }
-        })
-        .catch(error => {
-            showError('Error refreshing connections: ' + error.message);
-        });
-}
-
-function showLoading() {
-    document.getElementById('connectionsGrid').innerHTML = `
-        <div class="col-12 text-center py-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2 text-muted">Loading connections...</p>
-        </div>
-    `;
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function formatDateTime(dateString) {
-    if (!dateString) return 'Never';
-    return new Date(dateString).toLocaleString();
+        }
+    });
+    
+    // Set auth type
+    const authType = connection.auth_type || 'windows';
+    document.getElementById('auth' + authType.charAt(0).toUpperCase() + authType.slice(1)).checked = true;
+    
+    // Show SQL auth fields if needed
+    if (authType === 'sql') {
+        document.getElementById('sqlAuthSection').classList.add('active');
+    }
+    
+    // Set edit mode
+    document.getElementById('connectionId').value = connection.name;
+    document.getElementById('isEdit').value = 'true';
+    document.getElementById('connectionTested').value = 'true';
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('newConnectionModal'));
+    modal.show();
 }
 
 function showSuccess(message) {
-    alert('Success: ' + message);
+    showToast(message, 'success');
 }
 
 function showError(message) {
-    alert('Error: ' + message);
+    showToast(message, 'danger');
 }
 
-function showInfo(message) {
-    console.log('Info:', message);
+function showToast(message, type) {
+    const toastId = 'toast-' + Date.now();
+    const toast = `
+        <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('statusMessages').insertAdjacentHTML('beforeend', toast);
+    const toastElement = document.getElementById(toastId);
+    const bsToast = new bootstrap.Toast(toastElement);
+    bsToast.show();
+    
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastElement.remove();
+    });
 }
 
-// Reset form when modal is hidden
-document.getElementById('newConnectionModal').addEventListener('hidden.bs.modal', function() {
-    resetConnectionForm();
-});
+function formatDateTime(dateStr) {
+    const date = new Date(dateStr);
+    return date.toLocaleString();
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function getStatusText(status) {
+    switch (status) {
+        case 'online': return 'Online';
+        case 'offline': return 'Offline';
+        case 'testing': return 'Testing...';
+        default: return 'Unknown';
+    }
+}
+
+function getStatusTextClass(status) {
+    switch (status) {
+        case 'online': return 'text-success';
+        case 'offline': return 'text-danger';
+        case 'testing': return 'text-warning';
+        default: return 'text-muted';
+    }
+}
 </script>
 {% endblock %}
