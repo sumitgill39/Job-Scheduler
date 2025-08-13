@@ -554,8 +554,16 @@ class EnhancedConnectionManager:
     def _list_yaml_connections(self) -> List[str]:
         """List all YAML connection files"""
         try:
+            # Ensure directory exists
+            if not self.yaml_connections_dir.exists():
+                self.logger.debug(f"Connections directory does not exist: {self.yaml_connections_dir}")
+                return []
+            
             connection_files = list(self.yaml_connections_dir.glob("*.yaml"))
-            return [f.stem for f in connection_files]
+            connection_names = [f.stem for f in connection_files]
+            
+            self.logger.debug(f"Found {len(connection_names)} YAML connection files")
+            return connection_names
             
         except Exception as e:
             self.logger.error(f"Error listing YAML connections: {e}")

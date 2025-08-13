@@ -380,39 +380,17 @@ def create_routes(app):
                 })
                 
             except Exception as enhanced_error:
-                logger.warning(f"Enhanced connection manager failed, trying fallback: {enhanced_error}")
+                logger.warning(f"Enhanced connection manager failed: {enhanced_error}")
                 
-                # Fallback to legacy connection manager
-                from database.connection_manager import DatabaseConnectionManager
-                db_manager = DatabaseConnectionManager()
-                
-                connections = []
-                for conn_name in db_manager.list_connections():
-                    conn_info = db_manager.get_connection_info(conn_name)
-                    if conn_info:
-                        connections.append({
-                            'name': conn_name,
-                            'server': conn_info.get('server', ''),
-                            'database': conn_info.get('database', ''),
-                            'port': conn_info.get('port', 1433),
-                            'auth_type': 'windows' if conn_info.get('trusted_connection') else 'sql',
-                            'description': conn_info.get('description', ''),
-                            'created_date': '',
-                            'modified_date': '',
-                            'is_active': True,
-                            'last_tested': None,
-                            'status': 'unknown',
-                            'last_checked': None,
-                            'response_time': 0,
-                            'error': None
-                        })
-                
-                logger.info(f"Fallback: Found {len(connections)} connections")
+                # Return empty connections list if enhanced manager fails
+                # Let users create their first connection manually
+                logger.info("Starting with empty connections list")
                 
                 return jsonify({
                     'success': True, 
-                    'connections': connections,
-                    'count': len(connections),
+                    'connections': [],
+                    'count': 0,
+                    'message': 'No connections found. Create your first connection to get started.',
                     'fallback': True
                 })
             
@@ -428,33 +406,52 @@ def create_routes(app):
             if not data:
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
             
-            from database.enhanced_connection_manager import enhanced_connection_manager, ConnectionInfo
+            # Validate required fields
+            required_fields = ['name', 'server', 'database']
+            for field in required_fields:
+                if not data.get(field, '').strip():
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
             
-            # Create connection info object
-            connection_info = ConnectionInfo(
-                name=data.get('name', '').strip(),
-                server=data.get('server', '').strip(),
-                database=data.get('database', '').strip(),
-                port=int(data.get('port', 1433)),
-                auth_type=data.get('auth_type', 'windows').lower(),
-                username=data.get('username', '').strip() if data.get('username') else None,
-                password=data.get('password', '').strip() if data.get('password') else None,
-                description=data.get('description', '').strip(),
-                connection_timeout=int(data.get('connection_timeout', 30)),
-                command_timeout=int(data.get('command_timeout', 300)),
-                encrypt=bool(data.get('encrypt', False)),
-                trust_server_certificate=bool(data.get('trust_server_certificate', True))
-            )
-            
-            success, message = enhanced_connection_manager.create_connection(connection_info)
-            
-            if success:
-                return jsonify({'success': True, 'message': message}), 201
-            else:
-                return jsonify({'success': False, 'error': message}), 400
+            try:
+                from database.enhanced_connection_manager import get_enhanced_connection_manager, ConnectionInfo
+                
+                # Get the connection manager instance
+                conn_manager = get_enhanced_connection_manager()
+                
+                # Create connection info object
+                connection_info = ConnectionInfo(
+                    name=data.get('name', '').strip(),
+                    server=data.get('server', '').strip(),
+                    database=data.get('database', '').strip(),
+                    port=int(data.get('port', 1433)),
+                    auth_type=data.get('auth_type', 'windows').lower(),
+                    username=data.get('username', '').strip() if data.get('username') else None,
+                    password=data.get('password', '').strip() if data.get('password') else None,
+                    description=data.get('description', '').strip(),
+                    connection_timeout=int(data.get('connection_timeout', 30)),
+                    command_timeout=int(data.get('command_timeout', 300)),
+                    encrypt=bool(data.get('encrypt', False)),
+                    trust_server_certificate=bool(data.get('trust_server_certificate', True))
+                )
+                
+                success, message = conn_manager.create_connection(connection_info)
+                
+                if success:
+                    logger.info(f"Connection '{connection_info.name}' created successfully")
+                    return jsonify({'success': True, 'message': message}), 201
+                else:
+                    logger.warning(f"Failed to create connection '{connection_info.name}': {message}")
+                    return jsonify({'success': False, 'error': message}), 400
+                    
+            except Exception as enhanced_error:
+                logger.warning(f"Enhanced connection manager failed for creation: {enhanced_error}")
+                return jsonify({
+                    'success': False, 
+                    'error': f'Connection manager not available: {str(enhanced_error)}'
+                }), 500
                 
         except Exception as e:
-            logger.error(f"API create connection error: {e}")
+            logger.error(f"API create connection error: {e}", exc_info=True)
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/connections/<connection_name>', methods=['GET'])

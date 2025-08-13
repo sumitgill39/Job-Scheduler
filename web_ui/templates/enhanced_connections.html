@@ -304,6 +304,14 @@ function loadConnections() {
             if (data.success) {
                 currentConnections = data.connections;
                 renderConnections(data.connections);
+                
+                // Show info message if using fallback mode
+                if (data.fallback) {
+                    console.log('Using fallback connection mode');
+                    if (data.message) {
+                        showInfo(data.message);
+                    }
+                }
             } else {
                 showError('Failed to load connections: ' + data.error);
                 showDebugInfo();
