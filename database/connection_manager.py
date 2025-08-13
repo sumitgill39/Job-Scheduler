@@ -46,18 +46,7 @@ class DatabaseConnectionManager:
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default database configuration"""
         return {
-            'databases': {
-                'default': {
-                    'driver': '{ODBC Driver 17 for SQL Server}',
-                    'server': 'localhost',
-                    'database': 'JobScheduler',
-                    'trusted_connection': True,
-                    'username': None,
-                    'password': None,
-                    'connection_timeout': 30,
-                    'command_timeout': 300
-                }
-            },
+            'databases': {},  # Empty - only user-added connections
             'connection_pool': {
                 'max_connections': 10,
                 'min_connections': 2,
@@ -181,6 +170,100 @@ class DatabaseConnectionManager:
         
         return None
     
+    def _test_connection_direct(self, server: str, database: str, port: int = 1433,
+                              auth_type: str = "windows", username: str = None, 
+                              password: str = None) -> Dict[str, Any]:
+        """Test database connection directly without using saved configuration"""
+        start_time = time.time()
+        
+        try:
+            # Import required modules
+            import pyodbc
+            
+            # Build connection string components
+            components = []
+            components.append("DRIVER={ODBC Driver 17 for SQL Server}")
+            
+            # Handle server and port
+            if '\\' in server:
+                # Named instance - don't add port
+                components.append(f"SERVER={server}")
+            elif port and port != 1433:
+                # Custom port
+                components.append(f"SERVER={server},{port}")
+            else:
+                # Default port
+                components.append(f"SERVER={server}")
+            
+            components.append(f"DATABASE={database}")
+            
+            # Authentication
+            if auth_type.lower() == 'windows':
+                components.append("Trusted_Connection=yes")
+            else:
+                if not username or not password:
+                    return {
+                        'success': False,
+                        'error': 'Username and password required for SQL authentication',
+                        'response_time': time.time() - start_time
+                    }
+                components.append(f"UID={username}")
+                components.append(f"PWD={password}")
+            
+            # Connection settings
+            components.extend([
+                "Connection Timeout=10",
+                "Command Timeout=30",
+                "Encrypt=no",
+                "TrustServerCertificate=yes"
+            ])
+            
+            connection_string = ";".join(components)
+            
+            # Test the connection
+            self.logger.info(f"Testing connection to {server}\\{database}")
+            
+            connection = pyodbc.connect(connection_string)
+            cursor = connection.cursor()
+            cursor.execute("SELECT 1 as test, @@VERSION as version")
+            result = cursor.fetchone()
+            cursor.close()
+            connection.close()
+            
+            response_time = time.time() - start_time
+            
+            return {
+                'success': True,
+                'message': 'Connection successful',
+                'response_time': response_time,
+                'server_info': {
+                    'test_result': result[0] if result else None,
+                    'version': result[1][:100] if result and len(result) > 1 else 'Unknown'
+                }
+            }
+            
+        except Exception as e:
+            response_time = time.time() - start_time
+            error_msg = str(e)
+            
+            # Extract more user-friendly error message
+            if "Login failed" in error_msg:
+                error_msg = "Login failed - check username and password"
+            elif "Server does not exist" in error_msg:
+                error_msg = "Server not found - check server name and port"
+            elif "Database" in error_msg and "does not exist" in error_msg:
+                error_msg = "Database not found - check database name"
+            elif "timeout" in error_msg.lower():
+                error_msg = "Connection timeout - check server accessibility"
+            
+            self.logger.error(f"Connection test failed: {e}")
+            
+            return {
+                'success': False,
+                'error': error_msg,
+                'response_time': response_time
+            }
+
     def test_connection(self, connection_name: str = "default") -> Dict[str, Any]:
         """Test database connection"""
         start_time = time.time()
@@ -313,7 +396,7 @@ class DatabaseConnectionManager:
     def create_custom_connection(self, name: str, server: str, database: str, 
                                port: int = 1433, auth_type: str = "windows",
                                username: str = None, password: str = None,
-                               description: str = None) -> bool:
+                               description: str = None) -> Dict[str, Any]:
         """Create a custom database connection configuration
         
         Args:
@@ -327,11 +410,30 @@ class DatabaseConnectionManager:
             description: Connection description
             
         Returns:
-            bool: Success status
+            Dict: Result with success status, message, and test details
         """
         try:
             use_windows_auth = auth_type.lower() == "windows"
             
+            # First test the connection without saving
+            test_result = self._test_connection_direct(
+                server=server,
+                database=database,
+                port=port,
+                auth_type=auth_type,
+                username=username,
+                password=password
+            )
+            
+            if not test_result['success']:
+                self.logger.error(f"Connection test failed for '{name}': {test_result['error']}")
+                return {
+                    'success': False,
+                    'error': f"Connection test failed: {test_result['error']}",
+                    'test_details': test_result
+                }
+            
+            # Test passed, now create and save the configuration
             config = self.create_connection_config(
                 connection_name=name,
                 server=server,
@@ -343,20 +445,20 @@ class DatabaseConnectionManager:
                 description=description
             )
             
-            # Test the new connection
-            test_result = self.test_connection(name)
-            if not test_result['success']:
-                # Remove the failed configuration
-                self.remove_connection(name)
-                self.logger.error(f"Failed to create connection '{name}': {test_result['error']}")
-                return False
-            
             self.logger.info(f"Successfully created and tested connection: {name}")
-            return True
+            return {
+                'success': True,
+                'message': f"Connection '{name}' created and tested successfully",
+                'test_details': test_result
+            }
             
         except Exception as e:
             self.logger.error(f"Failed to create custom connection '{name}': {e}")
-            return False
+            return {
+                'success': False,
+                'error': f"Failed to create connection: {str(e)}",
+                'test_details': None
+            }
     
     def update_connection_config(self, connection_name: str, updates: Dict[str, Any]) -> bool:
         """Update an existing connection configuration"""

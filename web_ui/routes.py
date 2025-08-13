@@ -350,7 +350,7 @@ def create_routes(app):
             from database.connection_manager import DatabaseConnectionManager
             db_manager = DatabaseConnectionManager()
             
-            success = db_manager.create_custom_connection(
+            result = db_manager.create_custom_connection(
                 name=data.get('name'),
                 server=data.get('server'),
                 database=data.get('database'),
@@ -361,13 +361,39 @@ def create_routes(app):
                 description=data.get('description')
             )
             
-            if success:
-                return jsonify({'success': True, 'message': 'Connection created successfully'})
+            if result['success']:
+                return jsonify({
+                    'success': True, 
+                    'message': result['message'],
+                    'test_details': result.get('test_details', {})
+                })
             else:
-                return jsonify({'success': False, 'error': 'Failed to create connection'}), 500
+                return jsonify({
+                    'success': False, 
+                    'error': result['error'],
+                    'test_details': result.get('test_details', {})
+                }), 400
                 
         except Exception as e:
             logger.error(f"API create connection error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/connections/<connection_name>', methods=['DELETE'])
+    def api_delete_connection(connection_name):
+        """API endpoint to delete a database connection"""
+        try:
+            from database.connection_manager import DatabaseConnectionManager
+            db_manager = DatabaseConnectionManager()
+            
+            success = db_manager.remove_connection(connection_name)
+            
+            if success:
+                return jsonify({'success': True, 'message': f'Connection "{connection_name}" deleted successfully'})
+            else:
+                return jsonify({'success': False, 'error': f'Connection "{connection_name}" not found'}), 404
+                
+        except Exception as e:
+            logger.error(f"API delete connection error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/test-connection', methods=['POST'])

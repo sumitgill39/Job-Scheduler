@@ -76,13 +76,11 @@
                                             data-bs-toggle="tooltip" title="Edit">
                                         <i class="fas fa-edit"></i>
                                     </button>
-                                    {% if conn.name not in ['default', 'production', 'development'] %}
                                     <button type="button" class="btn btn-sm btn-outline-danger" 
                                             onclick="deleteConnection('{{ conn.name }}')"
                                             data-bs-toggle="tooltip" title="Delete">
                                         <i class="fas fa-trash"></i>
                                     </button>
-                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -324,12 +322,20 @@
         .then(data => {
             hideLoading();
             if (data.success) {
-                showSuccess('Connection saved successfully!');
+                let message = data.message || 'Connection saved successfully!';
+                if (data.test_details && data.test_details.response_time) {
+                    message += ` (Test completed in ${data.test_details.response_time.toFixed(2)}s)`;
+                }
+                showSuccess(message);
                 setTimeout(() => {
                     window.location.reload();
                 }, 1500);
             } else {
-                showError(`Failed to save connection: ${data.error}`);
+                let errorMsg = data.error || 'Failed to save connection';
+                if (data.test_details && data.test_details.response_time) {
+                    errorMsg += ` (Test failed in ${data.test_details.response_time.toFixed(2)}s)`;
+                }
+                showError(errorMsg);
             }
         })
         .catch(error => {
