@@ -526,8 +526,8 @@ def create_routes(app):
     def connections():
         """Database connections management page"""
         try:
-            # Using the new enhanced connections template
-            return render_template('enhanced_connections.html')
+            # Using the connections template
+            return render_template('connections.html')
             
         except Exception as e:
             logger.error(f"Connections page error: {e}")
