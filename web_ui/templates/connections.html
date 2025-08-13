@@ -2,6 +2,7 @@
 
 {% block title %}Database Connections - Windows Job Scheduler{% endblock %}
 
+{# Make sure these scripts are loaded in base.html or add them here #}
 {% block extra_css %}
 <style>
     .connection-card {
@@ -92,7 +93,8 @@
                 <button type="button" class="btn btn-outline-secondary me-2" onclick="refreshConnections()">
                     <i class="fas fa-sync-alt me-1"></i>Refresh
                 </button>
-                <button type="button" class="btn btn-primary" onclick="showNewConnectionModal()">
+                <!-- Update this button -->
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
                     <i class="fas fa-plus me-1"></i>New Connection
                 </button>
             </div>
@@ -108,7 +110,8 @@
             <i class="fas fa-database fa-3x text-muted mb-3"></i>
             <h4 class="text-muted">No Database Connections</h4>
             <p class="text-muted mb-4">Create your first database connection to start building SQL jobs.</p>
-            <button type="button" class="btn btn-primary" onclick="showNewConnectionModal()">
+            <!-- Update this button -->
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
                 <i class="fas fa-plus me-1"></i>Create First Connection
             </button>
         </div>
@@ -277,6 +280,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Make sure Bootstrap JS is loaded before this -->
 <script>
 let currentConnections = [];
 let isLoading = false;
@@ -284,7 +288,16 @@ let isLoading = false;
 document.addEventListener('DOMContentLoaded', function() {
     setupAuthTypeToggle();
     initializeConnectionsPage();
+    initializeModals();
 });
+
+function initializeModals() {
+    // Initialize all modals
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modalEl => {
+        new bootstrap.Modal(modalEl);
+    });
+}
 
 function initializeConnectionsPage() {
     const grid = document.getElementById('connectionsGrid');
@@ -322,7 +335,8 @@ function setupAuthTypeToggle() {
 
 function showNewConnectionModal() {
     const form = document.getElementById('connectionForm');
-    const modal = new bootstrap.Modal(document.getElementById('newConnectionModal'));
+    const modalEl = document.getElementById('newConnectionModal');
+    const modal = new bootstrap.Modal(modalEl);
     
     // Reset form
     form.reset();
