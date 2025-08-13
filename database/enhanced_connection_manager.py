@@ -44,12 +44,12 @@ class ConnectionInfo:
     command_timeout: int = 300
     encrypt: bool = False
     trust_server_certificate: bool = True
-
+    
     def __post_init__(self):
         if not self.created_date:
             self.created_date = datetime.now().isoformat()
         if not self.modified_date:
-            self.modified_date = self.created_date
+            self.modified_date = datetime.now().isoformat()
 
 
 class EnhancedConnectionManager:
@@ -362,43 +362,23 @@ class EnhancedConnectionManager:
     def test_connection(self, connection_info: ConnectionInfo) -> Tuple[bool, Optional[str]]:
         """Test a database connection"""
         try:
+            if not HAS_PYODBC:
+                return False, "pyodbc is not installed"
+
             # Build connection string
-            conn_str_parts = [
-                f"DRIVER={{ODBC Driver 17 for SQL Server}}",
-                f"SERVER={connection_info.server},{connection_info.port}",
-                f"DATABASE={connection_info.database}"
-            ]
-
-            if connection_info.auth_type == "sql":
-                conn_str_parts.extend([
-                    f"UID={connection_info.username}",
-                    f"PWD={connection_info.password}"
-                ])
-            else:
-                conn_str_parts.append("Trusted_Connection=yes")
-
-            if connection_info.encrypt:
-                conn_str_parts.append("Encrypt=yes")
-            else:
-                conn_str_parts.append("Encrypt=no")
-
-            if connection_info.trust_server_certificate:
-                conn_str_parts.append("TrustServerCertificate=yes")
-
-            conn_str_parts.append(f"Connection Timeout={connection_info.connection_timeout}")
+            conn_str = self._build_connection_string(connection_info)
             
-            conn_str = ";".join(conn_str_parts)
-
             # Try to connect
-            with pyodbc.connect(conn_str) as conn:
+            start_time = time.time()
+            with pyodbc.connect(conn_str, timeout=connection_info.connection_timeout) as conn:
+                # Test with a simple query
                 cursor = conn.cursor()
                 cursor.execute("SELECT 1")
                 cursor.fetchone()
-
+                
             return True, None
 
         except Exception as e:
-            self.logger.error(f"Connection test failed: {e}")
             return False, str(e)
 
     def save_connection(self, connection_info: ConnectionInfo) -> bool:
