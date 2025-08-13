@@ -546,7 +546,9 @@ function saveConnection() {
         return;
     }
     
-    if (document.getElementById('connectionTested').value !== 'true') {
+    // Remove connection testing requirement if it's an edit
+    if (document.getElementById('isEdit').value !== 'true' && 
+        document.getElementById('connectionTested').value !== 'true') {
         document.getElementById('testRequiredAlert').style.display = 'block';
         return;
     }
@@ -554,8 +556,21 @@ function saveConnection() {
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
     
+    // Convert boolean values
     data.encrypt = data.encrypt === 'on';
     data.trust_server_certificate = data.trust_server_certificate === 'on';
+    data.is_active = data.is_active === 'true';
+    
+    // Convert numeric values
+    data.port = parseInt(data.port, 10);
+    data.connection_timeout = parseInt(data.connection_timeout, 10);
+    data.command_timeout = parseInt(data.command_timeout, 10);
+    
+    // Remove empty username/password for Windows auth
+    if (data.auth_type === 'windows') {
+        delete data.username;
+        delete data.password;
+    }
     
     const saveBtn = document.querySelector('.modal-footer .btn-primary');
     const originalText = saveBtn.innerHTML;
@@ -567,19 +582,29 @@ function saveConnection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            if (response.status === 409) {
+                throw new Error('A connection with this name already exists');
+            }
+            return response.json().then(err => {
+                throw new Error(err.error || 'Failed to save connection');
+            });
+        }
+        return response.json();
+    })
     .then(result => {
         if (result.success) {
             const modal = bootstrap.Modal.getInstance(document.getElementById('newConnectionModal'));
             modal.hide();
-            showSuccess('Connection saved successfully');
+            showSuccess(result.message || 'Connection saved successfully');
             loadConnections();
         } else {
             showError('Failed to save connection: ' + result.error);
         }
     })
     .catch(error => {
-        showError('Error saving connection: ' + error.message);
+        showError(error.message);
     })
     .finally(() => {
         saveBtn.innerHTML = originalText;
