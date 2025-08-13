@@ -504,8 +504,12 @@ function testConnection() {
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
     
+    // Convert boolean and numeric values
     data.encrypt = data.encrypt === 'on';
     data.trust_server_certificate = data.trust_server_certificate === 'on';
+    data.port = parseInt(data.port, 10);
+    data.connection_timeout = parseInt(data.connection_timeout, 10);
+    data.command_timeout = parseInt(data.command_timeout, 10);
     
     const testBtn = event.target;
     const originalText = testBtn.innerHTML;
@@ -515,6 +519,8 @@ function testConnection() {
     const testResult = document.getElementById('testResult');
     testResult.style.display = 'none';
     
+    console.log('Testing connection with data:', data);  // Debug log
+    
     fetch('/api/test-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -522,11 +528,12 @@ function testConnection() {
     })
     .then(response => response.json())
     .then(result => {
+        console.log('Test connection response:', result);  // Debug log
         testResult.style.display = 'block';
-        document.getElementById('connectionTested').value = 'true';
-        document.getElementById('testRequiredAlert').style.display = 'none';
         
         if (result.success) {
+            document.getElementById('connectionTested').value = 'true';
+            document.getElementById('testRequiredAlert').style.display = 'none';
             testResult.innerHTML = `
                 <div class="alert alert-success">
                     <i class="fas fa-check-circle me-2"></i>
@@ -545,6 +552,7 @@ function testConnection() {
         }
     })
     .catch(error => {
+        console.error('Test connection error:', error);  // Debug log
         testResult.style.display = 'block';
         testResult.innerHTML = `
             <div class="alert alert-danger">
