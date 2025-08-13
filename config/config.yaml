@@ -1,0 +1,64 @@
+# Job Scheduler Configuration File
+# Windows-specific configuration for Job Scheduler
+
+application:
+  name: "Windows Job Scheduler"
+  version: "1.0.0"
+  debug: true
+  log_level: "INFO"
+
+# Web UI Configuration
+web:
+  host: "127.0.0.1"
+  port: 5000
+  secret_key: "your-secret-key-change-this-in-production"
+  debug: true
+
+# Scheduler Configuration
+scheduler:
+  max_workers: 10
+  thread_pool_size: 20
+  job_defaults:
+    coalesce: false
+    max_instances: 3
+    misfire_grace_time: 30
+
+# Logging Configuration
+logging:
+  log_file: "logs\\scheduler.log"
+  max_file_size: "10MB"
+  backup_count: 5
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+# Windows-specific settings
+windows:
+  powershell_path: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+  powershell_execution_policy: "RemoteSigned"
+  enable_windows_auth: true
+  
+# Job Storage (YAML-based by default)
+storage:
+  type: "yaml"  # yaml or database
+  yaml_file: "config\\jobs.yaml"
+  
+# Security Settings
+security:
+  allowed_domains: 
+    - "dmzprod01"
+    - "dmzweb01" 
+    - "MGD"
+    - "Mercer"
+  require_authentication: false  # Set to true for production
+  
+# Default job settings
+defaults:
+  sql_job:
+    timeout: 300  # 5 minutes
+    retry_count: 3
+    retry_delay: 60  # 1 minute
+  
+  powershell_job:
+    timeout: 600  # 10 minutes
+    retry_count: 2
+    retry_delay: 30  # 30 seconds
+    execution_policy: "RemoteSigned"

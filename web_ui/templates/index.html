@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Windows Job Scheduler{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h1>
+    <button class="btn btn-outline-primary" onclick="refreshDashboard()">
+        <i class="fas fa-sync-alt me-1"></i>Refresh
+    </button>
+</div>
+
+<!-- Metrics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body metric-card">
+                <div class="metric-number text-primary">{{ status.total_jobs or 0 }}</div>
+                <div class="metric-label">Total Jobs</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body metric-card">
+                <div class="metric-number text-success">{{ status.enabled_jobs or 0 }}</div>
+                <div class="metric-label">Enabled Jobs</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body metric-card">
+                <div class="metric-number text-info">{{ status.scheduled_jobs or 0 }}</div>
+                <div class="metric-label">Scheduled Jobs</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body metric-card">
+                <div class="metric-number text-warning">{{ status.disabled_jobs or 0 }}</div>
+                <div class="metric-label">Disabled Jobs</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Scheduler Status -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-server me-2"></i>Scheduler Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-{{ 'play' if status.running else 'stop' }} me-2 text-{{ 'success' if status.running else 'danger' }}"></i>
+                            <span class="fw-bold">Status:</span>
+                            <span class="ms-2 badge bg-{{ 'success' if status.running else 'danger' }}">
+                                {{ 'Running' if status.running else 'Stopped' }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-clock me-2 text-info"></i>
+                            <span class="fw-bold">Uptime:</span>
+                            <span class="ms-2">{{ status.uptime or 'N/A' }}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if status.job_types %}
+                <div class="mt-3">
+                    <h6>Job Types Distribution:</h6>
+                    {% for job_type, count in status.job_types.items() %}
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>
+                            <i class="fas fa-{{ 'database' if job_type == 'sql' else 'terminal' }} me-1"></i>
+                            {{ job_type.upper() }}
+                        </span>
+                        <span class="badge bg-secondary">{{ count }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Next Scheduled Jobs -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Next Scheduled Jobs</h5>
+            </div>
+            <div class="card-body">
+                {% if status.next_run_times %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Job</th>
+                                    <th>Type</th>
+                                    <th>Next Run</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for job in status.next_run_times[:5] %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('job_details', job_id=job.job_id) }}" class="text-decoration-none">
+                                            {{ job.job_name[:20] }}{% if job.job_name|length > 20 %}...{% endif %}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <i class="fas fa-{{ 'database' if job.job_type == 'sql' else 'terminal' }} me-1"></i>
+                                        {{ job.job_type.upper() }}
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">
+                                            {{ job.next_run_time[:16] if job.next_run_time else 'N/A' }}
+                                        </small>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center text-muted py-3">
+                        <i class="fas fa-calendar-times fa-2x mb-2"></i>
+                        <p>No scheduled jobs found</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Jobs -->
+{% if recent_jobs %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-history me-2"></i>Recent Jobs</h5>
+                <a href="{{ url_for('job_list') }}" class="btn btn-sm btn-outline-primary">
+                    View All Jobs <i class="fas fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Last Run</th>
+                                <th>Enabled</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in recent_jobs %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('job_details', job_id=job.job_id) }}" class="text-decoration-none">
+                                        <strong>{{ job.name }}</strong>
+                                    </a>
+                                    {% if job.description %}
+                                    <br><small class="text-muted">{{ job.description[:50] }}{% if job.description|length > 50 %}...{% endif %}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <i class="fas fa-{{ 'database' if job.job_type == 'sql' else 'terminal' }} me-1 job-type-{{ job.job_type }}"></i>
+                                    {{ job.job_type.upper() }}
+                                </td>
+                                <td>
+                                    <span class="status-badge status-{{ job.current_status.value.lower() }}">
+                                        {{ job.current_status.value.upper() }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if job.last_run_time %}
+                                        <small>{{ job.last_run_time.strftime('%Y-%m-%d %H:%M') }}</small>
+                                    {% else %}
+                                        <small class="text-muted">Never</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if job.enabled else 'secondary' }}">
+                                        {{ 'Enabled' if job.enabled else 'Disabled' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <button type="button" class="btn btn-sm btn-outline-primary btn-action" 
+                                                onclick="runJob('{{ job.job_id }}')" 
+                                                data-bs-toggle="tooltip" title="Run Now">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                        <a href="{{ url_for('job_details', job_id=job.job_id) }}" 
+                                           class="btn btn-sm btn-outline-info btn-action"
+                                           data-bs-toggle="tooltip" title="View Details">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Quick Actions -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <a href="{{ url_for('create_job') }}" class="btn btn-primary">
+                                <i class="fas fa-plus me-2"></i>Create New Job
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <a href="{{ url_for('job_list') }}" class="btn btn-outline-primary">
+                                <i class="fas fa-list me-2"></i>View All Jobs
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <button class="btn btn-outline-secondary" onclick="refreshDashboard()">
+                                <i class="fas fa-sync-alt me-2"></i>Refresh Dashboard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Refresh dashboard data
+    function refreshDashboard() {
+        showLoading();
+        window.location.reload();
+    }
+    
+    // Run job immediately
+    function runJob(jobId) {
+        if (confirm('Are you sure you want to run this job now?')) {
+            showLoading();
+            
+            fetch(`/api/jobs/${jobId}/run`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                if (data.message) {
+                    showSuccess(`Job executed: ${data.status} (${data.duration}s)`);
+                    // Refresh after a delay to show updated status
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    showError(data.error || 'Failed to run job');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showError('Error running job: ' + error.message);
+            });
+        }
+    }
+    
+    // Auto-refresh dashboard every 60 seconds
+    setInterval(() => {
+        refreshStatus();
+    }, 60000);
+</script>
+{% endblock %}

@@ -1,0 +1,492 @@
+{% extends "base.html" %}
+
+{% block title %}{{ job.name }} - Job Details{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('job_list') }}">Jobs</a></li>
+                <li class="breadcrumb-item active">{{ job.name }}</li>
+            </ol>
+        </nav>
+        <h1><i class="fas fa-{{ 'database' if job.job_type == 'sql' else 'terminal' }} me-2"></i>{{ job.name }}</h1>
+    </div>
+    <div>
+        <button class="btn btn-outline-secondary me-2" onclick="refreshPage()">
+            <i class="fas fa-sync-alt me-1"></i>Refresh
+        </button>
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary" onclick="runJob('{{ job.job_id }}')" 
+                    {{ 'disabled' if status.is_running else '' }}>
+                <i class="fas fa-play me-1"></i>Run Now
+            </button>
+            <button type="button" class="btn btn-outline-{{ 'warning' if status.enabled else 'success' }}" 
+                    onclick="toggleJob('{{ job.job_id }}')">
+                <i class="fas fa-{{ 'pause' if status.enabled else 'play' }} me-1"></i>
+                {{ 'Disable' if status.enabled else 'Enable' }}
+            </button>
+            <button type="button" class="btn btn-outline-danger" onclick="deleteJob('{{ job.job_id }}')">
+                <i class="fas fa-trash me-1"></i>Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Job Information -->
+    <div class="col-lg-8">
+        <!-- Status Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Job Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="h4 mb-1">
+                                <span class="status-badge status-{{ status.current_status.lower() }}">
+                                    {{ status.current_status.upper() }}
+                                </span>
+                            </div>
+                            <small class="text-muted">Current Status</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="h4 mb-1">
+                                <span class="badge bg-{{ 'success' if status.enabled else 'secondary' }}">
+                                    {{ 'ENABLED' if status.enabled else 'DISABLED' }}
+                                </span>
+                            </div>
+                            <small class="text-muted">Job State</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="h4 mb-1">
+                                {% if status.is_running %}
+                                    <span class="badge bg-info">
+                                        <i class="fas fa-spinner fa-spin"></i> RUNNING
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary">IDLE</span>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">Execution State</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="h4 mb-1">{{ status.retry_count }}/{{ status.max_retries }}</div>
+                            <small class="text-muted">Retry Count</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Job Configuration -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-cog me-2"></i>Configuration</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <td class="fw-bold">Job ID:</td>
+                                <td><code>{{ job.job_id }}</code></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Type:</td>
+                                <td>
+                                    <i class="fas fa-{{ 'database' if job.job_type == 'sql' else 'terminal' }} me-1"></i>
+                                    {{ job.job_type.upper() }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Description:</td>
+                                <td>{{ job.description or 'No description' }}</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Timeout:</td>
+                                <td>{{ job.timeout }} seconds</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <td class="fw-bold">Max Retries:</td>
+                                <td>{{ job.max_retries }}</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Retry Delay:</td>
+                                <td>{{ job.retry_delay }} seconds</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Run As:</td>
+                                <td>{{ job.run_as or 'Current User' }}</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Created:</td>
+                                <td>{{ job.metadata.get('created_date', 'Unknown')[:19] if job.metadata.get('created_date') else 'Unknown' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Job-specific configuration -->
+                {% if job.job_type == 'sql' %}
+                <div class="mt-3">
+                    <h6><i class="fas fa-database me-2"></i>SQL Configuration</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Connection:</strong> {{ job.connection_name }}<br>
+                            <strong>Database:</strong> {{ job.database_name or 'Default' }}<br>
+                            <strong>Query Timeout:</strong> {{ job.query_timeout or job.timeout }} seconds
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Max Rows:</strong> {{ job.max_rows or 'Unlimited' }}<br>
+                            <strong>Fetch Size:</strong> {{ job.fetch_size or 'Default' }}
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <strong>SQL Query:</strong>
+                        <pre class="bg-light p-3 mt-2 border rounded"><code>{{ job.sql_query }}</code></pre>
+                    </div>
+                </div>
+                {% elif job.job_type == 'powershell' %}
+                <div class="mt-3">
+                    <h6><i class="fab fa-microsoft me-2"></i>PowerShell Configuration</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            {% if job.script_path %}
+                                <strong>Script File:</strong> {{ job.script_path }}<br>
+                            {% endif %}
+                            <strong>Execution Policy:</strong> {{ job.execution_policy }}<br>
+                            <strong>Working Directory:</strong> {{ job.working_directory or 'Default' }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Parameters:</strong> {{ job.parameters|join(' ') if job.parameters else 'None' }}
+                        </div>
+                    </div>
+                    {% if job.script_content %}
+                    <div class="mt-3">
+                        <strong>Script Content:</strong>
+                        <pre class="bg-light p-3 mt-2 border rounded"><code>{{ job.script_content }}</code></pre>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Schedule Information -->
+        {% if status.schedule %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Schedule</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Type:</strong> {{ status.schedule.type.upper() }}<br>
+                        {% if status.schedule.type == 'cron' %}
+                            <strong>Expression:</strong> <code>{{ status.schedule.cron }}</code><br>
+                        {% elif status.schedule.type == 'interval' %}
+                            <strong>Interval:</strong> 
+                            {% set interval = status.schedule.interval %}
+                            {{ interval.days }}d {{ interval.hours }}h {{ interval.minutes }}m {{ interval.seconds }}s<br>
+                        {% elif status.schedule.type == 'date' %}
+                            <strong>Run Date:</strong> {{ status.schedule.run_date }}<br>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Next Run:</strong> {{ status.next_run_time or 'Not scheduled' }}<br>
+                        <strong>Last Run:</strong> {{ status.last_run_time or 'Never' }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Last Execution Result -->
+        {% if status.last_result %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-play-circle me-2"></i>Last Execution</h5>
+            </div>
+            <div class="card-body">
+                {% set result = status.last_result %}
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Status:</strong> 
+                        <span class="status-badge status-{{ result.status.lower() }}">
+                            {{ result.status.upper() }}
+                        </span><br>
+                        <strong>Duration:</strong> {{ "%.2f"|format(result.duration_seconds or 0) }} seconds<br>
+                        <strong>Return Code:</strong> {{ result.return_code or 'N/A' }}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Start Time:</strong> {{ result.start_time[:19] if result.start_time else 'N/A' }}<br>
+                        <strong>End Time:</strong> {{ result.end_time[:19] if result.end_time else 'N/A' }}
+                    </div>
+                </div>
+                
+                {% if result.output %}
+                <div class="mt-3">
+                    <strong>Output:</strong>
+                    <pre class="bg-light p-3 mt-2 border rounded" style="max-height: 200px; overflow-y: auto;"><code>{{ result.output[:1000] }}{% if result.output|length > 1000 %}... (truncated){% endif %}</code></pre>
+                </div>
+                {% endif %}
+                
+                {% if result.error_message %}
+                <div class="mt-3">
+                    <strong>Error:</strong>
+                    <div class="alert alert-danger">{{ result.error_message }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <!-- Quick Actions -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="runJob('{{ job.job_id }}')"
+                            {{ 'disabled' if status.is_running else '' }}>
+                        <i class="fas fa-play me-1"></i>Run Now
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="viewHistory()">
+                        <i class="fas fa-history me-1"></i>View Full History
+                    </button>
+                    <button class="btn btn-outline-info" onclick="exportJob()">
+                        <i class="fas fa-download me-1"></i>Export Configuration
+                    </button>
+                    <button class="btn btn-outline-warning" onclick="duplicateJob()">
+                        <i class="fas fa-copy me-1"></i>Duplicate Job
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Execution Statistics -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Statistics</h6>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="h5 mb-1 text-success">{{ history|selectattr('status', 'equalto', 'success')|list|length }}</div>
+                        <small class="text-muted">Successful</small>
+                    </div>
+                    <div class="col-6">
+                        <div class="h5 mb-1 text-danger">{{ history|selectattr('status', 'equalto', 'failed')|list|length }}</div>
+                        <small class="text-muted">Failed</small>
+                    </div>
+                </div>
+                <hr>
+                <div class="text-center">
+                    <div class="h5 mb-1">{{ history|length }}</div>
+                    <small class="text-muted">Total Executions</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Execution History -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-history me-2"></i>Recent Executions</h6>
+                <button class="btn btn-sm btn-outline-primary" onclick="viewHistory()">
+                    View All
+                </button>
+            </div>
+            <div class="card-body">
+                {% if history %}
+                    <div class="timeline">
+                        {% for execution in history[:10] %}
+                        <div class="timeline-item">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="status-badge status-{{ execution.status.lower() }}">
+                                    {{ execution.status.upper() }}
+                                </span>
+                                <small class="text-muted">{{ execution.start_time[:16] if execution.start_time else 'N/A' }}</small>
+                            </div>
+                            {% if execution.duration_seconds %}
+                            <small class="text-muted">
+                                Duration: {{ "%.2f"|format(execution.duration_seconds) }}s
+                            </small>
+                            {% endif %}
+                            {% if execution.error_message %}
+                            <div class="small text-danger mt-1">
+                                {{ execution.error_message[:100] }}{% if execution.error_message|length > 100 %}...{% endif %}
+                            </div>
+                            {% endif %}
+                            {% if not loop.last %}<hr class="my-2">{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center text-muted py-3">
+                        <i class="fas fa-clock fa-2x mb-2"></i>
+                        <p>No execution history</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Refresh page
+    function refreshPage() {
+        window.location.reload();
+    }
+    
+    // Run job
+    function runJob(jobId) {
+        if (confirm('Are you sure you want to run this job now?')) {
+            showLoading();
+            
+            fetch(`/api/jobs/${jobId}/run`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                if (data.message) {
+                    showSuccess(`Job executed: ${data.status}`);
+                    setTimeout(() => refreshPage(), 2000);
+                } else {
+                    showError(data.error || 'Failed to run job');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showError('Error running job: ' + error.message);
+            });
+        }
+    }
+    
+    // Toggle job enabled/disabled
+    function toggleJob(jobId) {
+        showLoading();
+        
+        fetch(`/api/jobs/${jobId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.message) {
+                showSuccess(data.message);
+                setTimeout(() => refreshPage(), 1000);
+            } else {
+                showError(data.error || 'Failed to toggle job');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Error toggling job: ' + error.message);
+        });
+    }
+    
+    // Delete job
+    function deleteJob(jobId) {
+        if (confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
+            showLoading();
+            
+            fetch(`/api/jobs/${jobId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                if (data.message) {
+                    showSuccess(data.message);
+                    setTimeout(() => {
+                        window.location.href = '{{ url_for("job_list") }}';
+                    }, 2000);
+                } else {
+                    showError(data.error || 'Failed to delete job');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showError('Error deleting job: ' + error.message);
+            });
+        }
+    }
+    
+    // View full history
+    function viewHistory() {
+        // This could open a modal or navigate to a dedicated history page
+        showError('Full history view not yet implemented');
+    }
+    
+    // Export job configuration
+    function exportJob() {
+        const jobData = {
+            name: '{{ job.name }}',
+            type: '{{ job.job_type }}',
+            configuration: {{ job.to_dict()|tojson }}
+        };
+        
+        const blob = new Blob([JSON.stringify(jobData, null, 2)], {
+            type: 'application/json'
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `job_${jobData.name.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showSuccess('Job configuration exported');
+    }
+    
+    // Duplicate job
+    function duplicateJob() {
+        if (confirm('Create a copy of this job?')) {
+            // This would redirect to create job page with pre-filled data
+            showError('Job duplication not yet implemented');
+        }
+    }
+    
+    // Auto-refresh every 30 seconds if job is running
+    {% if status.is_running %}
+    setInterval(() => {
+        if (!document.hidden) {
+            refreshPage();
+        }
+    }, 30000);
+    {% endif %}
+</script>
+{% endblock %}
