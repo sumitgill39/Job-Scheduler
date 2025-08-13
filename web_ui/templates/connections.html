@@ -20,23 +20,6 @@
     .connection-card.unknown {
         border-left-color: #6c757d;
     }
-    
-    .connection-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    
-    .status-indicator {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        margin-right: 8px;
-    }
-    
-    .status-online { background-color: #28a745; }
-    .status-offline { background-color: #dc3545; }
-    .status-unknown { background-color: #6c757d; }
 </style>
 {% endblock %}
 
@@ -62,253 +45,8 @@
         <div id="connectionsGrid" class="row">
             <!-- Will be populated by JavaScript -->
         </div>
-        
-        <!-- Empty State -->
-        <div id="emptyState" class="text-center py-5" style="display: none;">
-            <i class="fas fa-database fa-3x text-muted mb-3"></i>
-            <h4 class="text-muted">No Database Connections</h4>
-            <p class="text-muted mb-4">Create your first database connection to start building SQL jobs.</p>
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
-                <i class="fas fa-plus me-1"></i>Create First Connection
-            </button>
-        </div>
     </div>
 </div>
-
-<!-- New Connection Modal -->
-<div class="modal fade" id="newConnectionModal" tabindex="-1" aria-labelledby="newConnectionModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="newConnectionModalLabel">
-                    <i class="fas fa-database me-2"></i>New Database Connection
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form id="connectionForm" novalidate>
-                    <input type="hidden" id="connectionId" name="connectionId">
-                    <input type="hidden" id="isEdit" name="isEdit" value="false">
-                    <input type="hidden" id="connectionTested" name="connectionTested" value="false">
-                    
-                    <!-- Basic Information -->
-                    <div class="row mb-3">
-                        <div class="col-md-8">
-                            <label for="connectionName" class="form-label">Connection Name *</label>
-                            <input type="text" class="form-control" id="connectionName" name="name" required 
-                                   pattern="^[a-zA-Z0-9_-]+$" title="Only letters, numbers, underscore and hyphen allowed">
-                            <div class="form-text">Choose a unique, descriptive name (letters, numbers, underscore, hyphen)</div>
-                        </div>
-                        <div class="col-md-4">
-                            <label for="connectionStatus" class="form-label">Status</label>
-                            <select class="form-select" id="connectionStatus" name="is_active">
-                                <option value="true" selected>Active</option>
-                                <option value="false">Inactive</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="connectionDescription" class="form-label">Description</label>
-                        <textarea class="form-control" id="connectionDescription" name="description" rows="2"></textarea>
-                    </div>
-                    
-                    <!-- Server Information -->
-                    <h6 class="mb-3"><i class="fas fa-server me-1"></i>Server Information</h6>
-                    <div class="row mb-3">
-                        <div class="col-md-8">
-                            <label for="serverName" class="form-label">Server Name/IP *</label>
-                            <input type="text" class="form-control" id="serverName" name="server" required>
-                            <div class="form-text">Examples: localhost, server.domain.com, SERVER\INSTANCE</div>
-                        </div>
-                        <div class="col-md-4">
-                            <label for="serverPort" class="form-label">Port</label>
-                            <input type="number" class="form-control" id="serverPort" name="port" min="1" max="65535" value="1433">
-                        </div>
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label for="databaseName" class="form-label">Database Name *</label>
-                        <input type="text" class="form-control" id="databaseName" name="database" required>
-                        <div class="form-text">The name of the database to connect to</div>
-                    </div>
-                    
-                    <!-- Authentication -->
-                    <h6 class="mb-3"><i class="fas fa-key me-1"></i>Authentication</h6>
-                    <div class="mb-3">
-                        <div class="btn-group w-100" role="group">
-                            <input type="radio" class="btn-check" name="auth_type" id="authWindows" value="windows" checked>
-                            <label class="btn btn-outline-primary" for="authWindows">
-                                <i class="fab fa-windows me-1"></i>Windows Authentication
-                            </label>
-                            
-                            <input type="radio" class="btn-check" name="auth_type" id="authSql" value="sql">
-                            <label class="btn btn-outline-primary" for="authSql">
-                                <i class="fas fa-database me-1"></i>SQL Authentication
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <!-- SQL Authentication Section -->
-                    <div id="sqlAuthSection" class="auth-type-section mb-4">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <label for="sqlUsername" class="form-label">Username *</label>
-                                <input type="text" class="form-control" id="sqlUsername" name="username">
-                            </div>
-                            <div class="col-md-6">
-                                <label for="sqlPassword" class="form-label">Password *</label>
-                                <input type="password" class="form-control" id="sqlPassword" name="password">
-                                <div class="form-text">Password will be encrypted before storage</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Advanced Settings -->
-                    <div class="mb-3">
-                        <button type="button" class="btn btn-link p-0" data-bs-toggle="collapse" data-bs-target="#advancedSettings">
-                            <i class="fas fa-cog me-1"></i>Advanced Settings
-                        </button>
-                    </div>
-                    
-                    <div class="collapse" id="advancedSettings">
-                        <div class="card card-body bg-light">
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label for="connectionTimeout" class="form-label">Connection Timeout (sec)</label>
-                                    <input type="number" class="form-control" id="connectionTimeout" name="connection_timeout" value="30" min="1" max="300">
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="commandTimeout" class="form-label">Command Timeout (sec)</label>
-                                    <input type="number" class="form-control" id="commandTimeout" name="command_timeout" value="300" min="1" max="3600">
-                                </div>
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="encryptConnection" name="encrypt">
-                                        <label class="form-check-label" for="encryptConnection">
-                                            Encrypt Connection
-                                        </label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="trustCertificate" name="trust_server_certificate" checked>
-                                        <label class="form-check-label" for="trustCertificate">
-                                            Trust Server Certificate
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Test Connection -->
-                    <div class="mt-4">
-                        <button type="button" class="btn btn-outline-info" id="testConnectionBtn">
-                            <i class="fas fa-plug me-1"></i>Test Connection
-                        </button>
-                        <div id="testResult" class="mt-2" style="display: none;"></div>
-                    </div>
-
-                    <!-- Test Required Alert -->
-                    <div id="testRequiredAlert" class="alert alert-warning test-required-alert" style="display: none;">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Please test the connection before saving.
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveConnectionBtn">
-                    <i class="fas fa-save me-1"></i>Save Connection
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Edit Connection Modal -->
-<div class="modal fade" id="editConnectionModal" tabindex="-1" aria-labelledby="editConnectionModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="editConnectionModalLabel">
-                    <i class="fas fa-edit me-2"></i>Edit Connection
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form id="editConnectionForm" novalidate>
-                    <input type="hidden" id="editConnectionId" name="connectionId">
-                    <input type="hidden" id="editIsEdit" name="isEdit" value="true">
-                    <input type="hidden" id="editConnectionTested" name="connectionTested" value="false">
-                    
-                    <!-- Basic Information (Read-only) -->
-                    <div class="row mb-3">
-                        <div class="col-md-8">
-                            <label class="form-label">Connection Name</label>
-                            <input type="text" class="form-control" id="editConnectionName" name="name" readonly>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Status</label>
-                            <input type="text" class="form-control" id="editConnectionStatus" readonly>
-                        </div>
-                    </div>
-                    
-                    <!-- Server Information (Read-only) -->
-                    <div class="row mb-3">
-                        <div class="col-md-8">
-                            <label class="form-label">Server</label>
-                            <input type="text" class="form-control" id="editServerName" name="server" readonly>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Port</label>
-                            <input type="number" class="form-control" id="editServerPort" name="port" readonly>
-                        </div>
-                    </div>
-                    
-                    <!-- Authentication (Password only editable) -->
-                    <h6 class="mb-3"><i class="fas fa-key me-1"></i>Authentication</h6>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Username</label>
-                            <input type="text" class="form-control" id="editSqlUsername" name="username" readonly>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Password *</label>
-                            <input type="password" class="form-control" id="editSqlPassword" name="password" required>
-                            <div class="form-text">Enter the new password</div>
-                        </div>
-                    </div>
-                    
-                    <!-- Test Connection -->
-                    <div class="mt-4">
-                        <button type="button" class="btn btn-outline-info" id="editTestConnectionBtn">
-                            <i class="fas fa-plug me-1"></i>Test Connection
-                        </button>
-                        <div id="editTestResult" class="mt-2" style="display: none;"></div>
-                    </div>
-
-                    <!-- Test Required Alert -->
-                    <div id="editTestRequiredAlert" class="alert alert-warning" style="display: none;">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Please test the connection with the new password before saving.
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="updateConnectionBtn">
-                    <i class="fas fa-save me-1"></i>Update Connection
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
 
 {% block extra_js %}
 <script>
@@ -321,36 +59,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function loadConnections() {
     const grid = document.getElementById('connectionsGrid');
-    const emptyState = document.getElementById('emptyState');
-    
-    // Show loading state
-    grid.innerHTML = `
-        <div class="col-12 text-center py-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2 text-muted">Loading connections...</p>
-        </div>
-    `;
     
     fetch('/api/connections')
         .then(response => response.json())
         .then(data => {
-            if (data.success && data.connections && data.connections.length > 0) {
+            if (data.success && data.connections) {
                 renderConnections(data.connections);
-                emptyState.style.display = 'none';
-                grid.style.display = 'block';
             } else {
-                grid.style.display = 'none';
-                emptyState.style.display = 'block';
+                grid.innerHTML = '<div class="col-12"><div class="alert alert-warning">No connections found.</div></div>';
             }
         })
         .catch(error => {
             console.error('Error loading connections:', error);
             grid.innerHTML = `
                 <div class="col-12">
-                    <div class="alert alert-danger" role="alert">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
+                    <div class="alert alert-danger">
                         Failed to load connections: ${error.message}
                     </div>
                 </div>
@@ -365,61 +88,26 @@ function renderConnections(connections) {
         <div class="col-xl-4 col-lg-6 col-md-6 mb-4">
             <div class="card connection-card ${conn.status || 'unknown'}">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-database me-2"></i>${escapeHtml(conn.name)}
-                        </h5>
-                        <div>
-                            <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="testConnection('${conn.name}')">
-                                <i class="fas fa-plug"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editConnection('${conn.name}')">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                        </div>
-                    </div>
-                    
+                    <h5 class="card-title">
+                        <i class="fas fa-database me-2"></i>${conn.name}
+                    </h5>
                     <div class="mb-3">
                         <small class="text-muted">
-                            <i class="fas fa-server me-1"></i>${escapeHtml(conn.server)}:${conn.port}
+                            <i class="fas fa-server me-1"></i>${conn.server}:${conn.port}
                         </small><br>
                         <small class="text-muted">
-                            <i class="fas fa-database me-1"></i>${escapeHtml(conn.database)}
+                            <i class="fas fa-database me-1"></i>${conn.database}
                         </small><br>
                         <small class="text-muted">
-                            <i class="fas fa-user me-1"></i>${escapeHtml(conn.username)}
+                            <i class="fas fa-user me-1"></i>${conn.username}
                         </small>
-                    </div>
-                    
-                    <div class="d-flex align-items-center">
-                        <span class="status-indicator status-${conn.status || 'unknown'}"></span>
-                        <span class="text-${conn.status === 'online' ? 'success' : 
-                                         conn.status === 'offline' ? 'danger' : 'muted'}">
-                            ${conn.status === 'online' ? 'Online' :
-                              conn.status === 'offline' ? 'Offline' : 'Unknown'}
-                        </span>
                     </div>
                 </div>
             </div>
         </div>
     `).join('');
 }
-
-function escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
-function testConnection(name) {
-    // Implement test connection functionality
-    console.log('Testing connection:', name);
-}
-
-function editConnection(name) {
-    // Implement edit connection functionality
-    console.log('Editing connection:', name);
-}
 </script>
+{% endblock %}
+
 {% endblock %}
