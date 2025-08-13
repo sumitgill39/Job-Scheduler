@@ -359,132 +359,87 @@ class EnhancedConnectionManager:
                 "response_time": response_time
             }
     
-    def test_connection(self, name: str) -> Dict[str, Any]:
-        """Test an existing connection by name"""
-        connection = self.get_connection(name)
-        if not connection:
-            return {
-                "success": False,
-                "error": f"Connection '{name}' not found",
-                "response_time": 0
-            }
-        
-        result = self.test_connection_info(connection)
-        
-        # Update connection status
-        self._connection_status[name] = {
-            "status": "online" if result["success"] else "offline",
-            "last_checked": datetime.now(),
-            "response_time": result.get("response_time", 0),
-            "error": result.get("error")
-        }
-        
-        # Update last tested in connection info
-        if result["success"]:
-            connection.last_tested = datetime.now().isoformat()
-            connection.last_test_result = "success"
-        else:
-            connection.last_test_result = f"failed: {result.get('error', 'Unknown error')}"
-        
-        # Save updated connection
-        if self.storage_type == "yaml":
-            self._save_connection_yaml(connection)
-        elif self.storage_type == "database":
-            self._save_connection_database(connection)
-        
-        return result
-    
-    def get_connection_status(self, name: str) -> Dict[str, Any]:
-        """Get the current status of a connection"""
-        return self._connection_status.get(name, {
-            "status": "unknown",
-            "last_checked": None,
-            "response_time": 0,
-            "error": None
-        })
-    
-    def refresh_all_connections(self) -> Dict[str, Any]:
-        """Test all connections and update their status"""
-        results = {}
-        connections = self.list_connections()
-        
-        for conn in connections:
-            if conn["is_active"]:
-                result = self.test_connection(conn["name"])
-                results[conn["name"]] = result
-        
-        self.logger.info(f"Refreshed {len(results)} connections")
-        return results
-    
-    def _validate_connection_info(self, connection_info: ConnectionInfo) -> Tuple[bool, str]:
-        """Validate connection information"""
-        if not connection_info.name:
-            return False, "Connection name is required"
-        
-        if not connection_info.server:
-            return False, "Server is required"
-        
-        if not connection_info.database:
-            return False, "Database name is required"
-        
-        if connection_info.port < 1 or connection_info.port > 65535:
-            return False, "Port must be between 1 and 65535"
-        
-        if connection_info.auth_type not in ["windows", "sql"]:
-            return False, "Authentication type must be 'windows' or 'sql'"
-        
-        if connection_info.auth_type == "sql":
-            if not connection_info.username:
-                return False, "Username is required for SQL authentication"
-            if not connection_info.password:
-                return False, "Password is required for SQL authentication"
-        
-        return True, "Valid"
-    
-    def _build_connection_string(self, connection_info: ConnectionInfo) -> str:
-        """Build ODBC connection string from connection info"""
-        components = []
-        components.append("DRIVER={ODBC Driver 17 for SQL Server}")
-        
-        # Handle server and port
-        if '\\' in connection_info.server:
-            # Named instance - don't add port
-            components.append(f"SERVER={connection_info.server}")
-        elif connection_info.port and connection_info.port != 1433:
-            # Custom port
-            components.append(f"SERVER={connection_info.server},{connection_info.port}")
-        else:
-            # Default port
-            components.append(f"SERVER={connection_info.server}")
-        
-        components.append(f"DATABASE={connection_info.database}")
-        
-        # Authentication
-        if connection_info.auth_type == "windows":
-            components.append("Trusted_Connection=yes")
-        else:
-            components.append(f"UID={connection_info.username}")
-            components.append(f"PWD={connection_info.password}")
-        
-        # Timeouts
-        components.append(f"Connection Timeout={connection_info.connection_timeout}")
-        components.append(f"Command Timeout={connection_info.command_timeout}")
-        
-        # Security settings
-        if connection_info.encrypt:
-            components.append("Encrypt=yes")
-        else:
-            components.append("Encrypt=no")
+    def test_connection(self, connection_info: ConnectionInfo) -> Tuple[bool, Optional[str]]:
+        """Test a database connection"""
+        try:
+            if not HAS_PYODBC:
+                return False, "pyodbc is not installed"
+
+            # Build connection string
+            conn_str = self._build_connection_string(connection_info)
             
-        if connection_info.trust_server_certificate:
-            components.append("TrustServerCertificate=yes")
+            # Try to connect
+            start_time = time.time()
+            with pyodbc.connect(conn_str, timeout=connection_info.connection_timeout) as conn:
+                # Test with a simple query
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+                
+            return True, None
+
+        except Exception as e:
+            return False, str(e)
+
+    def save_connection(self, connection_info: ConnectionInfo) -> bool:
+        """Save a database connection"""
+        try:
+            # Update timestamps
+            connection_info.modified_date = datetime.now().isoformat()
+            
+            # Convert to dict for storage
+            conn_data = asdict(connection_info)
+            
+            # Store in YAML file
+            config_dir = Path(self.config_path).parent
+            connections_file = config_dir / "connections.yaml"
+            
+            # Load existing connections
+            connections = {}
+            if connections_file.exists():
+                with open(connections_file, 'r') as f:
+                    connections = yaml.safe_load(f) or {}
+            
+            # Add/update connection
+            connections[connection_info.name] = conn_data
+            
+            # Save back to file
+            with open(connections_file, 'w') as f:
+                yaml.safe_dump(connections, f)
+            
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to save connection: {e}")
+            return False
+
+    def _build_connection_string(self, connection_info: ConnectionInfo) -> str:
+        """Build a connection string from connection info"""
+        parts = [
+            f"DRIVER={{ODBC Driver 17 for SQL Server}}",
+            f"SERVER={connection_info.server},{connection_info.port}",
+            f"DATABASE={connection_info.database}"
+        ]
+
+        if connection_info.auth_type == "windows":
+            parts.append("Trusted_Connection=yes")
         else:
-            components.append("TrustServerCertificate=no")
-        
-        # Application name for monitoring
-        components.append("Application Name=JobScheduler")
-        
-        return ";".join(components)
+            parts.extend([
+                f"UID={connection_info.username}",
+                f"PWD={connection_info.password}"
+            ])
+
+        if connection_info.encrypt:
+            parts.append("Encrypt=yes")
+        else:
+            parts.append("Encrypt=no")
+
+        if connection_info.trust_server_certificate:
+            parts.append("TrustServerCertificate=yes")
+
+        parts.append(f"Connect Timeout={connection_info.connection_timeout}")
+
+        return ";".join(parts)
     
     # YAML Storage Methods
     

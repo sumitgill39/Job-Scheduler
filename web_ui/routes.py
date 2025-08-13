@@ -367,26 +367,20 @@ def create_routes(app):
             data = request.json
             if not data:
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
-                
+
+            logger.info(f"Creating connection with data: {data}")
+
+            # Validate required fields
             required_fields = ['name', 'server', 'database']
             missing_fields = [field for field in required_fields if not data.get(field)]
             if missing_fields:
                 return jsonify({
-                    'success': False, 
+                    'success': False,
                     'error': f'Missing required fields: {", ".join(missing_fields)}'
                 }), 400
-                
-            conn_manager = get_enhanced_connection_manager()
-            
-            # Check if connection already exists
-            if conn_manager.get_connection(data['name']):
-                return jsonify({
-                    'success': False,
-                    'error': f'Connection with name "{data["name"]}" already exists'
-                }), 409
-                
-            # Create new connection
-            connection = conn_manager.create_connection(
+
+            # Create ConnectionInfo object
+            connection_info = ConnectionInfo(
                 name=data['name'],
                 server=data['server'],
                 database=data['database'],
@@ -394,28 +388,44 @@ def create_routes(app):
                 auth_type=data.get('auth_type', 'windows'),
                 username=data.get('username'),
                 password=data.get('password'),
-                description=data.get('description'),
+                description=data.get('description', ''),
                 is_active=data.get('is_active', True),
                 encrypt=data.get('encrypt', False),
                 trust_server_certificate=data.get('trust_server_certificate', True),
                 connection_timeout=int(data.get('connection_timeout', 30)),
                 command_timeout=int(data.get('command_timeout', 300))
             )
-            
-            return jsonify({
-                'success': True,
-                'message': f'Connection "{data["name"]}" created successfully',
-                'connection': {
-                    'name': connection.name,
-                    'server': connection.server,
-                    'database': connection.database,
-                    'port': connection.port,
-                    'description': connection.description,
-                    'auth_type': connection.auth_type,
-                    'is_active': connection.is_active
-                }
-            })
-            
+
+            # Get the connection manager
+            conn_manager = get_enhanced_connection_manager()
+
+            # Check if connection already exists
+            if conn_manager.get_connection(data['name']):
+                return jsonify({
+                    'success': False,
+                    'error': f'Connection with name "{data["name"]}" already exists'
+                }), 409
+
+            # Save the connection
+            success = conn_manager.save_connection(connection_info)
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': f'Connection "{data["name"]}" created successfully',
+                    'connection': {
+                        'name': connection_info.name,
+                        'server': connection_info.server,
+                        'database': connection_info.database,
+                        'description': connection_info.description,
+                        'is_active': connection_info.is_active
+                    }
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to save connection'
+                }), 500
+
         except Exception as e:
             logger.error(f"API create connection error: {e}", exc_info=True)
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -540,19 +550,12 @@ def create_routes(app):
             data = request.json
             if not data:
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
-                
-            required_fields = ['server', 'database']
-            missing_fields = [field for field in required_fields if not data.get(field)]
-            if missing_fields:
-                return jsonify({
-                    'success': False,
-                    'error': f'Missing required fields: {", ".join(missing_fields)}'
-                }), 400
-                
-            conn_manager = get_enhanced_connection_manager()
+
+            logger.info(f"Testing connection with data: {data}")
             
-            # Create temporary connection for testing
-            test_result = conn_manager.test_connection(
+            # Create a ConnectionInfo object
+            connection_info = ConnectionInfo(
+                name=data.get('name', 'test-connection'),
                 server=data['server'],
                 database=data['database'],
                 port=int(data.get('port', 1433)),
@@ -561,21 +564,30 @@ def create_routes(app):
                 password=data.get('password'),
                 encrypt=data.get('encrypt', False),
                 trust_server_certificate=data.get('trust_server_certificate', True),
-                connection_timeout=int(data.get('connection_timeout', 30))
+                connection_timeout=int(data.get('connection_timeout', 30)),
+                command_timeout=int(data.get('command_timeout', 300))
             )
+
+            # Get the connection manager
+            conn_manager = get_enhanced_connection_manager()
             
-            if test_result.success:
+            # Test the connection
+            start_time = time.time()
+            success, error = conn_manager.test_connection(connection_info)
+            response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+
+            if success:
                 return jsonify({
                     'success': True,
                     'message': 'Connection test successful',
-                    'response_time': test_result.response_time
+                    'response_time': response_time
                 })
             else:
                 return jsonify({
                     'success': False,
-                    'error': test_result.error
+                    'error': str(error)
                 })
-                
+
         except Exception as e:
             logger.error(f"API test connection error: {e}", exc_info=True)
             return jsonify({'success': False, 'error': str(e)}), 500
