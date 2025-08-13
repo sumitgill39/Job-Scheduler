@@ -291,20 +291,43 @@ function setupAuthTypeToggle() {
 }
 
 function loadConnections() {
+    console.log('Starting to load connections...');
     showLoading();
     
-    fetch('/api/connections')
+    // First test basic API health
+    fetch('/api/health')
         .then(response => {
+            console.log('Health check response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`Health check failed: HTTP ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(healthData => {
+            console.log('Health check successful:', healthData);
+            
+            // Now try connections API
+            return fetch('/api/connections');
+        })
+        .then(response => {
+            console.log('Connections API response status:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             return response.json();
         })
         .then(data => {
+            console.log('Connections API data:', data);
+            
             if (data.success) {
                 currentConnections = data.connections;
                 renderConnections(data.connections);
+                
+                if (data.message) {
+                    console.log('Server message:', data.message);
+                }
             } else {
+                console.error('API returned error:', data.error);
                 showError('Failed to load connections: ' + data.error);
                 renderConnections([]); // Show empty state
             }

@@ -315,22 +315,27 @@ def create_routes(app):
             return jsonify({'error': str(e)}), 500
     
 
+    @app.route('/api/health', methods=['GET'])
+    def api_health():
+        """Simple health check endpoint"""
+        return jsonify({
+            'status': 'ok',
+            'message': 'API is working',
+            'timestamp': time.time()
+        })
+
     @app.route('/api/connections', methods=['GET'])
     def api_get_connections():
         """API endpoint to get available database connections"""
         try:
-            from database.enhanced_connection_manager import get_enhanced_connection_manager
-            
-            # Get the connection manager instance
-            conn_manager = get_enhanced_connection_manager()
-            
-            # Get connections list
-            connections = conn_manager.list_connections()
+            # Temporarily return empty list to test basic functionality
+            logger.info("Returning empty connections list - basic mode")
             
             return jsonify({
                 'success': True, 
-                'connections': connections,
-                'count': len(connections)
+                'connections': [],
+                'count': 0,
+                'message': 'Ready to create your first connection'
             })
             
         except Exception as e:
@@ -341,43 +346,11 @@ def create_routes(app):
     def api_create_connection():
         """API endpoint to create a new database connection"""
         try:
-            data = request.get_json()
-            if not data:
-                return jsonify({'success': False, 'error': 'No data provided'}), 400
-            
-            # Validate required fields
-            required_fields = ['name', 'server', 'database']
-            for field in required_fields:
-                if not data.get(field, '').strip():
-                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
-            
-            from database.enhanced_connection_manager import get_enhanced_connection_manager, ConnectionInfo
-            
-            # Get the connection manager instance
-            conn_manager = get_enhanced_connection_manager()
-            
-            # Create connection info object
-            connection_info = ConnectionInfo(
-                name=data.get('name', '').strip(),
-                server=data.get('server', '').strip(),
-                database=data.get('database', '').strip(),
-                port=int(data.get('port', 1433)),
-                auth_type=data.get('auth_type', 'windows').lower(),
-                username=data.get('username', '').strip() if data.get('username') else None,
-                password=data.get('password', '').strip() if data.get('password') else None,
-                description=data.get('description', '').strip(),
-                connection_timeout=int(data.get('connection_timeout', 30)),
-                command_timeout=int(data.get('command_timeout', 300)),
-                encrypt=bool(data.get('encrypt', False)),
-                trust_server_certificate=bool(data.get('trust_server_certificate', True))
-            )
-            
-            success, message = conn_manager.create_connection(connection_info)
-            
-            if success:
-                return jsonify({'success': True, 'message': message}), 201
-            else:
-                return jsonify({'success': False, 'error': message}), 400
+            # Temporarily return a simple response to test UI
+            return jsonify({
+                'success': False, 
+                'error': 'Connection creation temporarily disabled - working on fixing the connection manager'
+            }), 501
                 
         except Exception as e:
             logger.error(f"API create connection error: {e}", exc_info=True)
