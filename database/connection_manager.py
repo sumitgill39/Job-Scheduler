@@ -135,9 +135,6 @@ class DatabaseConnectionManager:
             components.append("TrustServerCertificate=yes")
         else:
             components.append("TrustServerCertificate=no")
-            
-        # Add application name for better monitoring
-        components.append("Application Name=JobScheduler")
         
         connection_string = ";".join(components)
         self.logger.debug(f"Built connection string for '{connection_name}'")

@@ -2,897 +2,500 @@
 
 {% block title %}Database Connections - Windows Job Scheduler{% endblock %}
 
-{% block extra_css %}
-<style>
-    .connection-card {
-        transition: all 0.3s ease;
-        border-left: 4px solid #dee2e6;
-        cursor: pointer;
-    }
-    
-    .connection-card.online {
-        border-left-color: #28a745;
-        background-color: rgba(40, 167, 69, 0.05);
-    }
-    
-    .connection-card.offline {
-        border-left-color: #dc3545;
-        background-color: rgba(220, 53, 69, 0.05);
-    }
-    
-    .connection-card.unknown {
-        border-left-color: #6c757d;
-        background-color: rgba(108, 117, 125, 0.05);
-    }
-    
-    .connection-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    
-    .status-indicator {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        margin-right: 8px;
-    }
-    
-    .status-online { background-color: #28a745; }
-    .status-offline { background-color: #dc3545; }
-    .status-unknown { background-color: #6c757d; }
-    .status-testing { 
-        background-color: #ffc107; 
-        animation: pulse 1.5s ease-in-out infinite alternate;
-    }
-    
-    @keyframes pulse {
-        from { opacity: 0.4; }
-        to { opacity: 1.0; }
-    }
-    
-    .response-time {
-        font-size: 0.85rem;
-        color: #6c757d;
-    }
-    
-    .connection-actions {
-        opacity: 0;
-        transition: opacity 0.3s ease;
-    }
-    
-    .connection-card:hover .connection-actions {
-        opacity: 1;
-    }
-    
-    .auth-type-section {
-        display: none;
-    }
-    
-    .auth-type-section.active {
-        display: block;
-    }
-
-    .test-required-alert {
-        display: none;
-        margin-top: 10px;
-    }
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="row">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h2><i class="fas fa-database me-2"></i>Database Connections</h2>
-                <p class="text-muted">Manage SQL Server connections for your jobs</p>
-            </div>
-            <div>
-                <button type="button" class="btn btn-outline-secondary me-2" id="refreshBtn">
-                    <i class="fas fa-sync-alt me-1"></i>Refresh
-                </button>
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
-                    <i class="fas fa-plus me-1"></i>New Connection
-                </button>
-            </div>
-        </div>
-        
-        <!-- Connections Grid -->
-        <div id="connectionsGrid" class="row">
-            <!-- Will be populated by JavaScript -->
-        </div>
-        
-        <!-- Empty State -->
-        <div id="emptyState" class="text-center py-5" style="display: none;">
-            <i class="fas fa-database fa-3x text-muted mb-3"></i>
-            <h4 class="text-muted">No Database Connections</h4>
-            <p class="text-muted mb-4">Create your first database connection to start building SQL jobs.</p>
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
-                <i class="fas fa-plus me-1"></i>Create First Connection
-            </button>
-        </div>
-
-        <!-- Status Messages -->
-        <div id="statusMessages" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050">
-        </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="fas fa-database me-2"></i>Database Connections</h1>
+    <div>
+        <button class="btn btn-outline-secondary me-2" onclick="refreshConnections()">
+            <i class="fas fa-sync-alt me-1"></i>Refresh
+        </button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
+            <i class="fas fa-plus me-1"></i>New Connection
+        </button>
     </div>
 </div>
 
+<!-- Connections Table -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-table me-2"></i>Database Connections
+            <span class="badge bg-primary ms-2">{{ connections|length }}</span>
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if connections %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Server</th>
+                            <th>Database</th>
+                            <th>Port</th>
+                            <th>Authentication</th>
+                            <th>Status</th>
+                            <th>Response Time</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for conn in connections %}
+                        <tr>
+                            <td>
+                                <strong>{{ conn.name }}</strong>
+                                {% if conn.description %}
+                                <br><small class="text-muted">{{ conn.description }}</small>
+                                {% endif %}
+                            </td>
+                            <td>{{ conn.server }}</td>
+                            <td>{{ conn.database }}</td>
+                            <td>{{ conn.port or 1433 }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if conn.auth_type == 'Windows' else 'info' }}">
+                                    {{ conn.auth_type }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary" id="status-{{ conn.name }}">
+                                    <i class="fas fa-spinner fa-spin me-1"></i>Testing...
+                                </span>
+                            </td>
+                            <td>
+                                <span id="response-time-{{ conn.name }}" class="text-muted">-</span>
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-sm btn-outline-info" 
+                                            onclick="testConnection('{{ conn.name }}')"
+                                            data-bs-toggle="tooltip" title="Test Connection">
+                                        <i class="fas fa-plug"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning" 
+                                            onclick="editConnection('{{ conn.name }}')"
+                                            data-bs-toggle="tooltip" title="Edit">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    {% if conn.name not in ['default', 'production', 'development'] %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger" 
+                                            onclick="deleteConnection('{{ conn.name }}')"
+                                            data-bs-toggle="tooltip" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-database fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No database connections found</h5>
+                <p class="text-muted">Create your first database connection to get started.</p>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
+                    <i class="fas fa-plus me-1"></i>Create First Connection
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Connection Details Cards -->
+{% if connections %}
+<div class="row mt-4">
+    {% for conn in connections[:3] %}
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">{{ conn.name }}</h6>
+                <span class="badge bg-secondary" id="card-status-{{ conn.name }}">
+                    <i class="fas fa-spinner fa-spin"></i> Testing
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="small">
+                    <strong>Server:</strong> {{ conn.server }}<br>
+                    <strong>Database:</strong> {{ conn.database }}<br>
+                    <strong>Auth:</strong> {{ conn.auth_type }}<br>
+                    <strong>Response:</strong> <span id="card-response-{{ conn.name }}">Testing...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 <!-- New Connection Modal -->
-<div class="modal fade" id="newConnectionModal" tabindex="-1" aria-labelledby="newConnectionModalLabel" aria-hidden="true">
+<div class="modal fade" id="newConnectionModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="newConnectionModalLabel">
-                    <i class="fas fa-database me-2"></i>New Database Connection
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <h5 class="modal-title"><i class="fas fa-database me-2"></i>Create New Database Connection</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="connectionForm" novalidate>
-                    <input type="hidden" id="connectionId" name="connectionId">
-                    <input type="hidden" id="isEdit" name="isEdit" value="false">
-                    <input type="hidden" id="connectionTested" name="connectionTested" value="false">
+                <form id="newConnectionForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="connName" class="form-label">Connection Name *</label>
+                            <input type="text" class="form-control" id="connName" required
+                                   placeholder="e.g., MyDatabase">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="connDescription" class="form-label">Description</label>
+                            <input type="text" class="form-control" id="connDescription"
+                                   placeholder="Optional description">
+                        </div>
+                    </div>
                     
-                    <!-- Basic Information -->
-                    <div class="row mb-3">
+                    <div class="row mt-3">
                         <div class="col-md-8">
-                            <label for="connectionName" class="form-label">Connection Name *</label>
-                            <input type="text" class="form-control" id="connectionName" name="name" required 
-                                   pattern="^[a-zA-Z0-9_-]+$" title="Only letters, numbers, underscore and hyphen allowed">
-                            <div class="form-text">Choose a unique, descriptive name (letters, numbers, underscore, hyphen)</div>
+                            <label for="connServer" class="form-label">Server *</label>
+                            <input type="text" class="form-control" id="connServer" required
+                                   placeholder="localhost, server.domain.com, or SERVER\INSTANCE">
                         </div>
                         <div class="col-md-4">
-                            <label for="connectionStatus" class="form-label">Status</label>
-                            <select class="form-select" id="connectionStatus" name="is_active">
-                                <option value="true" selected>Active</option>
-                                <option value="false">Inactive</option>
+                            <label for="connPort" class="form-label">Port</label>
+                            <input type="number" class="form-control" id="connPort" 
+                                   value="1433" min="1" max="65535">
+                        </div>
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <label for="connDatabase" class="form-label">Database *</label>
+                            <input type="text" class="form-control" id="connDatabase" required
+                                   placeholder="Database name">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="connAuth" class="form-label">Authentication Type</label>
+                            <select class="form-select" id="connAuth">
+                                <option value="windows" selected>Windows Authentication</option>
+                                <option value="sql">SQL Server Authentication</option>
                             </select>
                         </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="connectionDescription" class="form-label">Description</label>
-                        <textarea class="form-control" id="connectionDescription" name="description" rows="2"></textarea>
-                    </div>
-                    
-                    <!-- Server Information -->
-                    <h6 class="mb-3"><i class="fas fa-server me-1"></i>Server Information</h6>
-                    <div class="row mb-3">
-                        <div class="col-md-8">
-                            <label for="serverName" class="form-label">Server Name/IP *</label>
-                            <input type="text" class="form-control" id="serverName" name="server" required>
-                            <div class="form-text">Examples: localhost, server.domain.com, SERVER\INSTANCE</div>
-                        </div>
-                        <div class="col-md-4">
-                            <label for="serverPort" class="form-label">Port</label>
-                            <input type="number" class="form-control" id="serverPort" name="port" min="1" max="65535" value="1433">
-                        </div>
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label for="databaseName" class="form-label">Database Name *</label>
-                        <input type="text" class="form-control" id="databaseName" name="database" required>
-                        <div class="form-text">The name of the database to connect to</div>
-                    </div>
-                    
-                    <!-- Authentication -->
-                    <h6 class="mb-3"><i class="fas fa-key me-1"></i>Authentication</h6>
-                    <div class="mb-3">
-                        <div class="btn-group w-100" role="group">
-                            <input type="radio" class="btn-check" name="auth_type" id="authWindows" value="windows" checked>
-                            <label class="btn btn-outline-primary" for="authWindows">
-                                <i class="fab fa-windows me-1"></i>Windows Authentication
-                            </label>
-                            
-                            <input type="radio" class="btn-check" name="auth_type" id="authSql" value="sql">
-                            <label class="btn btn-outline-primary" for="authSql">
-                                <i class="fas fa-database me-1"></i>SQL Authentication
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <!-- SQL Authentication Section -->
-                    <div id="sqlAuthSection" class="auth-type-section mb-4">
-                        <div class="row">
+                    <!-- SQL Authentication fields -->
+                    <div id="connSqlAuth" style="display: none;">
+                        <div class="row mt-3">
                             <div class="col-md-6">
-                                <label for="sqlUsername" class="form-label">Username *</label>
-                                <input type="text" class="form-control" id="sqlUsername" name="username">
+                                <label for="connUsername" class="form-label">Username *</label>
+                                <input type="text" class="form-control" id="connUsername"
+                                       placeholder="SQL Server username">
                             </div>
                             <div class="col-md-6">
-                                <label for="sqlPassword" class="form-label">Password *</label>
-                                <input type="password" class="form-control" id="sqlPassword" name="password">
-                                <div class="form-text">Password will be encrypted before storage</div>
+                                <label for="connPassword" class="form-label">Password *</label>
+                                <input type="password" class="form-control" id="connPassword"
+                                       placeholder="SQL Server password">
                             </div>
                         </div>
-                    </div>
-                    
-                    <!-- Advanced Settings -->
-                    <div class="mb-3">
-                        <button type="button" class="btn btn-link p-0" data-bs-toggle="collapse" data-bs-target="#advancedSettings">
-                            <i class="fas fa-cog me-1"></i>Advanced Settings
-                        </button>
-                    </div>
-                    
-                    <div class="collapse" id="advancedSettings">
-                        <div class="card card-body bg-light">
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label for="connectionTimeout" class="form-label">Connection Timeout (sec)</label>
-                                    <input type="number" class="form-control" id="connectionTimeout" name="connection_timeout" value="30" min="1" max="300">
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="commandTimeout" class="form-label">Command Timeout (sec)</label>
-                                    <input type="number" class="form-control" id="commandTimeout" name="command_timeout" value="300" min="1" max="3600">
-                                </div>
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="encryptConnection" name="encrypt">
-                                        <label class="form-check-label" for="encryptConnection">
-                                            Encrypt Connection
-                                        </label>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="trustCertificate" name="trust_server_certificate" checked>
-                                        <label class="form-check-label" for="trustCertificate">
-                                            Trust Server Certificate
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Test Connection -->
-                    <div class="mt-4">
-                        <button type="button" class="btn btn-outline-info" id="testConnectionBtn">
-                            <i class="fas fa-plug me-1"></i>Test Connection
-                        </button>
-                        <div id="testResult" class="mt-2" style="display: none;"></div>
-                    </div>
-
-                    <!-- Test Required Alert -->
-                    <div id="testRequiredAlert" class="alert alert-warning test-required-alert" style="display: none;">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Please test the connection before saving.
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" onclick="testConnectionForm()">
+                    <i class="fas fa-plug me-1"></i>Test Connection
+                </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveConnectionBtn">
+                <button type="button" class="btn btn-primary" onclick="saveConnection()">
                     <i class="fas fa-save me-1"></i>Save Connection
                 </button>
             </div>
         </div>
     </div>
 </div>
-
-<!-- Edit Connection Modal -->
-<div class="modal fade" id="editConnectionModal" tabindex="-1" aria-labelledby="editConnectionModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="editConnectionModalLabel">
-                    <i class="fas fa-edit me-2"></i>Edit Connection
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form id="editConnectionForm" novalidate>
-                    <input type="hidden" id="editConnectionId" name="connectionId">
-                    <input type="hidden" id="editIsEdit" name="isEdit" value="true">
-                    <input type="hidden" id="editConnectionTested" name="connectionTested" value="false">
-                    
-                    <!-- Basic Information (Read-only) -->
-                    <div class="row mb-3">
-                        <div class="col-md-8">
-                            <label class="form-label">Connection Name</label>
-                            <input type="text" class="form-control" id="editConnectionName" name="name" readonly>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Status</label>
-                            <input type="text" class="form-control" id="editConnectionStatus" readonly>
-                        </div>
-                    </div>
-                    
-                    <!-- Server Information (Read-only) -->
-                    <div class="row mb-3">
-                        <div class="col-md-8">
-                            <label class="form-label">Server</label>
-                            <input type="text" class="form-control" id="editServerName" name="server" readonly>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Port</label>
-                            <input type="number" class="form-control" id="editServerPort" name="port" readonly>
-                        </div>
-                    </div>
-                    
-                    <!-- Authentication (Password only editable) -->
-                    <h6 class="mb-3"><i class="fas fa-key me-1"></i>Authentication</h6>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Username</label>
-                            <input type="text" class="form-control" id="editSqlUsername" name="username" readonly>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Password *</label>
-                            <input type="password" class="form-control" id="editSqlPassword" name="password" required>
-                            <div class="form-text">Enter the new password</div>
-                        </div>
-                    </div>
-                    
-                    <!-- Test Connection -->
-                    <div class="mt-4">
-                        <button type="button" class="btn btn-outline-info" id="editTestConnectionBtn">
-                            <i class="fas fa-plug me-1"></i>Test Connection
-                        </button>
-                        <div id="editTestResult" class="mt-2" style="display: none;"></div>
-                    </div>
-
-                    <!-- Test Required Alert -->
-                    <div id="editTestRequiredAlert" class="alert alert-warning" style="display: none;">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Please test the connection with the new password before saving.
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="updateConnectionBtn">
-                    <i class="fas fa-save me-1"></i>Update Connection
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize Bootstrap components
-    initializeBootstrap();
-    
-    // Setup other handlers
-    setupEventListeners();
-    setupAuthTypeToggle();
-    initializeConnectionsPage();
-});
-
-function initializeBootstrap() {
-    // Initialize all Bootstrap tooltips
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-
-    // Initialize all modals
-    var modalElements = [].slice.call(document.querySelectorAll('.modal'));
-    modalElements.map(function (modalEl) {
-        return new bootstrap.Modal(modalEl);
-    });
-}
-
-function setupEventListeners() {
-    // Get modal element
-    const modal = document.getElementById('newConnectionModal');
-    
-    // Handle modal events
-    modal.addEventListener('show.bs.modal', function () {
-        console.log('Modal is about to show');
-        resetForm();
-    });
-
-    modal.addEventListener('shown.bs.modal', function () {
-        console.log('Modal is shown');
-        // Focus first input
-        const firstInput = modal.querySelector('input:not([type="hidden"])');
-        if (firstInput) {
-            firstInput.focus();
+    // Authentication type handling
+    document.getElementById('connAuth').addEventListener('change', function() {
+        const sqlAuthSection = document.getElementById('connSqlAuth');
+        if (this.value === 'sql') {
+            sqlAuthSection.style.display = 'block';
+            document.getElementById('connUsername').required = true;
+            document.getElementById('connPassword').required = true;
+        } else {
+            sqlAuthSection.style.display = 'none';
+            document.getElementById('connUsername').required = false;
+            document.getElementById('connPassword').required = false;
         }
     });
-
-    // Add event listeners for form buttons
-    const testConnectionBtn = document.getElementById('testConnectionBtn');
-    const saveConnectionBtn = document.getElementById('saveConnectionBtn');
-    const refreshBtn = document.getElementById('refreshBtn');
-
-    if (testConnectionBtn) {
-        testConnectionBtn.addEventListener('click', testConnection);
-    }
-    if (saveConnectionBtn) {
-        saveConnectionBtn.addEventListener('click', saveConnection);
-    }
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', loadConnections);
-    }
-}
-
-function resetForm() {
-    const form = document.getElementById('connectionForm');
-    if (form) {
-        form.reset();
-        // Reset hidden fields
-        const hiddenFields = form.querySelectorAll('input[type="hidden"]');
-        hiddenFields.forEach(field => {
-            if (field.id === 'connectionId') field.value = '';
-            if (field.id === 'isEdit') field.value = 'false';
-            if (field.id === 'connectionTested') field.value = 'false';
-        });
-
-        // Reset test result and alert
-        const testResult = document.getElementById('testResult');
-        const testRequiredAlert = document.getElementById('testRequiredAlert');
-        if (testResult) testResult.style.display = 'none';
-        if (testRequiredAlert) testRequiredAlert.style.display = 'none';
-
-        // Reset SQL auth section
-        const sqlAuthSection = document.getElementById('sqlAuthSection');
-        const authWindows = document.getElementById('authWindows');
-        if (sqlAuthSection) sqlAuthSection.classList.remove('active');
-        if (authWindows) authWindows.checked = true;
-
-        // Reset required fields
-        const sqlUsername = document.getElementById('sqlUsername');
-        const sqlPassword = document.getElementById('sqlPassword');
-        if (sqlUsername) sqlUsername.required = false;
-        if (sqlPassword) sqlPassword.required = false;
-    }
-}
-
-// Your functions
-function showNewConnectionModal() {
-    const form = document.getElementById('connectionForm');
-    const modal = new bootstrap.Modal(document.getElementById('newConnectionModal'));
     
-    // Reset form
-    form.reset();
-    document.getElementById('connectionId').value = '';
-    document.getElementById('isEdit').value = 'false';
-    document.getElementById('connectionTested').value = 'false';
-    document.getElementById('testResult').style.display = 'none';
-    document.getElementById('testRequiredAlert').style.display = 'none';
-    
-    // Reset SQL auth section
-    document.getElementById('sqlAuthSection').classList.remove('active');
-    document.getElementById('authWindows').checked = true;
-    document.getElementById('sqlUsername').required = false;
-    document.getElementById('sqlPassword').required = false;
-    
-    // Show modal
-    modal.show();
-}
-
-function testConnection(event) {
-    event.preventDefault();
-    const form = document.getElementById('connectionForm');
-    if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-    }
-
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-    
-    // Convert boolean and numeric values
-    data.encrypt = data.encrypt === 'on';
-    data.trust_server_certificate = data.trust_server_certificate === 'on';
-    data.port = parseInt(data.port, 10);
-    data.connection_timeout = parseInt(data.connection_timeout, 10);
-    data.command_timeout = parseInt(data.command_timeout, 10);
-    
-    const testBtn = event.target;
-    const originalText = testBtn.innerHTML;
-    testBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Testing...';
-    testBtn.disabled = true;
-    
-    const testResult = document.getElementById('testResult');
-    testResult.style.display = 'none';
-    
-    console.log('Testing connection with data:', data);
-    
-    fetch('/api/test-connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(result => {
-        console.log('Test connection response:', result);
-        testResult.style.display = 'block';
+    // Test connection from form
+    function testConnectionForm() {
+        const server = document.getElementById('connServer').value;
+        const port = document.getElementById('connPort').value;
+        const database = document.getElementById('connDatabase').value;
+        const authType = document.getElementById('connAuth').value;
+        const username = document.getElementById('connUsername').value;
+        const password = document.getElementById('connPassword').value;
         
-        if (result.success) {
-            document.getElementById('connectionTested').value = 'true';
-            document.getElementById('testRequiredAlert').style.display = 'none';
-            testResult.innerHTML = `
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle me-2"></i>
-                    <strong>Connection successful!</strong><br>
-                    Response time: ${result.response_time.toFixed(0)}ms
-                </div>
-            `;
-        } else {
-            testResult.innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="fas fa-times-circle me-2"></i>
-                    <strong>Connection failed:</strong><br>
-                    ${escapeHtml(result.error)}
-                </div>
-            `;
+        if (!server || !database) {
+            showError('Server and database are required');
+            return;
         }
-    })
-    .catch(error => {
-        console.error('Test connection error:', error);
-        testResult.style.display = 'block';
-        testResult.innerHTML = `
-            <div class="alert alert-danger">
-                <i class="fas fa-times-circle me-2"></i>
-                <strong>Test failed:</strong> ${escapeHtml(error.message)}
-            </div>
-        `;
-    })
-    .finally(() => {
-        testBtn.innerHTML = originalText;
-        testBtn.disabled = false;
-    });
-}
-
-function saveConnection(event) {
-    event.preventDefault();
-    const form = document.getElementById('connectionForm');
-    if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-    }
-    
-    if (document.getElementById('connectionTested').value !== 'true') {
-        document.getElementById('testRequiredAlert').style.display = 'block';
-        return;
-    }
-    
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-    
-    // Convert boolean and numeric values
-    data.encrypt = data.encrypt === 'on';
-    data.trust_server_certificate = data.trust_server_certificate === 'on';
-    data.is_active = data.is_active === 'true';
-    data.port = parseInt(data.port, 10);
-    data.connection_timeout = parseInt(data.connection_timeout, 10);
-    data.command_timeout = parseInt(data.command_timeout, 10);
-    
-    const saveBtn = document.querySelector('.modal-footer .btn-primary');
-    const originalText = saveBtn.innerHTML;
-    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
-    saveBtn.disabled = true;
-    
-    console.log('Saving connection with data:', data);
-    
-    fetch('/api/connections', {
-        method: data.isEdit === 'true' ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(err => {
-                throw new Error(err.error || 'Failed to save connection');
-            });
-        }
-        return response.json();
-    })
-    .then(result => {
-        if (result.success) {
-            const modal = bootstrap.Modal.getInstance(document.getElementById('newConnectionModal'));
-            modal.hide();
-            showSuccess(result.message || 'Connection saved successfully');
-            loadConnections();
-        } else {
-            showError('Failed to save connection: ' + result.error);
-        }
-    })
-    .catch(error => {
-        console.error('Save connection error:', error);
-        showError(error.message);
-    })
-    .finally(() => {
-        saveBtn.innerHTML = originalText;
-        saveBtn.disabled = false;
-    });
-}
-
-function renderConnections(connections) {
-    const grid = document.getElementById('connectionsGrid');
-    const emptyState = document.getElementById('emptyState');
-    
-    if (!connections || connections.length === 0) {
-        grid.style.display = 'none';
-        emptyState.style.display = 'block';
-        return;
-    }
-    
-    emptyState.style.display = 'none';
-    grid.style.display = 'block';
-    
-    grid.innerHTML = connections.map(conn => `
-        <div class="col-xl-4 col-lg-6 col-md-6 mb-4">
-            <div class="card connection-card ${conn.status || 'unknown'}">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h6 class="card-title mb-0">
-                            <i class="fas fa-database me-2"></i>${escapeHtml(conn.name)}
-                        </h6>
-                        <div class="connection-actions">
-                            <button type="button" class="btn btn-sm btn-outline-info me-1" onclick="testConnectionById('${conn.name}')">
-                                <i class="fas fa-plug"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="showEditConnection('${conn.name}')">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-2">
-                        <small class="text-muted">
-                            <i class="fas fa-server me-1"></i>${escapeHtml(conn.server)}:${conn.port}
-                        </small><br>
-                        <small class="text-muted">
-                            <i class="fas fa-user me-1"></i>${escapeHtml(conn.username)}
-                        </small>
-                    </div>
-                    
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="status-indicator status-${conn.status || 'unknown'}"></span>
-                            <small class="${getStatusTextClass(conn.status)}">
-                                ${getStatusText(conn.status)}
-                            </small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `).join('');
-}
-
-function showEditConnection(connectionName) {
-    const connection = currentConnections.find(c => c.name === connectionName);
-    if (!connection) {
-        showError('Connection not found');
-        return;
-    }
-    
-    // Fill form with connection details
-    document.getElementById('editConnectionId').value = connection.name;
-    document.getElementById('editConnectionName').value = connection.name;
-    document.getElementById('editServerName').value = connection.server;
-    document.getElementById('editServerPort').value = connection.port;
-    document.getElementById('editSqlUsername').value = connection.username;
-    document.getElementById('editConnectionStatus').value = connection.status || 'Unknown';
-    
-    // Clear password and test result
-    document.getElementById('editSqlPassword').value = '';
-    document.getElementById('editTestResult').style.display = 'none';
-    document.getElementById('editTestRequiredAlert').style.display = 'none';
-    document.getElementById('editConnectionTested').value = 'false';
-    
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('editConnectionModal'));
-    modal.show();
-}
-
-function testEditConnection(event) {
-    event.preventDefault();
-    const form = document.getElementById('editConnectionForm');
-    if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-    }
-
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-    
-    const testBtn = event.target;
-    const originalText = testBtn.innerHTML;
-    testBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Testing...';
-    testBtn.disabled = true;
-    
-    const testResult = document.getElementById('editTestResult');
-    testResult.style.display = 'none';
-    
-    fetch('/api/test-connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(result => {
-        testResult.style.display = 'block';
         
-        if (result.success) {
-            document.getElementById('editConnectionTested').value = 'true';
-            document.getElementById('editTestRequiredAlert').style.display = 'none';
-            testResult.innerHTML = `
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle me-2"></i>
-                    <strong>Connection successful!</strong><br>
-                    Response time: ${result.response_time.toFixed(0)}ms
-                </div>
-            `;
-        } else {
-            testResult.innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="fas fa-times-circle me-2"></i>
-                    <strong>Connection failed:</strong><br>
-                    ${escapeHtml(result.error)}
-                </div>
-            `;
+        if (authType === 'sql' && (!username || !password)) {
+            showError('Username and password are required for SQL authentication');
+            return;
         }
-    })
-    .catch(error => {
-        testResult.style.display = 'block';
-        testResult.innerHTML = `
-            <div class="alert alert-danger">
-                <i class="fas fa-times-circle me-2"></i>
-                <strong>Test failed:</strong> ${escapeHtml(error.message)}
-            </div>
-        `;
-    })
-    .finally(() => {
-        testBtn.innerHTML = originalText;
-        testBtn.disabled = false;
-    });
-}
-
-function updateConnection(event) {
-    event.preventDefault();
-    const form = document.getElementById('editConnectionForm');
-    if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-    }
-    
-    if (document.getElementById('editConnectionTested').value !== 'true') {
-        document.getElementById('editTestRequiredAlert').style.display = 'block';
-        return;
-    }
-    
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-    
-    const updateBtn = event.target;
-    const originalText = updateBtn.innerHTML;
-    updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Updating...';
-    updateBtn.disabled = true;
-    
-    fetch('/api/connections/' + encodeURIComponent(data.connectionId), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(result => {
-        if (result.success) {
-            const modal = bootstrap.Modal.getInstance(document.getElementById('editConnectionModal'));
-            modal.hide();
-            showSuccess('Connection updated successfully');
-            loadConnections();
-        } else {
-            showError('Failed to update connection: ' + result.error);
-        }
-    })
-    .catch(error => {
-        showError('Error updating connection: ' + error.message);
-    })
-    .finally(() => {
-        updateBtn.innerHTML = originalText;
-        updateBtn.disabled = false;
-    });
-}
-
-// Other helper functions
-window.setupAuthTypeToggle = function() {
-    document.querySelectorAll('input[name="auth_type"]').forEach(radio => {
-        radio.addEventListener('change', function() {
-            const sqlAuthSection = document.getElementById('sqlAuthSection');
-            if (this.value === 'sql') {
-                sqlAuthSection.classList.add('active');
-                document.getElementById('sqlUsername').required = true;
-                document.getElementById('sqlPassword').required = true;
-            } else {
-                sqlAuthSection.classList.remove('active');
-                document.getElementById('sqlUsername').required = false;
-                document.getElementById('sqlPassword').required = false;
-            }
-        });
-    });
-};
-
-window.showSuccess = function(message) {
-    showToast(message, 'success');
-};
-
-window.showError = function(message) {
-    showToast(message, 'danger');
-};
-
-window.showToast = function(message, type) {
-    const toastId = 'toast-' + Date.now();
-    const toast = `
-        <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="d-flex">
-                <div class="toast-body">
-                    ${message}
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-        </div>
-    `;
-    
-    document.getElementById('statusMessages').insertAdjacentHTML('beforeend', toast);
-    const toastElement = document.getElementById(toastId);
-    const bsToast = new bootstrap.Toast(toastElement);
-    bsToast.show();
-    
-    toastElement.addEventListener('hidden.bs.toast', () => {
-        toastElement.remove();
-    });
-};
-
-window.escapeHtml = function(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-};
-
-// Initialize page
-window.initializeConnectionsPage = function() {
-    const grid = document.getElementById('connectionsGrid');
-    const emptyState = document.getElementById('emptyState');
-    
-    grid.style.display = 'none';
-    emptyState.style.display = 'block';
-    
-    loadConnections();
-};
-
-// Load connections
-window.loadConnections = function() {
-    if (window.isLoading) return;
-    
-    window.isLoading = true;
-    showLoading();
-    
-    fetch('/api/connections')
+        
+        showLoading();
+        
+        const connectionData = {
+            server: server,
+            port: parseInt(port),
+            database: database,
+            auth_type: authType,
+            username: authType === 'sql' ? username : null,
+            password: authType === 'sql' ? password : null
+        };
+        
+        fetch('/api/test-connection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(connectionData)
+        })
         .then(response => response.json())
         .then(data => {
+            hideLoading();
             if (data.success) {
-                window.currentConnections = data.connections || [];
-                renderConnections(window.currentConnections);
+                showSuccess(`Connection test successful! Response time: ${data.response_time.toFixed(2)}s`);
             } else {
-                showError('Failed to load connections: ' + data.error);
-                renderConnections([]);
+                showError(`Connection test failed: ${data.error}`);
             }
         })
         .catch(error => {
-            console.error('Connection loading error:', error);
-            showError('Error loading connections: ' + error.message);
-            renderConnections([]);
-        })
-        .finally(() => {
-            window.isLoading = false;
             hideLoading();
+            showError('Error testing connection: ' + error.message);
         });
-};
-
-// Update the button onclick handlers in your HTML to match these function names
+    }
+    
+    // Save connection
+    function saveConnection() {
+        const name = document.getElementById('connName').value;
+        const description = document.getElementById('connDescription').value;
+        const server = document.getElementById('connServer').value;
+        const port = document.getElementById('connPort').value;
+        const database = document.getElementById('connDatabase').value;
+        const authType = document.getElementById('connAuth').value;
+        const username = document.getElementById('connUsername').value;
+        const password = document.getElementById('connPassword').value;
+        
+        if (!name || !server || !database) {
+            showError('Connection name, server, and database are required');
+            return;
+        }
+        
+        if (authType === 'sql' && (!username || !password)) {
+            showError('Username and password are required for SQL authentication');
+            return;
+        }
+        
+        showLoading();
+        
+        const connectionData = {
+            name: name,
+            description: description,
+            server: server,
+            port: parseInt(port),
+            database: database,
+            auth_type: authType,
+            username: authType === 'sql' ? username : null,
+            password: authType === 'sql' ? password : null
+        };
+        
+        fetch('/api/connections', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(connectionData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                showSuccess('Connection saved successfully!');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                showError(`Failed to save connection: ${data.error}`);
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Error saving connection: ' + error.message);
+        });
+    }
+    
+    // Test existing connection
+    function testConnection(connectionName) {
+        showLoading();
+        
+        // This would test an existing saved connection
+        fetch(`/api/connections/${connectionName}/test`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                showSuccess(`Connection test successful! Response time: ${data.response_time.toFixed(2)}s`);
+            } else {
+                showError(`Connection test failed: ${data.error}`);
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Error testing connection: ' + error.message);
+        });
+    }
+    
+    // Edit connection (placeholder)
+    function editConnection(connectionName) {
+        showError('Edit connection functionality not yet implemented');
+    }
+    
+    // Delete connection
+    function deleteConnection(connectionName) {
+        if (confirm(`Are you sure you want to delete the connection "${connectionName}"?`)) {
+            showLoading();
+            
+            fetch(`/api/connections/${connectionName}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                if (data.success) {
+                    showSuccess('Connection deleted successfully!');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showError(`Failed to delete connection: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showError('Error deleting connection: ' + error.message);
+            });
+        }
+    }
+    
+    // Refresh connections
+    function refreshConnections() {
+        window.location.reload();
+    }
+    
+    // Test all connections on page load
+    function testAllConnections() {
+        {% for conn in connections %}
+        testConnectionStatus('{{ conn.name }}');
+        {% endfor %}
+    }
+    
+    // Test a specific connection's status
+    function testConnectionStatus(connectionName) {
+        const statusElement = document.getElementById(`status-${connectionName}`);
+        const responseTimeElement = document.getElementById(`response-time-${connectionName}`);
+        const cardStatusElement = document.getElementById(`card-status-${connectionName}`);
+        const cardResponseElement = document.getElementById(`card-response-${connectionName}`);
+        
+        // Show testing status
+        if (statusElement) {
+            statusElement.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Testing...';
+            statusElement.className = 'badge bg-secondary';
+        }
+        
+        if (cardStatusElement) {
+            cardStatusElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing';
+            cardStatusElement.className = 'badge bg-secondary';
+        }
+        
+        fetch(`/api/connections/${connectionName}/test`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update table status
+                if (statusElement) {
+                    statusElement.innerHTML = '<i class="fas fa-check-circle me-1"></i>Connected';
+                    statusElement.className = 'badge bg-success';
+                    statusElement.title = '';
+                }
+                if (responseTimeElement) {
+                    responseTimeElement.textContent = `${data.response_time.toFixed(2)}s`;
+                }
+                
+                // Update card status
+                if (cardStatusElement) {
+                    cardStatusElement.innerHTML = '<i class="fas fa-check-circle"></i> Connected';
+                    cardStatusElement.className = 'badge bg-success';
+                }
+                if (cardResponseElement) {
+                    cardResponseElement.textContent = `${data.response_time.toFixed(2)}s`;
+                }
+                
+            } else {
+                // Update table status
+                if (statusElement) {
+                    statusElement.innerHTML = '<i class="fas fa-times-circle me-1"></i>Failed';
+                    statusElement.className = 'badge bg-danger';
+                    statusElement.title = data.error || 'Connection failed';
+                }
+                if (responseTimeElement) {
+                    responseTimeElement.textContent = 'N/A';
+                }
+                
+                // Update card status
+                if (cardStatusElement) {
+                    cardStatusElement.innerHTML = '<i class="fas fa-times-circle"></i> Failed';
+                    cardStatusElement.className = 'badge bg-danger';
+                    cardStatusElement.title = data.error || 'Connection failed';
+                }
+                if (cardResponseElement) {
+                    cardResponseElement.innerHTML = `<span class="text-danger">${(data.error || 'Connection failed').substring(0, 30)}</span>`;
+                }
+            }
+        })
+        .catch(error => {
+            // Update table status
+            if (statusElement) {
+                statusElement.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Error';
+                statusElement.className = 'badge bg-warning';
+                statusElement.title = 'Test failed: ' + error.message;
+            }
+            if (responseTimeElement) {
+                responseTimeElement.textContent = 'N/A';
+            }
+            
+            // Update card status
+            if (cardStatusElement) {
+                cardStatusElement.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error';
+                cardStatusElement.className = 'badge bg-warning';
+            }
+            if (cardResponseElement) {
+                cardResponseElement.innerHTML = `<span class="text-warning">Test Error</span>`;
+            }
+        });
+    }
+    
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+        // Test all connections after a short delay
+        setTimeout(testAllConnections, 500);
+    });
 </script>
 {% endblock %}

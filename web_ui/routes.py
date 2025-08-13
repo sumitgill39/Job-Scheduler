@@ -6,7 +6,6 @@ import time
 from flask import render_template, request, jsonify, redirect, url_for, flash
 from datetime import datetime
 from utils.logger import get_logger
-from database.enhanced_connection_manager import get_enhanced_connection_manager
 
 
 def create_routes(app):
@@ -315,302 +314,211 @@ def create_routes(app):
             logger.error(f"API delete job error: {e}")
             return jsonify({'error': str(e)}), 500
     
-
-    @app.route('/api/health', methods=['GET'])
-    def api_health():
-        """Simple health check endpoint"""
-        return jsonify({
-            'status': 'ok',
-            'message': 'API is working',
-            'timestamp': time.time()
-        })
-
     @app.route('/api/connections', methods=['GET'])
     def api_get_connections():
         """API endpoint to get available database connections"""
         try:
-            # Return default connection
-            default_connection = {
-                'name': 'default-sql-connection',
-                'server': 'USDF11DB197CI1\\PRD_DB01',
-                'port': 3433,
-                'database': 'master',  # Default database
-                'auth_type': 'sql',
-                'username': 'svc-con',
-                'description': 'Default SQL Server Connection',
-                'is_active': True,
-                'status': 'unknown',  # Will be updated when tested
-                'last_checked': None,
-                'response_time': None
-            }
+            from database.connection_manager import DatabaseConnectionManager
+            db_manager = DatabaseConnectionManager()
             
-            return jsonify({
-                'success': True,
-                'connections': [default_connection],
-                'count': 1
-            })
+            connections = []
+            for conn_name in db_manager.list_connections():
+                conn_info = db_manager.get_connection_info(conn_name)
+                if conn_info:
+                    connections.append({
+                        'name': conn_name,
+                        'server': conn_info.get('server'),
+                        'database': conn_info.get('database'),
+                        'description': conn_info.get('description', ''),
+                        'auth_type': 'windows' if conn_info.get('trusted_connection') else 'sql'
+                    })
+            
+            return jsonify({'success': True, 'connections': connections})
             
         except Exception as e:
-            logger.error(f"API get connections error: {e}", exc_info=True)
+            logger.error(f"API get connections error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/connections', methods=['POST'])
     def api_create_connection():
         """API endpoint to create a new database connection"""
         try:
-            data = request.json
-            if not data:
-                return jsonify({'success': False, 'error': 'No data provided'}), 400
-
-            logger.info(f"Creating connection with data: {data}")
-
-            # Validate required fields
-            required_fields = ['name', 'server', 'database']
-            missing_fields = [field for field in required_fields if not data.get(field)]
-            if missing_fields:
-                return jsonify({
-                    'success': False,
-                    'error': f'Missing required fields: {", ".join(missing_fields)}'
-                }), 400
-
-            # Create ConnectionInfo object
-            connection_info = ConnectionInfo(
-                name=data['name'],
-                server=data['server'],
-                database=data['database'],
-                port=int(data.get('port', 1433)),
-                auth_type=data.get('auth_type', 'windows'),
-                username=data.get('username'),
-                password=data.get('password'),
-                description=data.get('description', ''),
-                is_active=data.get('is_active', True),
-                encrypt=data.get('encrypt', False),
-                trust_server_certificate=data.get('trust_server_certificate', True),
-                connection_timeout=int(data.get('connection_timeout', 30)),
-                command_timeout=int(data.get('command_timeout', 300))
-            )
-
-            # Get the connection manager
-            conn_manager = get_enhanced_connection_manager()
-
-            # Check if connection already exists
-            if conn_manager.get_connection(data['name']):
-                return jsonify({
-                    'success': False,
-                    'error': f'Connection with name "{data["name"]}" already exists'
-                }), 409
-
-            # Save the connection
-            success = conn_manager.save_connection(connection_info)
-            if success:
-                return jsonify({
-                    'success': True,
-                    'message': f'Connection "{data["name"]}" created successfully',
-                    'connection': {
-                        'name': connection_info.name,
-                        'server': connection_info.server,
-                        'database': connection_info.database,
-                        'description': connection_info.description,
-                        'is_active': connection_info.is_active
-                    }
-                })
-            else:
-                return jsonify({
-                    'success': False,
-                    'error': 'Failed to save connection'
-                }), 500
-
-        except Exception as e:
-            logger.error(f"API create connection error: {e}", exc_info=True)
-            return jsonify({'success': False, 'error': str(e)}), 500
-    
-    @app.route('/api/connections/<connection_name>', methods=['GET'])
-    def api_get_connection(connection_name):
-        """API endpoint to get a specific connection"""
-        try:
-            from database.enhanced_connection_manager import get_enhanced_connection_manager
-            
-            conn_manager = get_enhanced_connection_manager()
-            connection = conn_manager.get_connection(connection_name)
-            
-            if not connection:
-                return jsonify({'success': False, 'error': 'Connection not found'}), 404
-            
-            # Convert to dict and remove sensitive data for response
-            conn_data = {
-                'name': connection.name,
-                'server': connection.server,
-                'database': connection.database,
-                'port': connection.port,
-                'auth_type': connection.auth_type,
-                'username': connection.username,
-                'description': connection.description,
-                'created_date': connection.created_date,
-                'modified_date': connection.modified_date,
-                'is_active': connection.is_active,
-                'last_tested': connection.last_tested,
-                'connection_timeout': connection.connection_timeout,
-                'command_timeout': connection.command_timeout,
-                'encrypt': connection.encrypt,
-                'trust_server_certificate': connection.trust_server_certificate
-            }
-            
-            # Add status information
-            status = conn_manager.get_connection_status(connection_name)
-            conn_data.update(status)
-            
-            return jsonify({'success': True, 'connection': conn_data})
-            
-        except Exception as e:
-            logger.error(f"API get connection error: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 500
-    
-    @app.route('/api/connections/<connection_name>', methods=['PUT'])
-    def api_update_connection(connection_name):
-        """API endpoint to update a connection"""
-        try:
             data = request.get_json()
             if not data:
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
             
-            from database.enhanced_connection_manager import get_enhanced_connection_manager, ConnectionInfo
+            from database.connection_manager import DatabaseConnectionManager
+            db_manager = DatabaseConnectionManager()
             
-            # Create updated connection info object
-            connection_info = ConnectionInfo(
-                name=data.get('name', '').strip(),
-                server=data.get('server', '').strip(),
-                database=data.get('database', '').strip(),
-                port=int(data.get('port', 1433)),
-                auth_type=data.get('auth_type', 'windows').lower(),
-                username=data.get('username', '').strip() if data.get('username') else None,
-                password=data.get('password', '').strip() if data.get('password') else None,
-                description=data.get('description', '').strip(),
-                connection_timeout=int(data.get('connection_timeout', 30)),
-                command_timeout=int(data.get('command_timeout', 300)),
-                encrypt=bool(data.get('encrypt', False)),
-                trust_server_certificate=bool(data.get('trust_server_certificate', True)),
-                is_active=bool(data.get('is_active', True))
+            success = db_manager.create_custom_connection(
+                name=data.get('name'),
+                server=data.get('server'),
+                database=data.get('database'),
+                port=data.get('port', 1433),
+                auth_type=data.get('auth_type', 'windows'),
+                username=data.get('username'),
+                password=data.get('password'),
+                description=data.get('description')
             )
             
-            conn_manager = get_enhanced_connection_manager()
-            success, message = conn_manager.update_connection(connection_name, connection_info)
-            
             if success:
-                return jsonify({'success': True, 'message': message})
+                return jsonify({'success': True, 'message': 'Connection created successfully'})
             else:
-                return jsonify({'success': False, 'error': message}), 400
+                return jsonify({'success': False, 'error': 'Failed to create connection'}), 500
                 
         except Exception as e:
-            logger.error(f"API update connection error: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 500
-    
-    @app.route('/api/connections/<connection_name>', methods=['DELETE'])
-    def api_delete_connection(connection_name):
-        """API endpoint to delete a connection"""
-        try:
-            from database.enhanced_connection_manager import get_enhanced_connection_manager
-            
-            conn_manager = get_enhanced_connection_manager()
-            success, message = conn_manager.delete_connection(connection_name)
-            
-            if success:
-                return jsonify({'success': True, 'message': message})
-            else:
-                return jsonify({'success': False, 'error': message}), 404 if 'not found' in message.lower() else 500
-                
-        except Exception as e:
-            logger.error(f"API delete connection error: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 500
-    
-    @app.route('/api/connections/<connection_name>/test', methods=['POST'])
-    def api_test_existing_connection(connection_name):
-        """API endpoint to test an existing connection"""
-        try:
-            from database.enhanced_connection_manager import get_enhanced_connection_manager
-            
-            conn_manager = get_enhanced_connection_manager()
-            result = conn_manager.test_connection(connection_name)
-            
-            return jsonify(result)
-            
-        except Exception as e:
-            logger.error(f"API test existing connection error: {e}")
+            logger.error(f"API create connection error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/test-connection', methods=['POST'])
     def api_test_connection():
         """API endpoint to test a database connection"""
         try:
-            data = request.json
+            data = request.get_json()
             if not data:
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
-
-            logger.info(f"Testing connection with data: {data}")
             
-            # Create a ConnectionInfo object
-            connection_info = ConnectionInfo(
-                name=data.get('name', 'test-connection'),
-                server=data['server'],
-                database=data['database'],
-                port=int(data.get('port', 1433)),
-                auth_type=data.get('auth_type', 'windows'),
-                username=data.get('username'),
-                password=data.get('password'),
-                encrypt=data.get('encrypt', False),
-                trust_server_certificate=data.get('trust_server_certificate', True),
-                connection_timeout=int(data.get('connection_timeout', 30)),
-                command_timeout=int(data.get('command_timeout', 300))
-            )
-
-            # Get the connection manager
-            conn_manager = get_enhanced_connection_manager()
+            # Validate required fields
+            required_fields = ['server', 'database']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            
+            # Import required modules
+            import pyodbc
+            import time
+            
+            # Build connection string directly for testing
+            server = data.get('server')
+            port = data.get('port', 1433)
+            database = data.get('database')
+            auth_type = data.get('auth_type', 'windows')
+            username = data.get('username')
+            password = data.get('password')
+            
+            # Build connection string components
+            components = []
+            components.append("DRIVER={ODBC Driver 17 for SQL Server}")
+            
+            # Handle server and port
+            if '\\' in server:
+                # Named instance - don't add port
+                components.append(f"SERVER={server}")
+            elif port and port != 1433:
+                # Custom port
+                components.append(f"SERVER={server},{port}")
+            else:
+                # Default port
+                components.append(f"SERVER={server}")
+            
+            components.append(f"DATABASE={database}")
+            
+            # Authentication
+            if auth_type == 'windows':
+                components.append("Trusted_Connection=yes")
+            else:
+                if not username or not password:
+                    return jsonify({'success': False, 'error': 'Username and password required for SQL authentication'}), 400
+                components.append(f"UID={username}")
+                components.append(f"PWD={password}")
+            
+            # Connection settings
+            components.extend([
+                "Connection Timeout=10",
+                "Command Timeout=30",
+                "Encrypt=no",
+                "TrustServerCertificate=yes"
+            ])
+            
+            connection_string = ";".join(components)
             
             # Test the connection
             start_time = time.time()
-            success, error = conn_manager.test_connection(connection_info)
-            response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-
-            if success:
+            
+            try:
+                logger.info(f"Testing connection to {server}\\{database}")
+                
+                connection = pyodbc.connect(connection_string)
+                cursor = connection.cursor()
+                cursor.execute("SELECT 1 as test, @@VERSION as version")
+                result = cursor.fetchone()
+                cursor.close()
+                connection.close()
+                
+                response_time = time.time() - start_time
+                
                 return jsonify({
                     'success': True,
-                    'message': 'Connection test successful',
-                    'response_time': response_time
+                    'message': 'Connection successful',
+                    'response_time': response_time,
+                    'server_info': {
+                        'test_result': result[0] if result else None,
+                        'version': result[1][:100] if result and len(result) > 1 else 'Unknown'
+                    }
                 })
-            else:
+                
+            except pyodbc.Error as e:
+                response_time = time.time() - start_time
+                error_msg = str(e)
+                
+                # Extract more user-friendly error message
+                if "Login failed" in error_msg:
+                    error_msg = "Login failed - check username and password"
+                elif "Server does not exist" in error_msg:
+                    error_msg = "Server not found - check server name and port"
+                elif "Database" in error_msg and "does not exist" in error_msg:
+                    error_msg = "Database not found - check database name"
+                elif "timeout" in error_msg.lower():
+                    error_msg = "Connection timeout - check server accessibility"
+                
+                logger.error(f"Connection test failed: {e}")
+                
                 return jsonify({
                     'success': False,
-                    'error': str(error)
+                    'error': error_msg,
+                    'response_time': response_time
                 })
-
-        except Exception as e:
-            logger.error(f"API test connection error: {e}", exc_info=True)
-            return jsonify({'success': False, 'error': str(e)}), 500
-    
-    @app.route('/api/connections/refresh', methods=['POST'])
-    def api_refresh_connections():
-        """API endpoint to refresh all connection statuses"""
-        try:
-            from database.enhanced_connection_manager import get_enhanced_connection_manager
-            
-            conn_manager = get_enhanced_connection_manager()
-            results = conn_manager.refresh_all_connections()
-            
+                
+        except ImportError as e:
+            logger.error(f"Import error in test connection: {e}")
             return jsonify({
-                'success': True,
-                'message': f'Refreshed {len(results)} connections',
-                'results': results
-            })
+                'success': False,
+                'error': 'pyodbc driver not available - please install ODBC Driver for SQL Server'
+            }), 500
             
         except Exception as e:
-            logger.error(f"API refresh connections error: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 500
+            logger.error(f"API test connection error: {e}")
+            return jsonify({
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }), 500
     
     @app.route('/connections')
     def connections():
         """Database connections management page"""
         try:
-            # Using the connections template
-            return render_template('connections.html')
+            from database.connection_manager import DatabaseConnectionManager
+            db_manager = DatabaseConnectionManager()
+            
+            connections = []
+            for conn_name in db_manager.list_connections():
+                conn_info = db_manager.get_connection_info(conn_name)
+                if conn_info:
+                    # Don't test connection status immediately to avoid page load delays
+                    # Status will be tested on demand via AJAX
+                    connections.append({
+                        'name': conn_name,
+                        'server': conn_info.get('server'),
+                        'database': conn_info.get('database'),
+                        'port': conn_info.get('port', 1433),
+                        'description': conn_info.get('description', ''),
+                        'auth_type': 'Windows' if conn_info.get('trusted_connection') else 'SQL Server',
+                        'status': 'Unknown',  # Will be tested via AJAX
+                        'response_time': 0,
+                        'error': ''
+                    })
+            
+            return render_template('connections.html', connections=connections)
             
         except Exception as e:
             logger.error(f"Connections page error: {e}")
