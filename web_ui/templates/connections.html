@@ -2,12 +2,93 @@
 
 {% block title %}Database Connections - Windows Job Scheduler{% endblock %}
 
+{% block extra_css %}
+<style>
+    .connection-card {
+        transition: all 0.3s ease;
+        border-left: 4px solid #dee2e6;
+    }
+    
+    .connection-card.online {
+        border-left-color: #28a745;
+        background-color: rgba(40, 167, 69, 0.05);
+    }
+    
+    .connection-card.offline {
+        border-left-color: #dc3545;
+        background-color: rgba(220, 53, 69, 0.05);
+    }
+    
+    .connection-card.unknown {
+        border-left-color: #6c757d;
+        background-color: rgba(108, 117, 125, 0.05);
+    }
+    
+    .connection-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    
+    .status-online { background-color: #28a745; }
+    .status-offline { background-color: #dc3545; }
+    .status-unknown { background-color: #6c757d; }
+    .status-testing { 
+        background-color: #ffc107; 
+        animation: pulse 1.5s ease-in-out infinite alternate;
+    }
+    
+    @keyframes pulse {
+        from { opacity: 0.4; }
+        to { opacity: 1.0; }
+    }
+    
+    .response-time {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    
+    .connection-actions {
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    
+    .connection-card:hover .connection-actions {
+        opacity: 1;
+    }
+    
+    .form-floating > label {
+        padding: 1rem 0.75rem;
+    }
+    
+    .auth-type-section {
+        display: none;
+    }
+    
+    .auth-type-section.active {
+        display: block;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1><i class="fas fa-database me-2"></i>Database Connections</h1>
-    <div>
-        <button class="btn btn-outline-secondary me-2" onclick="refreshConnections()">
-            <i class="fas fa-sync-alt me-1"></i>Refresh
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2><i class="fas fa-database me-2"></i>Database Connections</h2>
+                <p class="text-muted">Manage SQL Server connections for your jobs</p>
+            </div>
+            <div>
+                <button type="button" class="btn btn-outline-secondary me-2" onclick="refreshAllConnections()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh All
         </button>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
             <i class="fas fa-plus me-1"></i>New Connection
