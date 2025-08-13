@@ -314,85 +314,24 @@ def create_routes(app):
             logger.error(f"API delete job error: {e}")
             return jsonify({'error': str(e)}), 500
     
-    @app.route('/api/debug/connections', methods=['GET'])
-    def api_debug_connections():
-        """Debug endpoint to check connection manager status"""
-        try:
-            debug_info = {
-                'enhanced_manager_available': False,
-                'connections_dir_exists': False,
-                'error': None
-            }
-            
-            # Check if enhanced connection manager can be imported
-            try:
-                from database.enhanced_connection_manager import get_enhanced_connection_manager
-                debug_info['enhanced_manager_available'] = True
-                
-                # Check if connections directory exists
-                from pathlib import Path
-                connections_dir = Path("config/connections")
-                debug_info['connections_dir_exists'] = connections_dir.exists()
-                debug_info['connections_dir_path'] = str(connections_dir.absolute())
-                
-                # Try to get connection manager
-                conn_manager = get_enhanced_connection_manager()
-                debug_info['manager_initialized'] = True
-                
-                # Try to list connections
-                connections = conn_manager.list_connections()
-                debug_info['connections_count'] = len(connections)
-                debug_info['connections'] = connections
-                
-            except Exception as e:
-                debug_info['error'] = str(e)
-                logger.error(f"Debug connections error: {e}", exc_info=True)
-            
-            return jsonify({
-                'success': True,
-                'debug_info': debug_info
-            })
-            
-        except Exception as e:
-            logger.error(f"API debug connections error: {e}", exc_info=True)
-            return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/connections', methods=['GET'])
     def api_get_connections():
         """API endpoint to get available database connections"""
         try:
-            # Try enhanced connection manager first
-            try:
-                from database.enhanced_connection_manager import get_enhanced_connection_manager
-                
-                # Get the connection manager instance
-                conn_manager = get_enhanced_connection_manager()
-                logger.info("Enhanced connection manager loaded successfully")
-                
-                # Get connections list
-                connections = conn_manager.list_connections()
-                logger.info(f"Found {len(connections)} connections")
-                
-                return jsonify({
-                    'success': True, 
-                    'connections': connections,
-                    'count': len(connections)
-                })
-                
-            except Exception as enhanced_error:
-                logger.warning(f"Enhanced connection manager failed: {enhanced_error}")
-                
-                # Return empty connections list if enhanced manager fails
-                # Let users create their first connection manually
-                logger.info("Starting with empty connections list")
-                
-                return jsonify({
-                    'success': True, 
-                    'connections': [],
-                    'count': 0,
-                    'message': 'No connections found. Create your first connection to get started.',
-                    'fallback': True
-                })
+            from database.enhanced_connection_manager import get_enhanced_connection_manager
+            
+            # Get the connection manager instance
+            conn_manager = get_enhanced_connection_manager()
+            
+            # Get connections list
+            connections = conn_manager.list_connections()
+            
+            return jsonify({
+                'success': True, 
+                'connections': connections,
+                'count': len(connections)
+            })
             
         except Exception as e:
             logger.error(f"API get connections error: {e}", exc_info=True)
@@ -412,43 +351,33 @@ def create_routes(app):
                 if not data.get(field, '').strip():
                     return jsonify({'success': False, 'error': f'{field} is required'}), 400
             
-            try:
-                from database.enhanced_connection_manager import get_enhanced_connection_manager, ConnectionInfo
-                
-                # Get the connection manager instance
-                conn_manager = get_enhanced_connection_manager()
-                
-                # Create connection info object
-                connection_info = ConnectionInfo(
-                    name=data.get('name', '').strip(),
-                    server=data.get('server', '').strip(),
-                    database=data.get('database', '').strip(),
-                    port=int(data.get('port', 1433)),
-                    auth_type=data.get('auth_type', 'windows').lower(),
-                    username=data.get('username', '').strip() if data.get('username') else None,
-                    password=data.get('password', '').strip() if data.get('password') else None,
-                    description=data.get('description', '').strip(),
-                    connection_timeout=int(data.get('connection_timeout', 30)),
-                    command_timeout=int(data.get('command_timeout', 300)),
-                    encrypt=bool(data.get('encrypt', False)),
-                    trust_server_certificate=bool(data.get('trust_server_certificate', True))
-                )
-                
-                success, message = conn_manager.create_connection(connection_info)
-                
-                if success:
-                    logger.info(f"Connection '{connection_info.name}' created successfully")
-                    return jsonify({'success': True, 'message': message}), 201
-                else:
-                    logger.warning(f"Failed to create connection '{connection_info.name}': {message}")
-                    return jsonify({'success': False, 'error': message}), 400
-                    
-            except Exception as enhanced_error:
-                logger.warning(f"Enhanced connection manager failed for creation: {enhanced_error}")
-                return jsonify({
-                    'success': False, 
-                    'error': f'Connection manager not available: {str(enhanced_error)}'
-                }), 500
+            from database.enhanced_connection_manager import get_enhanced_connection_manager, ConnectionInfo
+            
+            # Get the connection manager instance
+            conn_manager = get_enhanced_connection_manager()
+            
+            # Create connection info object
+            connection_info = ConnectionInfo(
+                name=data.get('name', '').strip(),
+                server=data.get('server', '').strip(),
+                database=data.get('database', '').strip(),
+                port=int(data.get('port', 1433)),
+                auth_type=data.get('auth_type', 'windows').lower(),
+                username=data.get('username', '').strip() if data.get('username') else None,
+                password=data.get('password', '').strip() if data.get('password') else None,
+                description=data.get('description', '').strip(),
+                connection_timeout=int(data.get('connection_timeout', 30)),
+                command_timeout=int(data.get('command_timeout', 300)),
+                encrypt=bool(data.get('encrypt', False)),
+                trust_server_certificate=bool(data.get('trust_server_certificate', True))
+            )
+            
+            success, message = conn_manager.create_connection(connection_info)
+            
+            if success:
+                return jsonify({'success': True, 'message': message}), 201
+            else:
+                return jsonify({'success': False, 'error': message}), 400
                 
         except Exception as e:
             logger.error(f"API create connection error: {e}", exc_info=True)
@@ -458,9 +387,11 @@ def create_routes(app):
     def api_get_connection(connection_name):
         """API endpoint to get a specific connection"""
         try:
-            from database.enhanced_connection_manager import enhanced_connection_manager
+            from database.enhanced_connection_manager import get_enhanced_connection_manager
             
-            connection = enhanced_connection_manager.get_connection(connection_name)
+            conn_manager = get_enhanced_connection_manager()
+            connection = conn_manager.get_connection(connection_name)
+            
             if not connection:
                 return jsonify({'success': False, 'error': 'Connection not found'}), 404
             
@@ -484,7 +415,7 @@ def create_routes(app):
             }
             
             # Add status information
-            status = enhanced_connection_manager.get_connection_status(connection_name)
+            status = conn_manager.get_connection_status(connection_name)
             conn_data.update(status)
             
             return jsonify({'success': True, 'connection': conn_data})
@@ -501,7 +432,7 @@ def create_routes(app):
             if not data:
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
             
-            from database.enhanced_connection_manager import enhanced_connection_manager, ConnectionInfo
+            from database.enhanced_connection_manager import get_enhanced_connection_manager, ConnectionInfo
             
             # Create updated connection info object
             connection_info = ConnectionInfo(
@@ -520,7 +451,8 @@ def create_routes(app):
                 is_active=bool(data.get('is_active', True))
             )
             
-            success, message = enhanced_connection_manager.update_connection(connection_name, connection_info)
+            conn_manager = get_enhanced_connection_manager()
+            success, message = conn_manager.update_connection(connection_name, connection_info)
             
             if success:
                 return jsonify({'success': True, 'message': message})
@@ -535,9 +467,10 @@ def create_routes(app):
     def api_delete_connection(connection_name):
         """API endpoint to delete a connection"""
         try:
-            from database.enhanced_connection_manager import enhanced_connection_manager
+            from database.enhanced_connection_manager import get_enhanced_connection_manager
             
-            success, message = enhanced_connection_manager.delete_connection(connection_name)
+            conn_manager = get_enhanced_connection_manager()
+            success, message = conn_manager.delete_connection(connection_name)
             
             if success:
                 return jsonify({'success': True, 'message': message})
@@ -552,9 +485,10 @@ def create_routes(app):
     def api_test_existing_connection(connection_name):
         """API endpoint to test an existing connection"""
         try:
-            from database.enhanced_connection_manager import enhanced_connection_manager
+            from database.enhanced_connection_manager import get_enhanced_connection_manager
             
-            result = enhanced_connection_manager.test_connection(connection_name)
+            conn_manager = get_enhanced_connection_manager()
+            result = conn_manager.test_connection(connection_name)
             
             return jsonify(result)
             
@@ -570,7 +504,7 @@ def create_routes(app):
             if not data:
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
             
-            from database.enhanced_connection_manager import enhanced_connection_manager, ConnectionInfo
+            from database.enhanced_connection_manager import get_enhanced_connection_manager, ConnectionInfo
             
             # Create temporary connection info for testing
             connection_info = ConnectionInfo(
@@ -587,7 +521,8 @@ def create_routes(app):
                 trust_server_certificate=bool(data.get('trust_server_certificate', True))
             )
             
-            result = enhanced_connection_manager.test_connection_info(connection_info)
+            conn_manager = get_enhanced_connection_manager()
+            result = conn_manager.test_connection_info(connection_info)
             
             return jsonify(result)
             
@@ -599,9 +534,10 @@ def create_routes(app):
     def api_refresh_connections():
         """API endpoint to refresh all connection statuses"""
         try:
-            from database.enhanced_connection_manager import enhanced_connection_manager
+            from database.enhanced_connection_manager import get_enhanced_connection_manager
             
-            results = enhanced_connection_manager.refresh_all_connections()
+            conn_manager = get_enhanced_connection_manager()
+            results = conn_manager.refresh_all_connections()
             
             return jsonify({
                 'success': True,

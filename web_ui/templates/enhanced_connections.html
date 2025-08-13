@@ -269,8 +269,8 @@ let currentConnectionName = '';
 
 // Load connections when page loads
 document.addEventListener('DOMContentLoaded', function() {
-    loadConnections();
     setupAuthTypeToggle();
+    loadConnections();
 });
 
 function setupAuthTypeToggle() {
@@ -304,57 +304,18 @@ function loadConnections() {
             if (data.success) {
                 currentConnections = data.connections;
                 renderConnections(data.connections);
-                
-                // Show info message if using fallback mode
-                if (data.fallback) {
-                    console.log('Using fallback connection mode');
-                    if (data.message) {
-                        showInfo(data.message);
-                    }
-                }
             } else {
                 showError('Failed to load connections: ' + data.error);
-                showDebugInfo();
+                renderConnections([]); // Show empty state
             }
         })
         .catch(error => {
             console.error('Connection loading error:', error);
             showError('Error loading connections: ' + error.message);
-            showDebugInfo();
+            renderConnections([]); // Show empty state on error
         });
 }
 
-function showDebugInfo() {
-    // Show debug information to help troubleshoot
-    fetch('/api/debug/connections')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                console.log('Debug Info:', data.debug_info);
-                
-                const grid = document.getElementById('connectionsGrid');
-                grid.innerHTML = `
-                    <div class="col-12">
-                        <div class="alert alert-warning">
-                            <h5><i class="fas fa-exclamation-triangle me-2"></i>Connection Manager Debug Info</h5>
-                            <p><strong>Enhanced Manager Available:</strong> ${data.debug_info.enhanced_manager_available ? 'Yes' : 'No'}</p>
-                            <p><strong>Connections Directory:</strong> ${data.debug_info.connections_dir_exists ? 'Exists' : 'Missing'}</p>
-                            <p><strong>Directory Path:</strong> ${data.debug_info.connections_dir_path || 'Unknown'}</p>
-                            <p><strong>Manager Initialized:</strong> ${data.debug_info.manager_initialized ? 'Yes' : 'No'}</p>
-                            <p><strong>Connections Found:</strong> ${data.debug_info.connections_count || 0}</p>
-                            ${data.debug_info.error ? `<p class="text-danger"><strong>Error:</strong> ${data.debug_info.error}</p>` : ''}
-                            
-                            <hr>
-                            <p class="mb-0">This information can help debug connection loading issues.</p>
-                        </div>
-                    </div>
-                `;
-            }
-        })
-        .catch(error => {
-            console.error('Debug info error:', error);
-        });
-}
 
 function renderConnections(connections) {
     const grid = document.getElementById('connectionsGrid');
