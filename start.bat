@@ -6,7 +6,7 @@ echo        Windows Job Scheduler
 echo ================================================
 
 REM Check if Python is available
-python --version >nul 2>&1
+py --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo ERROR: Python is not installed or not in PATH
     echo Please install Python 3.8+ and try again
@@ -26,7 +26,7 @@ if "%VIRTUAL_ENV%"=="" (
 REM Install dependencies if requirements.txt is newer than installed packages
 if exist requirements.txt (
     echo Installing/updating dependencies...
-    pip install -r requirements.txt
+    py -m pip install -r requirements.txt
 )
 
 echo.
@@ -37,6 +37,6 @@ echo Press Ctrl+C to stop
 echo.
 
 REM Start the application
-python main.py --mode web
+py main.py --mode web
 
 pause
