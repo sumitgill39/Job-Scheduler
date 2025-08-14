@@ -399,6 +399,8 @@ def create_routes(app):
     @app.route('/api/connections/<connection_name>/test', methods=['POST'])
     def api_test_existing_connection(connection_name):
         """API endpoint to test an existing saved database connection"""
+        logger.info(f"[API_TEST] Testing existing connection '{connection_name}' via API")
+        
         try:
             from database.connection_manager import DatabaseConnectionManager
             db_manager = DatabaseConnectionManager()
@@ -407,6 +409,7 @@ def create_routes(app):
             test_result = db_manager.test_connection(connection_name)
             
             if test_result['success']:
+                logger.info(f"[API_TEST] Connection '{connection_name}' test successful via API")
                 return jsonify({
                     'success': True,
                     'message': test_result.get('message', 'Connection successful'),
@@ -414,6 +417,7 @@ def create_routes(app):
                     'server_info': test_result.get('server_info', {})
                 })
             else:
+                logger.warning(f"[API_TEST] Connection '{connection_name}' test failed via API: {test_result.get('error')}")
                 return jsonify({
                     'success': False,
                     'error': test_result.get('error', 'Connection test failed'),
@@ -421,7 +425,7 @@ def create_routes(app):
                 }), 400
                 
         except Exception as e:
-            logger.error(f"API test existing connection error: {e}")
+            logger.error(f"[API_TEST] API test existing connection error for '{connection_name}': {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/system/database-status', methods=['GET'])
@@ -594,6 +598,52 @@ def create_routes(app):
                 'success': False, 
                 'error': str(e), 
                 'total_time': total_time
+            }), 500
+    
+    @app.route('/api/connections/audit-trail', methods=['GET'])
+    def api_connection_audit_trail():
+        """Get connection audit trail"""
+        try:
+            from database.connection_manager import DatabaseConnectionManager
+            
+            connection_name = request.args.get('connection_name')
+            limit = request.args.get('limit', 50, type=int)
+            
+            logger.info(f"[AUDIT_API] Retrieving audit trail" + (f" for connection '{connection_name}'" if connection_name else " (all connections)") + f" (limit: {limit})")
+            
+            db_manager = DatabaseConnectionManager()
+            audit_entries = db_manager.get_connection_audit_trail(connection_name, limit)
+            
+            logger.info(f"[AUDIT_API] Retrieved {len(audit_entries)} audit entries")
+            
+            # Format entries for API response
+            formatted_entries = []
+            for entry in audit_entries:
+                formatted_entry = {
+                    'timestamp': entry['timestamp'].isoformat() if hasattr(entry['timestamp'], 'isoformat') else str(entry['timestamp']),
+                    'user': entry['user'],
+                    'host': entry['host'],
+                    'action': entry['action'],
+                    'connection_name': entry['connection_name'],
+                    'details': entry['details']
+                }
+                formatted_entries.append(formatted_entry)
+            
+            return jsonify({
+                'success': True,
+                'audit_entries': formatted_entries,
+                'total_count': len(formatted_entries),
+                'filter': {
+                    'connection_name': connection_name,
+                    'limit': limit
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"[AUDIT_API] Error retrieving audit trail: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
             }), 500
     
     @app.route('/api/test-connection', methods=['POST'])

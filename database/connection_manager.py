@@ -406,6 +406,11 @@ class DatabaseConnectionManager:
         
         self.logger.info(f"[CONNECTION_TEST] Starting test for saved connection '{connection_name}'")
         
+        # Audit log the test attempt
+        self._audit_log('TEST', connection_name, {
+            'test_type': 'saved_connection'
+        })
+        
         try:
             # Get connection info for logging
             conn_info = self.get_connection_info(connection_name)
@@ -418,6 +423,10 @@ class DatabaseConnectionManager:
             
             if not connection:
                 self.logger.error(f"[CONNECTION_TEST] Failed to establish connection for '{connection_name}'")
+                self._audit_log('TEST_FAILED', connection_name, {
+                    'error': 'Failed to establish connection',
+                    'response_time': time.time() - start_time
+                })
                 return {
                     'success': False,
                     'connection_name': connection_name,
@@ -460,6 +469,13 @@ class DatabaseConnectionManager:
             
             self.logger.info(f"[CONNECTION_TEST] Connection test completed successfully for '{connection_name}' in {response_time:.2f}s")
             
+            # Audit log the successful test
+            self._audit_log('TEST_SUCCESS', connection_name, {
+                'response_time': response_time,
+                'server_info_keys': list(server_info.keys()),
+                'queries_executed': len([q for q in test_queries if any(k in server_info for k in [q.split()[-1].lower().replace('as', '').strip()])])
+            })
+            
             result_data = {
                 'success': True,
                 'connection_name': connection_name,
@@ -474,6 +490,13 @@ class DatabaseConnectionManager:
         except Exception as e:
             response_time = time.time() - start_time
             self.logger.error(f"[CONNECTION_TEST] Connection test failed for '{connection_name}' after {response_time:.2f}s: {e}")
+            
+            # Audit log the failed test
+            self._audit_log('TEST_ERROR', connection_name, {
+                'error': str(e),
+                'exception_type': type(e).__name__,
+                'response_time': response_time
+            })
             
             return {
                 'success': False,
@@ -954,6 +977,131 @@ class DatabaseConnectionManager:
         except Exception as e:
             self.logger.error(f"[LIFECYCLE] Error getting connection '{connection_name}' from database: {e}")
             return None
+    
+    def _audit_log(self, action: str, connection_name: str, details: Dict[str, Any] = None):
+        """Log audit trail for connection operations"""
+        try:
+            details = details or {}
+            audit_entry = {
+                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'user': self._current_user,
+                'host': self._host_name,
+                'action': action,
+                'connection_name': connection_name,
+                'details': details
+            }
+            
+            # Create structured audit log message
+            details_str = ', '.join([f"{k}={v}" for k, v in details.items() if v is not None]) if details else 'no details'
+            
+            self.logger.info(
+                f"[AUDIT] {audit_entry['timestamp']} | {self._current_user}@{self._host_name} | "
+                f"{action} | connection='{connection_name}' | {details_str}"
+            )
+            
+            # Also attempt to save to database audit table if possible
+            self._save_audit_to_database(audit_entry)
+            
+        except Exception as e:
+            # Don't let audit logging failures break the main operation
+            self.logger.warning(f"[AUDIT] Failed to log audit entry: {e}")
+    
+    def _save_audit_to_database(self, audit_entry: Dict[str, Any]):
+        """Save audit entry to database (if system connection is available)"""
+        try:
+            system_connection = self.get_connection("system")
+            if not system_connection:
+                return  # System connection not available, skip database audit
+            
+            cursor = system_connection.cursor()
+            
+            # Create audit table if it doesn't exist
+            cursor.execute("""
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='connection_audit_log' AND xtype='U')
+                CREATE TABLE connection_audit_log (
+                    audit_id NVARCHAR(100) PRIMARY KEY DEFAULT NEWID(),
+                    timestamp DATETIME NOT NULL,
+                    user_name NVARCHAR(255) NOT NULL,
+                    host_name NVARCHAR(255) NOT NULL,
+                    action NVARCHAR(50) NOT NULL,
+                    connection_name NVARCHAR(255) NOT NULL,
+                    details NVARCHAR(MAX) NULL,
+                    created_date DATETIME DEFAULT GETDATE(),
+                    INDEX IX_audit_timestamp (timestamp),
+                    INDEX IX_audit_connection (connection_name),
+                    INDEX IX_audit_action (action)
+                )
+            """)
+            
+            # Insert audit entry
+            details_json = yaml.dump(audit_entry['details']) if audit_entry['details'] else None
+            
+            cursor.execute("""
+                INSERT INTO connection_audit_log 
+                (timestamp, user_name, host_name, action, connection_name, details)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                audit_entry['timestamp'],
+                audit_entry['user'], 
+                audit_entry['host'],
+                audit_entry['action'],
+                audit_entry['connection_name'],
+                details_json
+            ))
+            
+            system_connection.commit()
+            cursor.close()
+            system_connection.close()
+            
+        except Exception as e:
+            # Don't let database audit failures break the main operation
+            self.logger.debug(f"[AUDIT] Could not save audit to database: {e}")
+    
+    def get_connection_audit_trail(self, connection_name: str = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get audit trail for connections"""
+        try:
+            system_connection = self.get_connection("system")
+            if not system_connection:
+                return []
+            
+            cursor = system_connection.cursor()
+            
+            if connection_name:
+                cursor.execute("""
+                    SELECT TOP (?) timestamp, user_name, host_name, action, connection_name, details
+                    FROM connection_audit_log 
+                    WHERE connection_name = ?
+                    ORDER BY timestamp DESC
+                """, limit, connection_name)
+            else:
+                cursor.execute("""
+                    SELECT TOP (?) timestamp, user_name, host_name, action, connection_name, details
+                    FROM connection_audit_log 
+                    ORDER BY timestamp DESC
+                """, limit)
+            
+            rows = cursor.fetchall()
+            cursor.close()
+            system_connection.close()
+            
+            audit_trail = []
+            for row in rows:
+                entry = {
+                    'timestamp': row[0],
+                    'user': row[1],
+                    'host': row[2], 
+                    'action': row[3],
+                    'connection_name': row[4],
+                    'details': yaml.safe_load(row[5]) if row[5] else {}
+                }
+                audit_trail.append(entry)
+            
+            self.logger.debug(f"[AUDIT] Retrieved {len(audit_trail)} audit entries" + (f" for connection '{connection_name}'" if connection_name else ""))
+            return audit_trail
+            
+        except Exception as e:
+            self.logger.error(f"[AUDIT] Error retrieving audit trail: {e}")
+            return []
 
 
 if __name__ == "__main__":
