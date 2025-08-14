@@ -131,12 +131,16 @@ class DatabaseConnectionManager:
     
     def get_connection_string(self, connection_name: str = "default") -> str:
         """Build connection string for specified connection"""
-        # First try to get from database
-        db_config = self._get_connection_from_database(connection_name)
-        
-        if not db_config:
-            # Fall back to config file
+        # For system connection, always use config file to avoid recursion
+        if connection_name == "system":
             db_config = self.config.get('databases', {}).get(connection_name)
+        else:
+            # First try to get from database
+            db_config = self._get_connection_from_database(connection_name)
+            
+            if not db_config:
+                # Fall back to config file
+                db_config = self.config.get('databases', {}).get(connection_name)
         
         if not db_config:
             raise ValueError(f"Database connection '{connection_name}' not found in configuration")
@@ -723,12 +727,16 @@ class DatabaseConnectionManager:
     
     def get_connection_info(self, connection_name: str) -> Optional[Dict[str, Any]]:
         """Get connection information (without sensitive data)"""
-        # First try to get from database
-        db_config = self._get_connection_from_database(connection_name)
-        
-        if not db_config:
-            # Fall back to config file
+        # For system connection, always use config file to avoid recursion
+        if connection_name == "system":
             db_config = self.config.get('databases', {}).get(connection_name)
+        else:
+            # First try to get from database
+            db_config = self._get_connection_from_database(connection_name)
+            
+            if not db_config:
+                # Fall back to config file
+                db_config = self.config.get('databases', {}).get(connection_name)
         
         if not db_config:
             return None
