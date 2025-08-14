@@ -4,6 +4,7 @@ Database Connection Manager for Windows SQL Server
 
 import pyodbc
 import yaml
+import uuid
 from pathlib import Path
 from typing import Dict, Optional, Any, List
 import time
@@ -21,7 +22,58 @@ class DatabaseConnectionManager:
         self._connection_lock = Lock()
         self._connection_pool = {}
         
+        # Initialize system database tables
+        self._init_system_database()
+        
         self.logger.info("Database Connection Manager initialized")
+    
+    def _init_system_database(self):
+        """Initialize system database tables for storing user connections"""
+        try:
+            # Get system connection
+            system_connection = self.get_connection("system")
+            if not system_connection:
+                self.logger.error("Could not connect to system database for initialization")
+                return
+            
+            cursor = system_connection.cursor()
+            
+            # Create user connections table
+            create_table_sql = """
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='user_connections' AND xtype='U')
+            CREATE TABLE user_connections (
+                connection_id NVARCHAR(100) PRIMARY KEY,
+                name NVARCHAR(255) NOT NULL,
+                server_name NVARCHAR(255) NOT NULL,
+                port INT DEFAULT 1433,
+                database_name NVARCHAR(255) NOT NULL,
+                trusted_connection BIT DEFAULT 1,
+                username NVARCHAR(255) NULL,
+                password NVARCHAR(500) NULL,
+                description NVARCHAR(1000) NULL,
+                driver NVARCHAR(255) DEFAULT '{ODBC Driver 17 for SQL Server}',
+                connection_timeout INT DEFAULT 30,
+                command_timeout INT DEFAULT 300,
+                encrypt BIT DEFAULT 0,
+                trust_server_certificate BIT DEFAULT 1,
+                created_date DATETIME DEFAULT GETDATE(),
+                modified_date DATETIME DEFAULT GETDATE(),
+                created_by NVARCHAR(255) DEFAULT SYSTEM_USER,
+                is_active BIT DEFAULT 1,
+                INDEX IX_user_connections_name (name),
+                INDEX IX_user_connections_active (is_active)
+            )
+            """
+            
+            cursor.execute(create_table_sql)
+            system_connection.commit()
+            cursor.close()
+            system_connection.close()
+            
+            self.logger.info("System database tables initialized successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize system database: {e}")
     
     def _load_config(self) -> Dict[str, Any]:
         """Load database configuration from YAML file"""
@@ -68,7 +120,12 @@ class DatabaseConnectionManager:
     
     def get_connection_string(self, connection_name: str = "default") -> str:
         """Build connection string for specified connection"""
-        db_config = self.config.get('databases', {}).get(connection_name)
+        # First try to get from database
+        db_config = self._get_connection_from_database(connection_name)
+        
+        if not db_config:
+            # Fall back to config file
+            db_config = self.config.get('databases', {}).get(connection_name)
         
         if not db_config:
             raise ValueError(f"Database connection '{connection_name}' not found in configuration")
@@ -356,7 +413,7 @@ class DatabaseConnectionManager:
                                port: int = 1433, use_windows_auth: bool = True, 
                                username: str = None, password: str = None,
                                description: str = None, **kwargs) -> Dict[str, Any]:
-        """Create a new connection configuration"""
+        """Create a new connection configuration and save to database"""
         
         # Validate parameters
         if not connection_name or not server or not database:
@@ -367,38 +424,87 @@ class DatabaseConnectionManager:
         
         # Build configuration
         config = {
+            'connection_id': str(uuid.uuid4()),
+            'name': connection_name,
             'driver': kwargs.get('driver', '{ODBC Driver 17 for SQL Server}'),
             'server': server,
-            'port': port if port != 1433 else None,  # Only store non-default ports
+            'port': port,
             'database': database,
             'trusted_connection': use_windows_auth,
+            'username': username if not use_windows_auth else None,
+            'password': password if not use_windows_auth else None,
             'connection_timeout': kwargs.get('connection_timeout', 30),
             'command_timeout': kwargs.get('command_timeout', 300),
-            'description': description or f"Connection to {server}\\{database}"
+            'description': description or f"Connection to {server}\\{database}",
+            'encrypt': kwargs.get('encrypt', False),
+            'trust_server_certificate': kwargs.get('trust_server_certificate', True)
         }
         
-        # Add authentication details if needed
-        if not use_windows_auth:
-            config['username'] = username
-            config['password'] = password
-        
-        # Add Azure SQL specific settings if specified
-        if kwargs.get('is_azure', False):
-            config['encrypt'] = True
-            config['trust_server_certificate'] = False
-        
-        # Add to current configuration
-        if 'databases' not in self.config:
-            self.config['databases'] = {}
-        
-        self.config['databases'][connection_name] = config
-        
-        # Save configuration
-        self._save_config()
+        # Save to database
+        success = self._save_connection_to_database(config)
+        if not success:
+            raise Exception("Failed to save connection to database")
         
         self.logger.info(f"Created connection configuration: {connection_name}")
         
         return config
+    
+    def _save_connection_to_database(self, config: Dict[str, Any]) -> bool:
+        """Save connection configuration to database"""
+        try:
+            system_connection = self.get_connection("system")
+            if not system_connection:
+                return False
+            
+            cursor = system_connection.cursor()
+            
+            # Check if connection already exists
+            cursor.execute("SELECT COUNT(*) FROM user_connections WHERE name = ?", config['name'])
+            exists = cursor.fetchone()[0] > 0
+            
+            if exists:
+                # Update existing connection
+                cursor.execute("""
+                    UPDATE user_connections 
+                    SET server_name = ?, port = ?, database_name = ?, trusted_connection = ?,
+                        username = ?, password = ?, description = ?, driver = ?,
+                        connection_timeout = ?, command_timeout = ?, encrypt = ?, trust_server_certificate = ?,
+                        modified_date = GETDATE()
+                    WHERE name = ?
+                """, (
+                    config['server'], config['port'], config['database'], config['trusted_connection'],
+                    config['username'], config['password'], config['description'], config['driver'],
+                    config['connection_timeout'], config['command_timeout'], config['encrypt'], 
+                    config['trust_server_certificate'], config['name']
+                ))
+            else:
+                # Insert new connection
+                cursor.execute("""
+                    INSERT INTO user_connections 
+                    (connection_id, name, server_name, port, database_name, trusted_connection,
+                     username, password, description, driver, connection_timeout, command_timeout,
+                     encrypt, trust_server_certificate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    config['connection_id'], config['name'], config['server'], config['port'], 
+                    config['database'], config['trusted_connection'], config['username'], config['password'],
+                    config['description'], config['driver'], config['connection_timeout'], 
+                    config['command_timeout'], config['encrypt'], config['trust_server_certificate']
+                ))
+            
+            system_connection.commit()
+            cursor.close()
+            system_connection.close()
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error saving connection to database: {e}")
+            try:
+                system_connection.rollback()
+                system_connection.close()
+            except:
+                pass
+            return False
     
     def create_custom_connection(self, name: str, server: str, database: str, 
                                port: int = 1433, auth_type: str = "windows",
@@ -505,28 +611,105 @@ class DatabaseConnectionManager:
     def remove_connection(self, connection_name: str) -> bool:
         """Remove a connection configuration"""
         try:
+            success = False
+            
+            # Remove from database
+            db_success = self._remove_connection_from_database(connection_name)
+            if db_success:
+                success = True
+            
+            # Remove from config file (if exists there)
             if connection_name in self.config.get('databases', {}):
                 del self.config['databases'][connection_name]
                 self._save_config()
+                success = True
+            
+            if success:
                 self.logger.info(f"Removed connection configuration: {connection_name}")
-                return True
             else:
                 self.logger.warning(f"Connection '{connection_name}' not found")
-                return False
+                
+            return success
+            
         except Exception as e:
             self.logger.error(f"Failed to remove connection '{connection_name}': {e}")
             return False
     
+    def _remove_connection_from_database(self, connection_name: str) -> bool:
+        """Remove connection configuration from database"""
+        try:
+            system_connection = self.get_connection("system")
+            if not system_connection:
+                return False
+            
+            cursor = system_connection.cursor()
+            cursor.execute("UPDATE user_connections SET is_active = 0 WHERE name = ?", connection_name)
+            rows_affected = cursor.rowcount
+            
+            system_connection.commit()
+            cursor.close()
+            system_connection.close()
+            
+            return rows_affected > 0
+            
+        except Exception as e:
+            self.logger.error(f"Error removing connection from database: {e}")
+            try:
+                system_connection.rollback()
+                system_connection.close()
+            except:
+                pass
+            return False
+    
     def list_connections(self) -> List[str]:
-        """Get list of configured connection names"""
-        databases = self.config.get('databases')
-        if databases is None:
+        """Get list of configured connection names (excluding system connections)"""
+        try:
+            # First get from database
+            db_connections = self._load_connections_from_database()
+            
+            # Then get from config (excluding system connections)
+            config_connections = []
+            databases = self.config.get('databases', {})
+            if databases:
+                for conn_name, conn_config in databases.items():
+                    if not conn_config.get('is_system_connection', False):
+                        config_connections.append(conn_name)
+            
+            # Combine and deduplicate
+            all_connections = list(set(db_connections + config_connections))
+            return all_connections
+            
+        except Exception as e:
+            self.logger.error(f"Error listing connections: {e}")
             return []
-        return list(databases.keys())
+    
+    def _load_connections_from_database(self) -> List[str]:
+        """Load connection names from database"""
+        try:
+            system_connection = self.get_connection("system")
+            if not system_connection:
+                return []
+            
+            cursor = system_connection.cursor()
+            cursor.execute("SELECT name FROM user_connections WHERE is_active = 1")
+            rows = cursor.fetchall()
+            cursor.close()
+            system_connection.close()
+            
+            return [row[0] for row in rows]
+            
+        except Exception as e:
+            self.logger.error(f"Error loading connections from database: {e}")
+            return []
     
     def get_connection_info(self, connection_name: str) -> Optional[Dict[str, Any]]:
         """Get connection information (without sensitive data)"""
-        db_config = self.config.get('databases', {}).get(connection_name)
+        # First try to get from database
+        db_config = self._get_connection_from_database(connection_name)
+        
+        if not db_config:
+            # Fall back to config file
+            db_config = self.config.get('databases', {}).get(connection_name)
         
         if not db_config:
             return None
@@ -537,6 +720,50 @@ class DatabaseConnectionManager:
             safe_config['password'] = '***'
         
         return safe_config
+    
+    def _get_connection_from_database(self, connection_name: str) -> Optional[Dict[str, Any]]:
+        """Get connection configuration from database"""
+        try:
+            system_connection = self.get_connection("system")
+            if not system_connection:
+                return None
+            
+            cursor = system_connection.cursor()
+            cursor.execute("""
+                SELECT connection_id, name, server_name, port, database_name, 
+                       trusted_connection, username, password, description,
+                       driver, connection_timeout, command_timeout, encrypt, trust_server_certificate
+                FROM user_connections 
+                WHERE name = ? AND is_active = 1
+            """, connection_name)
+            
+            row = cursor.fetchone()
+            cursor.close()
+            system_connection.close()
+            
+            if not row:
+                return None
+            
+            return {
+                'connection_id': row[0],
+                'name': row[1],
+                'server': row[2],
+                'port': row[3],
+                'database': row[4],
+                'trusted_connection': bool(row[5]),
+                'username': row[6],
+                'password': row[7],
+                'description': row[8],
+                'driver': row[9],
+                'connection_timeout': row[10],
+                'command_timeout': row[11],
+                'encrypt': bool(row[12]),
+                'trust_server_certificate': bool(row[13])
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error getting connection from database: {e}")
+            return None
 
 
 if __name__ == "__main__":

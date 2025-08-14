@@ -1,7 +1,20 @@
 # Database Configuration for Windows SQL Server
-# User-defined database connections only
+# System database connection for storing user connections
 
-databases: {}
+databases:
+  # System database connection - stores user connection configurations
+  system:
+    driver: "{ODBC Driver 17 for SQL Server}"
+    server: "localhost"
+    port: 1433
+    database: "JobScheduler"
+    trusted_connection: true
+    username: null
+    password: null
+    connection_timeout: 30
+    command_timeout: 300
+    description: "System database for storing user connections"
+    is_system_connection: true
 
 # Connection pool settings
 connection_pool:
