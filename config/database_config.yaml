@@ -5,12 +5,12 @@ databases:
   # System database connection - stores user connection configurations
   system:
     driver: "{ODBC Driver 17 for SQL Server}"
-    server: "localhost"
-    port: 1433
-    database: "JobScheduler"
-    trusted_connection: true
-    username: null
-    password: null
+    server: "YOUR_SQL_SERVER_NAME_OR_IP"  # Replace with your SQL Server
+    port: 1433  # Change if using different port
+    database: "YOUR_DATABASE_NAME"  # Replace with your database name
+    trusted_connection: true  # Set to false for SQL Server authentication
+    username: null  # Set username if using SQL Server authentication
+    password: null  # Set password if using SQL Server authentication
     connection_timeout: 30
     command_timeout: 300
     description: "System database for storing user connections"
