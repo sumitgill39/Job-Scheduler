@@ -424,6 +424,105 @@ def create_routes(app):
             logger.error(f"API test existing connection error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/system/database-status', methods=['GET'])
+    def api_system_database_status():
+        """Get system database connection status"""
+        try:
+            from database.connection_manager import DatabaseConnectionManager
+            db_manager = DatabaseConnectionManager()
+            
+            # Test system database connection
+            system_status = db_manager.test_connection("system")
+            
+            if system_status['success']:
+                return jsonify({
+                    'success': True,
+                    'connected': True,
+                    'database': 'sreutil',
+                    'server': 'USDF11DB197\\PROD_DB01:3433',
+                    'response_time': system_status['response_time'],
+                    'server_info': system_status.get('server_info', {})
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'connected': False,
+                    'error': system_status['error'],
+                    'response_time': system_status.get('response_time', 0)
+                })
+                
+        except Exception as e:
+            logger.error(f"API system database status error: {e}")
+            return jsonify({
+                'success': False,
+                'connected': False,
+                'error': str(e)
+            }), 500
+    
+    @app.route('/api/connections/validate-all', methods=['POST'])
+    def api_validate_all_connections():
+        """Validate all saved connections in parallel"""
+        try:
+            from database.connection_manager import DatabaseConnectionManager
+            import concurrent.futures
+            import threading
+            
+            db_manager = DatabaseConnectionManager()
+            connections = db_manager.list_connections()
+            
+            if not connections:
+                return jsonify({
+                    'success': True,
+                    'results': {},
+                    'message': 'No connections to validate'
+                })
+            
+            # Function to test a single connection
+            def test_single_connection(conn_name):
+                try:
+                    result = db_manager.test_connection(conn_name)
+                    return conn_name, {
+                        'success': result['success'],
+                        'status': 'valid' if result['success'] else 'invalid',
+                        'response_time': result.get('response_time', 0),
+                        'error': result.get('error', ''),
+                        'server_info': result.get('server_info', {})
+                    }
+                except Exception as e:
+                    return conn_name, {
+                        'success': False,
+                        'status': 'error',
+                        'response_time': 0,
+                        'error': str(e),
+                        'server_info': {}
+                    }
+            
+            # Test all connections in parallel
+            results = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                # Submit all connection tests
+                future_to_conn = {
+                    executor.submit(test_single_connection, conn_name): conn_name 
+                    for conn_name in connections
+                }
+                
+                # Collect results
+                for future in concurrent.futures.as_completed(future_to_conn):
+                    conn_name, result = future.result()
+                    results[conn_name] = result
+            
+            return jsonify({
+                'success': True,
+                'results': results,
+                'total_connections': len(connections),
+                'valid_connections': sum(1 for r in results.values() if r['success']),
+                'invalid_connections': sum(1 for r in results.values() if not r['success'])
+            })
+            
+        except Exception as e:
+            logger.error(f"API validate all connections error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/test-connection', methods=['POST'])
     def api_test_connection():
         """API endpoint to test a database connection"""
@@ -589,7 +688,7 @@ def create_routes(app):
                 connections = []  # Ensure we have an empty list
             
             logger.info(f"Rendering connections page with {len(connections)} connections")
-            return render_template('connections.html', connections=connections)
+            return render_template('connections_new.html', connections=connections)
             
         except Exception as e:
             logger.error(f"Connections page error: {e}")
