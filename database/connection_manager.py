@@ -141,9 +141,12 @@ class DatabaseConnectionManager:
         server = db_config.get('server', 'localhost')
         port = db_config.get('port')
         
-        # Handle named instances (don't add port for named instances)
-        if '\\' in server:
-            # Named instance - don't add port
+        # Handle named instances and custom ports
+        if '\\' in server and port and port != 1433:
+            # Named instance with custom port - add port after server name
+            components.append(f"SERVER={server},{port}")
+        elif '\\' in server:
+            # Named instance - don't add port for default
             components.append(f"SERVER={server}")
         elif port and port != 1433:
             # Custom port
@@ -163,10 +166,11 @@ class DatabaseConnectionManager:
         else:
             username = db_config.get('username')
             password = db_config.get('password')
-            if username:
+            if username and password:
                 components.append(f"UID={username}")
-            if password:
                 components.append(f"PWD={password}")
+            else:
+                raise ValueError(f"Username and password required for SQL authentication on connection '{connection_name}'")
         
         # Timeouts
         connection_timeout = db_config.get('connection_timeout', 30)
@@ -249,8 +253,11 @@ class DatabaseConnectionManager:
             components.append("DRIVER={ODBC Driver 17 for SQL Server}")
             
             # Handle server and port
-            if '\\' in server:
-                # Named instance - don't add port
+            if '\\' in server and port and port != 1433:
+                # Named instance with custom port
+                components.append(f"SERVER={server},{port}")
+            elif '\\' in server:
+                # Named instance - don't add port for default
                 components.append(f"SERVER={server}")
             elif port and port != 1433:
                 # Custom port
@@ -273,6 +280,7 @@ class DatabaseConnectionManager:
                     }
                 components.append(f"UID={username}")
                 components.append(f"PWD={password}")
+                # Don't add Trusted_Connection=yes for SQL auth
             
             # Connection settings
             components.extend([

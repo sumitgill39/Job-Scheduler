@@ -5,12 +5,12 @@ databases:
   # System database connection - stores user connection configurations
   system:
     driver: "{ODBC Driver 17 for SQL Server}"
-    server: "YOUR_SQL_SERVER_NAME_OR_IP"  # Replace with your SQL Server
-    port: 1433  # Change if using different port
-    database: "YOUR_DATABASE_NAME"  # Replace with your database name
-    trusted_connection: true  # Set to false for SQL Server authentication
-    username: null  # Set username if using SQL Server authentication
-    password: null  # Set password if using SQL Server authentication
+    server: "USDF11DB197\\PROD_DB01"  # Named instance
+    port: 3433  # Custom port
+    database: "JobScheduler"  # Will be created if doesn't exist
+    trusted_connection: false  # Using SQL Server authentication
+    username: "sve-devops"  # SQL Server username
+    password: "Welcome@1234"  # SQL Server password
     connection_timeout: 30
     command_timeout: 300
     description: "System database for storing user connections"
