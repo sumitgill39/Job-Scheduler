@@ -156,19 +156,23 @@ class DatabaseConnectionManager:
         server = db_config.get('server', 'localhost')
         port = db_config.get('port')
         
-        # Handle named instances and custom ports
+        # Handle named instances and custom ports  
         if '\\' in server and port and port != 1433:
             # Named instance with custom port - add port after server name
             components.append(f"SERVER={server},{port}")
+            self.logger.debug(f"Using named instance with explicit port: {server},{port}")
         elif '\\' in server:
             # Named instance - don't add port for default
             components.append(f"SERVER={server}")
+            self.logger.debug(f"Using named instance: {server}")
         elif port and port != 1433:
             # Custom port
             components.append(f"SERVER={server},{port}")
+            self.logger.debug(f"Using server with custom port: {server},{port}")
         else:
             # Default port or no port specified
             components.append(f"SERVER={server}")
+            self.logger.debug(f"Using default server: {server}")
         
         # Database
         database = db_config.get('database')
@@ -269,17 +273,22 @@ class DatabaseConnectionManager:
             
             # Handle server and port
             if '\\' in server and port and port != 1433:
-                # Named instance with custom port
+                # Named instance with custom port - try both formats
+                # Some named instances require explicit port specification
                 components.append(f"SERVER={server},{port}")
+                self.logger.debug(f"Using named instance with explicit port: {server},{port}")
             elif '\\' in server:
-                # Named instance - don't add port for default
+                # Named instance - try without port first
                 components.append(f"SERVER={server}")
+                self.logger.debug(f"Using named instance: {server}")
             elif port and port != 1433:
-                # Custom port
+                # Standard server with custom port
                 components.append(f"SERVER={server},{port}")
+                self.logger.debug(f"Using server with custom port: {server},{port}")
             else:
-                # Default port
+                # Default server and port
                 components.append(f"SERVER={server}")
+                self.logger.debug(f"Using default server: {server}")
             
             components.append(f"DATABASE={database}")
             
@@ -306,6 +315,10 @@ class DatabaseConnectionManager:
             ])
             
             connection_string = ";".join(components)
+            
+            # Log the full connection string for debugging (without password)
+            debug_string = connection_string.replace(password, "***") if password else connection_string
+            self.logger.info(f"Testing connection with string: {debug_string}")
             
             # Test the connection
             self.logger.info(f"Testing connection to {server}\\{database}")
