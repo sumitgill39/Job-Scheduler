@@ -30,10 +30,13 @@ class DatabaseConnectionManager:
     def _init_system_database(self):
         """Initialize system database tables for storing user connections"""
         try:
+            self.logger.info("Initializing system database tables...")
+            
             # Get system connection
             system_connection = self.get_connection("system")
             if not system_connection:
                 self.logger.error("Could not connect to system database for initialization")
+                self.logger.error("Please check your system database connection in config/database_config.yaml")
                 return
             
             cursor = system_connection.cursor()
@@ -93,6 +96,14 @@ class DatabaseConnectionManager:
                 # Ensure databases section exists
                 if 'databases' not in config or config['databases'] is None:
                     config['databases'] = {}
+                
+                # Ensure boolean values are properly converted
+                for conn_name, conn_config in config.get('databases', {}).items():
+                    if isinstance(conn_config, dict):
+                        # Convert string boolean values to actual booleans
+                        if 'trusted_connection' in conn_config:
+                            if isinstance(conn_config['trusted_connection'], str):
+                                conn_config['trusted_connection'] = conn_config['trusted_connection'].lower() == 'true'
                 
                 if hasattr(self, 'logger'):
                     self.logger.info(f"Loaded database configuration from {config_path}")

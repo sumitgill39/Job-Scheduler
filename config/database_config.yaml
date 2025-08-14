@@ -7,8 +7,8 @@ databases:
     driver: "{ODBC Driver 17 for SQL Server}"
     server: "USDF11DB197\\PROD_DB01"  # Named instance
     port: 3433  # Custom port
-    database: "JobScheduler"  # Will be created if doesn't exist
-    trusted_connection: false  # Using SQL Server authentication
+    database: "sreutil"  # Updated database name
+    trusted_connection: false  # Using SQL Server authentication (boolean, not string)
     username: "sve-devops"  # SQL Server username
     password: "Welcome@1234"  # SQL Server password
     connection_timeout: 30

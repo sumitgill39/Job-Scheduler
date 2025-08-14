@@ -6,21 +6,11 @@
 -- Username: sve-devops
 -- Password: Welcome@1234
 
--- Step 1: Create Database (if not exists)
-IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'JobScheduler')
-BEGIN
-    CREATE DATABASE [JobScheduler]
-    PRINT 'Database JobScheduler created successfully'
-END
-ELSE
-BEGIN
-    PRINT 'Database JobScheduler already exists'
-END
+-- Step 1: Use the existing sreutil database
+USE [sreutil]
 GO
 
--- Step 2: Use the database
-USE [JobScheduler]
-GO
+PRINT 'Using existing sreutil database'
 
 -- Step 3: Create user_connections table for storing SQL connections
 IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='user_connections' AND xtype='U')
@@ -126,7 +116,7 @@ ORDER BY TABLE_NAME
 
 PRINT '============================================='
 PRINT 'Job Scheduler Database Setup Complete!'
-PRINT 'Database: JobScheduler'
+PRINT 'Database: sreutil'
 PRINT 'Tables Created:'
 PRINT '  - user_connections (stores SQL connection configs)'
 PRINT '  - job_configurations (stores job definitions)'  
