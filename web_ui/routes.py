@@ -473,6 +473,11 @@ def create_routes(app):
     @app.route('/api/connections/validate-all', methods=['POST'])
     def api_validate_all_connections():
         """Validate all saved connections in parallel"""
+        import time
+        start_time = time.time()
+        
+        logger.info("[PARALLEL_VALIDATION] Starting parallel validation of all connections")
+        
         try:
             from database.connection_manager import DatabaseConnectionManager
             import concurrent.futures
@@ -481,34 +486,56 @@ def create_routes(app):
             db_manager = DatabaseConnectionManager()
             connections = db_manager.list_connections()
             
+            logger.info(f"[PARALLEL_VALIDATION] Found {len(connections)} connections to validate: {', '.join(connections)}")
+            
             if not connections:
+                logger.info("[PARALLEL_VALIDATION] No connections found to validate")
                 return jsonify({
                     'success': True,
                     'results': {},
-                    'message': 'No connections to validate'
+                    'message': 'No connections to validate',
+                    'total_time': time.time() - start_time
                 })
             
-            # Function to test a single connection
+            # Function to test a single connection with detailed logging
             def test_single_connection(conn_name):
+                thread_start = time.time()
+                logger.debug(f"[PARALLEL_VALIDATION] Starting test for connection '{conn_name}' in thread {threading.current_thread().name}")
+                
                 try:
                     result = db_manager.test_connection(conn_name)
+                    thread_time = time.time() - thread_start
+                    
+                    if result['success']:
+                        logger.info(f"[PARALLEL_VALIDATION] Connection '{conn_name}' validated successfully in {thread_time:.2f}s (response: {result['response_time']:.2f}s)")
+                    else:
+                        logger.warning(f"[PARALLEL_VALIDATION] Connection '{conn_name}' validation failed in {thread_time:.2f}s: {result.get('error', 'Unknown error')}")
+                    
                     return conn_name, {
                         'success': result['success'],
                         'status': 'valid' if result['success'] else 'invalid',
                         'response_time': result.get('response_time', 0),
+                        'thread_time': thread_time,
                         'error': result.get('error', ''),
                         'server_info': result.get('server_info', {})
                     }
                 except Exception as e:
+                    thread_time = time.time() - thread_start
+                    logger.error(f"[PARALLEL_VALIDATION] Exception testing connection '{conn_name}' in {thread_time:.2f}s: {e}")
+                    
                     return conn_name, {
                         'success': False,
                         'status': 'error',
                         'response_time': 0,
+                        'thread_time': thread_time,
                         'error': str(e),
                         'server_info': {}
                     }
             
-            # Test all connections in parallel
+            # Test all connections in parallel with timing
+            logger.info(f"[PARALLEL_VALIDATION] Starting parallel execution with max 5 worker threads")
+            parallel_start = time.time()
+            
             results = {}
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                 # Submit all connection tests
@@ -517,22 +544,57 @@ def create_routes(app):
                     for conn_name in connections
                 }
                 
-                # Collect results
+                logger.debug(f"[PARALLEL_VALIDATION] Submitted {len(future_to_conn)} test tasks to thread pool")
+                
+                # Collect results as they complete
+                completed_count = 0
                 for future in concurrent.futures.as_completed(future_to_conn):
                     conn_name, result = future.result()
                     results[conn_name] = result
+                    completed_count += 1
+                    
+                    logger.debug(f"[PARALLEL_VALIDATION] Completed {completed_count}/{len(connections)}: '{conn_name}' -> {result['status']}")
+            
+            parallel_time = time.time() - parallel_start
+            total_time = time.time() - start_time
+            
+            # Calculate statistics
+            valid_count = sum(1 for r in results.values() if r['success'])
+            invalid_count = sum(1 for r in results.values() if not r['success'])
+            avg_response_time = sum(r['response_time'] for r in results.values()) / len(results) if results else 0
+            avg_thread_time = sum(r['thread_time'] for r in results.values()) / len(results) if results else 0
+            
+            logger.info(f"[PARALLEL_VALIDATION] Completed parallel validation: {valid_count} valid, {invalid_count} invalid")
+            logger.info(f"[PARALLEL_VALIDATION] Timing: parallel={parallel_time:.2f}s, total={total_time:.2f}s")
+            logger.info(f"[PARALLEL_VALIDATION] Average response time: {avg_response_time:.2f}s, average thread time: {avg_thread_time:.2f}s")
+            
+            # Log detailed results
+            for conn_name, result in results.items():
+                status = "✓" if result['success'] else "✗"
+                logger.debug(f"[PARALLEL_VALIDATION] {status} {conn_name}: {result['status']} ({result['response_time']:.2f}s)")
             
             return jsonify({
                 'success': True,
                 'results': results,
                 'total_connections': len(connections),
-                'valid_connections': sum(1 for r in results.values() if r['success']),
-                'invalid_connections': sum(1 for r in results.values() if not r['success'])
+                'valid_connections': valid_count,
+                'invalid_connections': invalid_count,
+                'timing': {
+                    'total_time': total_time,
+                    'parallel_time': parallel_time,
+                    'average_response_time': avg_response_time,
+                    'average_thread_time': avg_thread_time
+                }
             })
             
         except Exception as e:
-            logger.error(f"API validate all connections error: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 500
+            total_time = time.time() - start_time
+            logger.error(f"[PARALLEL_VALIDATION] API validate all connections error after {total_time:.2f}s: {e}")
+            return jsonify({
+                'success': False, 
+                'error': str(e), 
+                'total_time': total_time
+            }), 500
     
     @app.route('/api/test-connection', methods=['POST'])
     def api_test_connection():

@@ -8,6 +8,8 @@ import uuid
 from pathlib import Path
 from typing import Dict, Optional, Any, List
 import time
+import os
+import socket
 from threading import Lock
 from utils.logger import get_logger
 
@@ -22,10 +24,14 @@ class DatabaseConnectionManager:
         self._connection_lock = Lock()
         self._connection_pool = {}
         
+        # Initialize audit trail context
+        self._current_user = os.getenv('USERNAME', os.getenv('USER', 'system'))
+        self._host_name = socket.gethostname()
+        
         # Initialize system database tables
         self._init_system_database()
         
-        self.logger.info("Database Connection Manager initialized")
+        self.logger.info(f"[AUDIT] Database Connection Manager initialized by {self._current_user}@{self._host_name}")
     
     def _init_system_database(self):
         """Initialize system database tables for storing user connections"""
@@ -270,6 +276,9 @@ class DatabaseConnectionManager:
                               password: str = None) -> Dict[str, Any]:
         """Test database connection directly without using saved configuration"""
         start_time = time.time()
+        connection_detail = f"{server}:{port}/{database}"
+        
+        self.logger.info(f"[DIRECT_TEST] Starting connection test for {connection_detail} using {auth_type} authentication")
         
         try:
             # Import required modules
@@ -284,27 +293,29 @@ class DatabaseConnectionManager:
                 # Named instance with custom port - try both formats
                 # Some named instances require explicit port specification
                 components.append(f"SERVER={server},{port}")
-                self.logger.debug(f"Using named instance with explicit port: {server},{port}")
+                self.logger.debug(f"[DIRECT_TEST] Using named instance with explicit port: {server},{port}")
             elif '\\' in server:
                 # Named instance - try without port first
                 components.append(f"SERVER={server}")
-                self.logger.debug(f"Using named instance: {server}")
+                self.logger.debug(f"[DIRECT_TEST] Using named instance: {server}")
             elif port and port != 1433:
                 # Standard server with custom port
                 components.append(f"SERVER={server},{port}")
-                self.logger.debug(f"Using server with custom port: {server},{port}")
+                self.logger.debug(f"[DIRECT_TEST] Using server with custom port: {server},{port}")
             else:
                 # Default server and port
                 components.append(f"SERVER={server}")
-                self.logger.debug(f"Using default server: {server}")
+                self.logger.debug(f"[DIRECT_TEST] Using default server: {server}")
             
             components.append(f"DATABASE={database}")
             
             # Authentication
             if auth_type.lower() == 'windows':
                 components.append("Trusted_Connection=yes")
+                self.logger.debug(f"[DIRECT_TEST] Using Windows authentication")
             else:
                 if not username or not password:
+                    self.logger.error(f"[DIRECT_TEST] Username and password required for SQL authentication on {connection_detail}")
                     return {
                         'success': False,
                         'error': 'Username and password required for SQL authentication',
@@ -312,6 +323,7 @@ class DatabaseConnectionManager:
                     }
                 components.append(f"UID={username}")
                 components.append(f"PWD={password}")
+                self.logger.debug(f"[DIRECT_TEST] Using SQL Server authentication with username: {username}")
                 # Don't add Trusted_Connection=yes for SQL auth
             
             # Connection settings
@@ -326,12 +338,16 @@ class DatabaseConnectionManager:
             
             # Log the full connection string for debugging (without password)
             debug_string = connection_string.replace(password, "***") if password else connection_string
-            self.logger.info(f"Testing connection with string: {debug_string}")
+            self.logger.info(f"[DIRECT_TEST] Connection string for {connection_detail}: {debug_string}")
             
             # Test the connection
-            self.logger.info(f"Testing connection to {server}\\{database}")
+            self.logger.info(f"[DIRECT_TEST] Attempting to connect to {connection_detail}...")
             
             connection = pyodbc.connect(connection_string)
+            self.logger.info(f"[DIRECT_TEST] Successfully established connection to {connection_detail}")
+            
+            # Execute test query
+            self.logger.debug(f"[DIRECT_TEST] Executing test query on {connection_detail}")
             cursor = connection.cursor()
             cursor.execute("SELECT 1 as test, @@VERSION as version")
             result = cursor.fetchone()
@@ -340,7 +356,9 @@ class DatabaseConnectionManager:
             
             response_time = time.time() - start_time
             
-            return {
+            self.logger.info(f"[DIRECT_TEST] Connection test completed successfully for {connection_detail} in {response_time:.2f}s")
+            
+            result_data = {
                 'success': True,
                 'message': 'Connection successful',
                 'response_time': response_time,
@@ -350,25 +368,35 @@ class DatabaseConnectionManager:
                 }
             }
             
+            self.logger.debug(f"[DIRECT_TEST] Server info for {connection_detail}: {result_data['server_info']}")
+            return result_data
+            
         except Exception as e:
             response_time = time.time() - start_time
             error_msg = str(e)
             
             # Extract more user-friendly error message
             if "Login failed" in error_msg:
-                error_msg = "Login failed - check username and password"
+                friendly_error = "Login failed - check username and password"
+                self.logger.error(f"[DIRECT_TEST] Authentication failed for {connection_detail}: {error_msg}")
             elif "Server does not exist" in error_msg:
-                error_msg = "Server not found - check server name and port"
+                friendly_error = "Server not found - check server name and port"
+                self.logger.error(f"[DIRECT_TEST] Server not found for {connection_detail}: {error_msg}")
             elif "Database" in error_msg and "does not exist" in error_msg:
-                error_msg = "Database not found - check database name"
+                friendly_error = "Database not found - check database name"
+                self.logger.error(f"[DIRECT_TEST] Database not found for {connection_detail}: {error_msg}")
             elif "timeout" in error_msg.lower():
-                error_msg = "Connection timeout - check server accessibility"
+                friendly_error = "Connection timeout - check server accessibility"
+                self.logger.error(f"[DIRECT_TEST] Connection timeout for {connection_detail}: {error_msg}")
+            else:
+                friendly_error = error_msg
+                self.logger.error(f"[DIRECT_TEST] Connection failed for {connection_detail}: {error_msg}")
             
-            self.logger.error(f"Connection test failed: {e}")
+            self.logger.error(f"[DIRECT_TEST] Test failed for {connection_detail} after {response_time:.2f}s")
             
             return {
                 'success': False,
-                'error': error_msg,
+                'error': friendly_error,
                 'response_time': response_time
             }
 
@@ -376,16 +404,28 @@ class DatabaseConnectionManager:
         """Test database connection"""
         start_time = time.time()
         
+        self.logger.info(f"[CONNECTION_TEST] Starting test for saved connection '{connection_name}'")
+        
         try:
+            # Get connection info for logging
+            conn_info = self.get_connection_info(connection_name)
+            if conn_info:
+                server_detail = f"{conn_info.get('server')}:{conn_info.get('port', 1433)}/{conn_info.get('database')}"
+                auth_type = "Windows" if conn_info.get('trusted_connection') else "SQL Server"
+                self.logger.debug(f"[CONNECTION_TEST] Connection '{connection_name}' details: {server_detail} using {auth_type} auth")
+            
             connection = self.get_connection(connection_name)
             
             if not connection:
+                self.logger.error(f"[CONNECTION_TEST] Failed to establish connection for '{connection_name}'")
                 return {
                     'success': False,
                     'connection_name': connection_name,
                     'error': 'Failed to establish connection',
                     'response_time': time.time() - start_time
                 }
+            
+            self.logger.info(f"[CONNECTION_TEST] Successfully connected to '{connection_name}'")
             
             # Get server information
             cursor = connection.cursor()
@@ -399,6 +439,8 @@ class DatabaseConnectionManager:
                 "SELECT GETDATE() as current_time"
             ]
             
+            self.logger.debug(f"[CONNECTION_TEST] Executing {len(test_queries)} test queries on '{connection_name}'")
+            
             server_info = {}
             for query in test_queries:
                 try:
@@ -407,15 +449,18 @@ class DatabaseConnectionManager:
                     if result:
                         column_name = cursor.description[0][0].lower()
                         server_info[column_name] = str(result[0]).strip()
+                        self.logger.debug(f"[CONNECTION_TEST] Query result for '{connection_name}': {column_name} = {server_info[column_name][:50]}...")
                 except Exception as e:
-                    self.logger.debug(f"Failed to execute test query '{query}': {e}")
+                    self.logger.warning(f"[CONNECTION_TEST] Failed to execute test query '{query}' on '{connection_name}': {e}")
             
             cursor.close()
             connection.close()
             
             response_time = time.time() - start_time
             
-            return {
+            self.logger.info(f"[CONNECTION_TEST] Connection test completed successfully for '{connection_name}' in {response_time:.2f}s")
+            
+            result_data = {
                 'success': True,
                 'connection_name': connection_name,
                 'server_info': server_info,
@@ -423,12 +468,18 @@ class DatabaseConnectionManager:
                 'message': f'Connection successful in {response_time:.2f} seconds'
             }
             
+            self.logger.debug(f"[CONNECTION_TEST] Full server info for '{connection_name}': {len(server_info)} properties retrieved")
+            return result_data
+            
         except Exception as e:
+            response_time = time.time() - start_time
+            self.logger.error(f"[CONNECTION_TEST] Connection test failed for '{connection_name}' after {response_time:.2f}s: {e}")
+            
             return {
                 'success': False,
                 'connection_name': connection_name,
                 'error': str(e),
-                'response_time': time.time() - start_time
+                'response_time': response_time
             }
     
     def test_all_connections(self) -> Dict[str, Dict[str, Any]]:
@@ -495,9 +546,15 @@ class DatabaseConnectionManager:
     
     def _save_connection_to_database(self, config: Dict[str, Any]) -> bool:
         """Save connection configuration to database"""
+        connection_name = config.get('name', 'Unknown')
+        server_detail = f"{config.get('server')}:{config.get('port', 1433)}/{config.get('database')}"
+        
+        self.logger.info(f"[LIFECYCLE] Saving connection '{connection_name}' to database: {server_detail}")
+        
         try:
             system_connection = self.get_connection("system")
             if not system_connection:
+                self.logger.error(f"[LIFECYCLE] Cannot save connection '{connection_name}': system database not available")
                 return False
             
             cursor = system_connection.cursor()
@@ -508,6 +565,7 @@ class DatabaseConnectionManager:
             
             if exists:
                 # Update existing connection
+                self.logger.info(f"[LIFECYCLE] Updating existing connection '{connection_name}' in database")
                 cursor.execute("""
                     UPDATE user_connections 
                     SET server_name = ?, port = ?, database_name = ?, trusted_connection = ?,
@@ -521,8 +579,10 @@ class DatabaseConnectionManager:
                     config['connection_timeout'], config['command_timeout'], config['encrypt'], 
                     config['trust_server_certificate'], config['name']
                 ))
+                self.logger.debug(f"[LIFECYCLE] Updated connection '{connection_name}' with {cursor.rowcount} rows affected")
             else:
                 # Insert new connection
+                self.logger.info(f"[LIFECYCLE] Creating new connection '{connection_name}' in database")
                 cursor.execute("""
                     INSERT INTO user_connections 
                     (connection_id, name, server_name, port, database_name, trusted_connection,
@@ -535,14 +595,17 @@ class DatabaseConnectionManager:
                     config['description'], config['driver'], config['connection_timeout'], 
                     config['command_timeout'], config['encrypt'], config['trust_server_certificate']
                 ))
+                self.logger.debug(f"[LIFECYCLE] Inserted new connection '{connection_name}' with ID: {config['connection_id']}")
             
             system_connection.commit()
             cursor.close()
             system_connection.close()
+            
+            self.logger.info(f"[LIFECYCLE] Successfully saved connection '{connection_name}' to database")
             return True
             
         except Exception as e:
-            self.logger.error(f"Error saving connection to database: {e}")
+            self.logger.error(f"[LIFECYCLE] Error saving connection '{connection_name}' to database: {e}")
             try:
                 system_connection.rollback()
                 system_connection.close()
@@ -569,6 +632,15 @@ class DatabaseConnectionManager:
         Returns:
             Dict: Result with success status, message, and test details
         """
+        self._audit_log('CREATE', name, {
+            'server': server,
+            'database': database, 
+            'port': port,
+            'auth_type': auth_type,
+            'username': username if auth_type.lower() == 'sql' else None,
+            'description': description
+        })
+        
         try:
             use_windows_auth = auth_type.lower() == "windows"
             
@@ -584,6 +656,10 @@ class DatabaseConnectionManager:
             
             if not test_result['success']:
                 self.logger.error(f"Connection test failed for '{name}': {test_result['error']}")
+                self._audit_log('CREATE_FAILED', name, {
+                    'error': test_result['error'],
+                    'response_time': test_result.get('response_time', 0)
+                })
                 return {
                     'success': False,
                     'error': f"Connection test failed: {test_result['error']}",
@@ -603,6 +679,12 @@ class DatabaseConnectionManager:
             )
             
             self.logger.info(f"Successfully created and tested connection: {name}")
+            self._audit_log('CREATE_SUCCESS', name, {
+                'config_id': config.get('connection_id'),
+                'test_response_time': test_result.get('response_time', 0),
+                'server_info': test_result.get('server_info', {})
+            })
+            
             return {
                 'success': True,
                 'message': f"Connection '{name}' created and tested successfully",
@@ -611,6 +693,10 @@ class DatabaseConnectionManager:
             
         except Exception as e:
             self.logger.error(f"Failed to create custom connection '{name}': {e}")
+            self._audit_log('CREATE_ERROR', name, {
+                'error': str(e),
+                'exception_type': type(e).__name__
+            })
             return {
                 'success': False,
                 'error': f"Failed to create connection: {str(e)}",
@@ -654,6 +740,13 @@ class DatabaseConnectionManager:
     
     def remove_connection(self, connection_name: str) -> bool:
         """Remove a connection configuration"""
+        # Get connection info before removal for audit trail
+        conn_info = self.get_connection_info(connection_name)
+        self._audit_log('DELETE', connection_name, {
+            'server': conn_info.get('server') if conn_info else 'unknown',
+            'database': conn_info.get('database') if conn_info else 'unknown'
+        })
+        
         try:
             success = False
             
@@ -670,34 +763,60 @@ class DatabaseConnectionManager:
             
             if success:
                 self.logger.info(f"Removed connection configuration: {connection_name}")
+                self._audit_log('DELETE_SUCCESS', connection_name, {})
             else:
                 self.logger.warning(f"Connection '{connection_name}' not found")
+                self._audit_log('DELETE_NOT_FOUND', connection_name, {})
                 
             return success
             
         except Exception as e:
             self.logger.error(f"Failed to remove connection '{connection_name}': {e}")
+            self._audit_log('DELETE_ERROR', connection_name, {
+                'error': str(e),
+                'exception_type': type(e).__name__
+            })
             return False
     
     def _remove_connection_from_database(self, connection_name: str) -> bool:
         """Remove connection configuration from database"""
+        self.logger.info(f"[LIFECYCLE] Removing connection '{connection_name}' from database")
+        
         try:
             system_connection = self.get_connection("system")
             if not system_connection:
+                self.logger.error(f"[LIFECYCLE] Cannot remove connection '{connection_name}': system database not available")
                 return False
             
             cursor = system_connection.cursor()
-            cursor.execute("UPDATE user_connections SET is_active = 0 WHERE name = ?", connection_name)
+            
+            # First check if connection exists
+            cursor.execute("SELECT COUNT(*) FROM user_connections WHERE name = ? AND is_active = 1", connection_name)
+            exists = cursor.fetchone()[0] > 0
+            
+            if not exists:
+                self.logger.warning(f"[LIFECYCLE] Connection '{connection_name}' not found in database (already inactive or doesn't exist)")
+                cursor.close()
+                system_connection.close()
+                return False
+            
+            # Mark as inactive instead of deleting
+            cursor.execute("UPDATE user_connections SET is_active = 0, modified_date = GETDATE() WHERE name = ?", connection_name)
             rows_affected = cursor.rowcount
             
             system_connection.commit()
             cursor.close()
             system_connection.close()
             
+            if rows_affected > 0:
+                self.logger.info(f"[LIFECYCLE] Successfully removed connection '{connection_name}' from database ({rows_affected} rows affected)")
+            else:
+                self.logger.warning(f"[LIFECYCLE] No rows affected when removing connection '{connection_name}' from database")
+            
             return rows_affected > 0
             
         except Exception as e:
-            self.logger.error(f"Error removing connection from database: {e}")
+            self.logger.error(f"[LIFECYCLE] Error removing connection '{connection_name}' from database: {e}")
             try:
                 system_connection.rollback()
                 system_connection.close()
@@ -729,21 +848,33 @@ class DatabaseConnectionManager:
     
     def _load_connections_from_database(self) -> List[str]:
         """Load connection names from database"""
+        self.logger.debug(f"[LIFECYCLE] Loading connection list from database")
+        
         try:
             system_connection = self.get_connection("system")
             if not system_connection:
+                self.logger.warning(f"[LIFECYCLE] Cannot load connections: system database not available")
                 return []
             
             cursor = system_connection.cursor()
-            cursor.execute("SELECT name FROM user_connections WHERE is_active = 1")
+            cursor.execute("SELECT name, created_date FROM user_connections WHERE is_active = 1 ORDER BY name")
             rows = cursor.fetchall()
             cursor.close()
             system_connection.close()
             
-            return [row[0] for row in rows]
+            connection_names = [row[0] for row in rows]
+            
+            self.logger.info(f"[LIFECYCLE] Loaded {len(connection_names)} active connections from database: {', '.join(connection_names)}")
+            
+            if rows:
+                self.logger.debug(f"[LIFECYCLE] Connection creation dates:")
+                for row in rows:
+                    self.logger.debug(f"[LIFECYCLE]   - {row[0]}: created {row[1]}")
+            
+            return connection_names
             
         except Exception as e:
-            self.logger.error(f"Error loading connections from database: {e}")
+            self.logger.error(f"[LIFECYCLE] Error loading connections from database: {e}")
             return []
     
     def get_connection_info(self, connection_name: str) -> Optional[Dict[str, Any]]:
@@ -771,16 +902,20 @@ class DatabaseConnectionManager:
     
     def _get_connection_from_database(self, connection_name: str) -> Optional[Dict[str, Any]]:
         """Get connection configuration from database"""
+        self.logger.debug(f"[LIFECYCLE] Loading connection '{connection_name}' configuration from database")
+        
         try:
             system_connection = self.get_connection("system")
             if not system_connection:
+                self.logger.warning(f"[LIFECYCLE] Cannot load connection '{connection_name}': system database not available")
                 return None
             
             cursor = system_connection.cursor()
             cursor.execute("""
                 SELECT connection_id, name, server_name, port, database_name, 
                        trusted_connection, username, password, description,
-                       driver, connection_timeout, command_timeout, encrypt, trust_server_certificate
+                       driver, connection_timeout, command_timeout, encrypt, trust_server_certificate,
+                       created_date, modified_date
                 FROM user_connections 
                 WHERE name = ? AND is_active = 1
             """, connection_name)
@@ -790,7 +925,14 @@ class DatabaseConnectionManager:
             system_connection.close()
             
             if not row:
+                self.logger.warning(f"[LIFECYCLE] Connection '{connection_name}' not found in database")
                 return None
+            
+            auth_type = "Windows" if bool(row[5]) else "SQL Server"
+            server_detail = f"{row[2]}:{row[3]}/{row[4]}"
+            
+            self.logger.info(f"[LIFECYCLE] Successfully loaded connection '{connection_name}': {server_detail} using {auth_type} auth")
+            self.logger.debug(f"[LIFECYCLE] Connection '{connection_name}' created: {row[14]}, modified: {row[15]}")
             
             return {
                 'connection_id': row[0],
@@ -810,7 +952,7 @@ class DatabaseConnectionManager:
             }
             
         except Exception as e:
-            self.logger.error(f"Error getting connection from database: {e}")
+            self.logger.error(f"[LIFECYCLE] Error getting connection '{connection_name}' from database: {e}")
             return None
 
 
