@@ -255,6 +255,8 @@
             password: authType === 'sql' ? password : null
         };
         
+        console.log('Testing connection with data:', connectionData);
+        
         fetch('/api/test-connection', {
             method: 'POST',
             headers: {
@@ -262,8 +264,12 @@
             },
             body: JSON.stringify(connectionData)
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
         .then(data => {
+            console.log('Response data:', data);
             hideLoading();
             if (data.success) {
                 showSuccess(`Connection test successful! Response time: ${data.response_time.toFixed(2)}s`);
@@ -272,6 +278,7 @@
             }
         })
         .catch(error => {
+            console.error('Fetch error:', error);
             hideLoading();
             showError('Error testing connection: ' + error.message);
         });

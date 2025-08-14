@@ -396,6 +396,34 @@ def create_routes(app):
             logger.error(f"API delete connection error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/connections/<connection_name>/test', methods=['POST'])
+    def api_test_existing_connection(connection_name):
+        """API endpoint to test an existing saved database connection"""
+        try:
+            from database.connection_manager import DatabaseConnectionManager
+            db_manager = DatabaseConnectionManager()
+            
+            # Test the existing connection
+            test_result = db_manager.test_connection(connection_name)
+            
+            if test_result['success']:
+                return jsonify({
+                    'success': True,
+                    'message': test_result.get('message', 'Connection successful'),
+                    'response_time': test_result.get('response_time', 0),
+                    'server_info': test_result.get('server_info', {})
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': test_result.get('error', 'Connection test failed'),
+                    'response_time': test_result.get('response_time', 0)
+                }), 400
+                
+        except Exception as e:
+            logger.error(f"API test existing connection error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/test-connection', methods=['POST'])
     def api_test_connection():
         """API endpoint to test a database connection"""
@@ -427,8 +455,11 @@ def create_routes(app):
             components.append("DRIVER={ODBC Driver 17 for SQL Server}")
             
             # Handle server and port
-            if '\\' in server:
-                # Named instance - don't add port
+            if '\\' in server and port and port != 1433:
+                # Named instance with custom port
+                components.append(f"SERVER={server},{port}")
+            elif '\\' in server:
+                # Named instance - don't add port for default
                 components.append(f"SERVER={server}")
             elif port and port != 1433:
                 # Custom port
@@ -457,6 +488,10 @@ def create_routes(app):
             ])
             
             connection_string = ";".join(components)
+            
+            # Log the connection string for debugging (without password)
+            debug_string = connection_string.replace(password, "***") if password else connection_string
+            logger.info(f"Testing connection with string: {debug_string}")
             
             # Test the connection
             start_time = time.time()
