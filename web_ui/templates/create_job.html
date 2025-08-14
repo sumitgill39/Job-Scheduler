@@ -66,18 +66,15 @@
                         
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center">
-                                <label for="connectionName" class="form-label">Database Connection</label>
-                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#newConnectionModal">
-                                    <i class="fas fa-plus me-1"></i>New Connection
-                                </button>
+                                <label for="connectionName" class="form-label">Database Connection *</label>
+                                <a href="{{ url_for('connections') }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                    <i class="fas fa-plus me-1"></i>Manage Connections
+                                </a>
                             </div>
-                            <select class="form-select" id="connectionName" name="connection_name">
-                                <option value="default" selected>Default Connection</option>
-                                <option value="production">Production</option>
-                                <option value="development">Development</option>
-                                <option value="custom">Custom Connection...</option>
+                            <select class="form-select" id="connectionName" name="connection_name" required>
+                                <option value="" disabled selected>Loading connections...</option>
                             </select>
-                            <div class="form-text">Select the database connection to use or create a new one</div>
+                            <div class="form-text">Select the database connection to use for this SQL job</div>
                         </div>
 
                         <!-- Custom Connection Details (hidden by default) -->
@@ -146,18 +143,7 @@
                             <div class="form-text">Enter the SQL query to execute. Only SELECT statements are recommended for safety.</div>
                         </div>
 
-                        <div class="row">
-                            <div class="col-md-6">
-                                <label for="queryTimeout" class="form-label">Query Timeout (seconds)</label>
-                                <input type="number" class="form-control" id="queryTimeout" name="query_timeout" 
-                                       value="300" min="1" max="3600">
-                            </div>
-                            <div class="col-md-6">
-                                <label for="maxRows" class="form-label">Max Rows</label>
-                                <input type="number" class="form-control" id="maxRows" name="max_rows" 
-                                       value="1000" min="1" max="100000">
-                            </div>
-                        </div>
+                        <!-- Remove Query Timeout and Max Rows as per user request -->
                     </div>
 
                     <!-- PowerShell Job Configuration -->
@@ -508,6 +494,10 @@
                 showError('SQL query is required');
                 return false;
             }
+            if (!formData.get('connection_name')) {
+                showError('Database connection is required');
+                return false;
+            }
         } else if (selectedJobType === 'powershell') {
             const scriptType = document.querySelector('input[name="scriptType"]:checked').value;
             if (scriptType === 'inline' && !formData.get('script_content')) {
@@ -567,8 +557,7 @@
         if (selectedJobType === 'sql') {
             jobData.sql_query = formData.get('sql_query');
             jobData.connection_name = formData.get('connection_name');
-            jobData.query_timeout = parseInt(formData.get('query_timeout'));
-            jobData.max_rows = parseInt(formData.get('max_rows'));
+            // Remove query_timeout and max_rows as requested
         } else if (selectedJobType === 'powershell') {
             const scriptType = document.querySelector('input[name="scriptType"]:checked').value;
             if (scriptType === 'inline') {
@@ -626,8 +615,8 @@
         .then(response => response.json())
         .then(data => {
             hideLoading();
-            if (data.job_id) {
-                showSuccess('Job created successfully!');
+            if (data.success) {
+                showSuccess(data.message || 'Job created successfully!');
                 setTimeout(() => {
                     window.location.href = `/jobs/${data.job_id}`;
                 }, 2000);
@@ -641,10 +630,63 @@
         });
     });
     
+    // Load database connections
+    function loadDatabaseConnections() {
+        const connectionSelect = document.getElementById('connectionName');
+        
+        fetch('/api/connections')
+            .then(response => response.json())
+            .then(data => {
+                connectionSelect.innerHTML = ''; // Clear loading option
+                
+                if (data.success && data.connections && data.connections.length > 0) {
+                    // Add default empty option
+                    const emptyOption = document.createElement('option');
+                    emptyOption.value = '';
+                    emptyOption.textContent = 'Select a connection...';
+                    emptyOption.disabled = true;
+                    emptyOption.selected = true;
+                    connectionSelect.appendChild(emptyOption);
+                    
+                    // Add connections from database
+                    data.connections.forEach(connection => {
+                        const option = document.createElement('option');
+                        option.value = connection.name;
+                        option.textContent = `${connection.name} (${connection.server}/${connection.database})`;
+                        option.dataset.server = connection.server;
+                        option.dataset.database = connection.database;
+                        option.dataset.authType = connection.auth_type;
+                        connectionSelect.appendChild(option);
+                    });
+                } else {
+                    // No connections found
+                    const noOption = document.createElement('option');
+                    noOption.value = '';
+                    noOption.textContent = 'No connections available - create one first';
+                    noOption.disabled = true;
+                    noOption.selected = true;
+                    connectionSelect.appendChild(noOption);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading connections:', error);
+                connectionSelect.innerHTML = '';
+                const errorOption = document.createElement('option');
+                errorOption.value = '';
+                errorOption.textContent = 'Error loading connections';
+                errorOption.disabled = true;
+                errorOption.selected = true;
+                connectionSelect.appendChild(errorOption);
+            });
+    }
+    
     // Initialize form
     document.addEventListener('DOMContentLoaded', function() {
         // Set default date/time
         setDefaultDateTime();
+        
+        // Load database connections when SQL job type is selected
+        loadDatabaseConnections();
     });
 </script>
 {% endblock %}

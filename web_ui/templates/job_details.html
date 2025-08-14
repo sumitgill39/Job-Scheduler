@@ -12,7 +12,7 @@
                 <li class="breadcrumb-item active">{{ job.name }}</li>
             </ol>
         </nav>
-        <h1><i class="fas fa-{{ 'database' if job.job_type == 'sql' else 'terminal' }} me-2"></i>{{ job.name }}</h1>
+        <h1><i class="fas fa-{{ 'database' if job.type == 'sql' else 'terminal' }} me-2"></i>{{ job.name }}</h1>
     </div>
     <div>
         <button class="btn btn-outline-secondary me-2" onclick="refreshPage()">
@@ -105,8 +105,8 @@
                             <tr>
                                 <td class="fw-bold">Type:</td>
                                 <td>
-                                    <i class="fas fa-{{ 'database' if job.job_type == 'sql' else 'terminal' }} me-1"></i>
-                                    {{ job.job_type.upper() }}
+                                    <i class="fas fa-{{ 'database' if job.type == 'sql' else 'terminal' }} me-1"></i>
+                                    {{ job.type.upper() }}
                                 </td>
                             </tr>
                             <tr>

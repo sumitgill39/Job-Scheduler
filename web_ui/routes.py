@@ -51,30 +51,17 @@ def create_routes(app):
     def job_list():
         """Job list page"""
         try:
-            scheduler = getattr(app, 'scheduler_manager', None)
-            if not scheduler:
-                flash('Scheduler not available', 'error')
-                return redirect(url_for('index'))
+            from core.job_manager import JobManager
+            job_manager = JobManager()
             
-            jobs = scheduler.get_all_jobs()  # Returns dict {job_id: job_object}
-            job_list = []
+            jobs = job_manager.list_jobs()
             
-            for job_id, job in jobs.items():
-                job_data = {
-                    'id': job.job_id,
-                    'name': job.name,
-                    'type': job.job_type,
-                    'enabled': job.enabled,
-                    'status': job.current_status.value,
-                    'last_run': job.last_run_time.strftime('%Y-%m-%d %H:%M:%S') if job.last_run_time else 'Never',
-                    'is_running': job.is_running
-                }
-                job_list.append(job_data)
+            logger.info(f"[JOB_LIST] Displaying {len(jobs)} jobs")
             
-            return render_template('job_list.html', jobs=job_list)
+            return render_template('job_list.html', jobs=jobs)
         
         except Exception as e:
-            logger.error(f"Job list error: {e}")
+            logger.error(f"[JOB_LIST] Job list error: {e}")
             flash(f'Error loading jobs: {str(e)}', 'error')
             return redirect(url_for('index'))
     
@@ -87,29 +74,20 @@ def create_routes(app):
     def job_details(job_id):
         """Job details page"""
         try:
-            scheduler = getattr(app, 'scheduler_manager', None)
-            if not scheduler:
-                flash('Scheduler not available', 'error')
-                return redirect(url_for('job_list'))
+            from core.job_manager import JobManager
+            job_manager = JobManager()
             
-            job = scheduler.get_job(job_id)
+            job = job_manager.get_job(job_id)
             if not job:
                 flash('Job not found', 'error')
                 return redirect(url_for('job_list'))
             
-            # Get job status
-            status = scheduler.get_job_status(job_id)
+            logger.info(f"[JOB_DETAILS] Displaying details for job: {job['name']}")
             
-            # Get execution history
-            history = scheduler.get_execution_history(job_id, limit=20)
-            
-            return render_template('job_details.html', 
-                                 job=job, 
-                                 status=status, 
-                                 history=history)
+            return render_template('job_details.html', job=job)
         
         except Exception as e:
-            logger.error(f"Job details error: {e}")
+            logger.error(f"[JOB_DETAILS] Job details error: {e}")
             flash(f'Error loading job details: {str(e)}', 'error')
             return redirect(url_for('job_list'))
     
@@ -134,114 +112,62 @@ def create_routes(app):
     def api_jobs():
         """API endpoint for job list"""
         try:
-            scheduler = getattr(app, 'scheduler_manager', None)
-            if not scheduler:
-                return jsonify({'error': 'Scheduler not available'}), 500
+            from core.job_manager import JobManager
+            job_manager = JobManager()
             
-            jobs = scheduler.get_all_jobs()  # Returns dict {job_id: job_object}
-            job_data = {}
+            # Get query parameters
+            job_type = request.args.get('type')
+            enabled_only = request.args.get('enabled_only', 'false').lower() == 'true'
             
-            for job_id, job in jobs.items():
-                job_data[job_id] = {
-                    'id': job.job_id,
-                    'name': job.name,
-                    'type': job.job_type,
-                    'enabled': job.enabled,
-                    'status': job.current_status.value,
-                    'is_running': job.is_running,
-                    'last_run': job.last_run_time.isoformat() if job.last_run_time else None
-                }
+            jobs = job_manager.list_jobs(job_type=job_type, enabled_only=enabled_only)
             
-            return jsonify(job_data)
+            logger.info(f"[API_JOBS] Retrieved {len(jobs)} jobs")
+            
+            return jsonify({
+                'success': True,
+                'jobs': jobs,
+                'total_count': len(jobs)
+            })
         
         except Exception as e:
-            logger.error(f"API jobs error: {e}")
-            return jsonify({'error': str(e)}), 500
+            logger.error(f"[API_JOBS] API jobs error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
     
     @app.route('/api/jobs', methods=['POST'])
     def api_create_job():
         """API endpoint for job creation"""
+        logger.info("[API_JOB_CREATE] Received job creation request")
+        
         try:
-            scheduler = getattr(app, 'scheduler_manager', None)
-            if not scheduler:
-                return jsonify({'error': 'Scheduler not available'}), 500
-            
             data = request.get_json()
             if not data:
-                return jsonify({'error': 'No data provided'}), 400
+                logger.error("[API_JOB_CREATE] No data provided")
+                return jsonify({'success': False, 'error': 'No data provided'}), 400
             
-            job_type = data.get('type')
-            name = data.get('name')
+            logger.info(f"[API_JOB_CREATE] Creating {data.get('type', 'unknown')} job '{data.get('name', 'unnamed')}'")
             
-            if not job_type or not name:
-                return jsonify({'error': 'Job type and name are required'}), 400
+            # Use JobManager to create job
+            from core.job_manager import JobManager
+            job_manager = JobManager()
             
-            job_id = None
+            result = job_manager.create_job(data)
             
-            if job_type == 'sql':
-                # Handle custom connection if provided
-                connection_name = data.get('connection_name', 'default')
-                custom_connection = data.get('custom_connection')
-                
-                if custom_connection:
-                    # Create a temporary connection for this job
-                    from database.connection_manager import DatabaseConnectionManager
-                    import uuid
-                    
-                    db_manager = DatabaseConnectionManager()
-                    temp_conn_name = f"job_{uuid.uuid4().hex[:8]}"
-                    
-                    success = db_manager.create_custom_connection(
-                        name=temp_conn_name,
-                        server=custom_connection.get('server'),
-                        database=custom_connection.get('database'),
-                        port=custom_connection.get('port', 1433),
-                        auth_type=custom_connection.get('auth_type', 'windows'),
-                        username=custom_connection.get('username'),
-                        password=custom_connection.get('password'),
-                        description=f"Auto-created for job: {name}"
-                    )
-                    
-                    if success:
-                        connection_name = temp_conn_name
-                    else:
-                        return jsonify({'error': 'Failed to create custom database connection'}), 500
-                
-                job_id = scheduler.create_sql_job(
-                    name=name,
-                    description=data.get('description', ''),
-                    sql_query=data.get('sql_query', ''),
-                    connection_name=connection_name,
-                    query_timeout=data.get('query_timeout', 300),
-                    max_rows=data.get('max_rows', 1000),
-                    timeout=data.get('timeout', 300),
-                    max_retries=data.get('max_retries', 3),
-                    retry_delay=data.get('retry_delay', 60),
-                    run_as=data.get('run_as'),
-                    schedule=data.get('schedule')
-                )
-            
-            elif job_type == 'powershell':
-                job_id = scheduler.create_powershell_job(
-                    name=name,
-                    description=data.get('description', ''),
-                    script_path=data.get('script_path'),
-                    script_content=data.get('script_content'),
-                    parameters=data.get('parameters', []),
-                    schedule=data.get('schedule')
-                )
-            
+            if result['success']:
+                logger.info(f"[API_JOB_CREATE] Job created successfully: {result['job_id']}")
+                return jsonify(result), 201
             else:
-                return jsonify({'error': f'Unknown job type: {job_type}'}), 400
-            
-            if job_id:
-                return jsonify({'job_id': job_id, 'message': 'Job created successfully'}), 201
-            else:
-                return jsonify({'error': 'Failed to create job'}), 500
+                logger.warning(f"[API_JOB_CREATE] Job creation failed: {result['error']}")
+                return jsonify(result), 400
         
         except Exception as e:
-            logger.error(f"API create job error: {e}")
-            return jsonify({'error': str(e)}), 500
+            logger.error(f"[API_JOB_CREATE] API create job error: {e}")
+            return jsonify({
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }), 500
     
     @app.route('/api/jobs/<job_id>/run', methods=['POST'])
     def api_run_job(job_id):
