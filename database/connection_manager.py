@@ -213,7 +213,15 @@ class DatabaseConnectionManager:
             components.append("TrustServerCertificate=no")
         
         connection_string = ";".join(components)
-        self.logger.debug(f"Built connection string for '{connection_name}'")
+        
+        # Log the full connection string for debugging (mask password)
+        debug_string = connection_string
+        if 'PWD=' in debug_string:
+            import re
+            debug_string = re.sub(r'PWD=[^;]*', 'PWD=***', debug_string)
+        
+        self.logger.info(f"Built connection string for '{connection_name}': {debug_string}")
+        print(f"[DEBUG] Connection string for '{connection_name}': {debug_string}")  # Also print to console
         
         return connection_string
     
