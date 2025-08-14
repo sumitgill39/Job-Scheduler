@@ -435,11 +435,22 @@ def create_routes(app):
             system_status = db_manager.test_connection("system")
             
             if system_status['success']:
+                # Get system connection info dynamically
+                system_info = db_manager.get_connection_info("system")
+                database_name = system_info.get('database', 'Unknown') if system_info else 'Unknown'
+                server_name = system_info.get('server', 'Unknown') if system_info else 'Unknown'
+                port = system_info.get('port') if system_info else None
+                
+                # Build server display string
+                server_display = server_name
+                if port and port != 1433:
+                    server_display += f":{port}"
+                
                 return jsonify({
                     'success': True,
                     'connected': True,
-                    'database': 'sreutil',
-                    'server': 'USDF11DB197\\PROD_DB01:3433',
+                    'database': database_name,
+                    'server': server_display,
                     'response_time': system_status['response_time'],
                     'server_info': system_status.get('server_info', {})
                 })
@@ -657,38 +668,9 @@ def create_routes(app):
     def connections():
         """Database connections management page"""
         try:
-            from database.connection_manager import DatabaseConnectionManager
-            db_manager = DatabaseConnectionManager()
-            
-            connections = []
-            try:
-                connection_names = db_manager.list_connections()
-                logger.debug(f"Found {len(connection_names)} connections: {connection_names}")
-                
-                for conn_name in connection_names:
-                    conn_info = db_manager.get_connection_info(conn_name)
-                    if conn_info:
-                        # Don't test connection status immediately to avoid page load delays
-                        # Status will be tested on demand via AJAX
-                        connections.append({
-                            'name': conn_name,
-                            'server': conn_info.get('server', 'Unknown'),
-                            'database': conn_info.get('database', 'Unknown'),
-                            'port': conn_info.get('port', 1433),
-                            'description': conn_info.get('description', ''),
-                            'auth_type': 'Windows' if conn_info.get('trusted_connection') else 'SQL Server',
-                            'status': 'Unknown',  # Will be tested via AJAX
-                            'response_time': 0,
-                            'error': ''
-                        })
-                    else:
-                        logger.warning(f"Could not get info for connection: {conn_name}")
-            except Exception as conn_error:
-                logger.error(f"Error getting connections list: {conn_error}")
-                connections = []  # Ensure we have an empty list
-            
-            logger.info(f"Rendering connections page with {len(connections)} connections")
-            return render_template('connections_new.html', connections=connections)
+            # Simply render the template - connections are loaded dynamically via JavaScript
+            logger.info("Rendering connections page - connections will be loaded dynamically")
+            return render_template('connections_new.html')
             
         except Exception as e:
             logger.error(f"Connections page error: {e}")
