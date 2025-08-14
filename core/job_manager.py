@@ -17,7 +17,7 @@ class JobManager:
     def __init__(self):
         self.connection_pool = get_connection_pool()
         self.logger = get_logger(__name__)
-        self.logger.info("[JOB_MANAGER] Job Manager initialized")
+        self.logger.info("[JOB_MANAGER] Job Manager initialized with connection pooling")
     
     def create_job(self, job_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new job and store in database
@@ -66,7 +66,7 @@ class JobManager:
                 if not self._validate_connection(job_data.get('connection_name')):
                     return {
                         'success': False,
-                        'error': f'Database connection \"{job_data.get(\"connection_name\")}\" not found'
+                        'error': f'Database connection "{job_data.get("connection_name")}" not found'
                     }
             
             elif job_type == 'powershell':
@@ -96,4 +96,267 @@ class JobManager:
             
             # Add job-specific configuration
             if job_type == 'sql':
-                job_config['configuration']['sql'] = {\n                    'connection_name': job_data.get('connection_name'),\n                    'query': job_data.get('sql_query'),\n                    'query_timeout': job_data.get('query_timeout', 300),\n                    'max_rows': job_data.get('max_rows', 1000)\n                }\n            \n            elif job_type == 'powershell':\n                job_config['configuration']['powershell'] = {\n                    'script_content': job_data.get('script_content', ''),\n                    'script_path': job_data.get('script_path', ''),\n                    'execution_policy': job_data.get('execution_policy', 'RemoteSigned'),\n                    'working_directory': job_data.get('working_directory', ''),\n                    'parameters': job_data.get('parameters', [])\n                }\n            \n            # Add schedule configuration if provided\n            if job_data.get('schedule'):\n                job_config['configuration']['schedule'] = job_data['schedule']\n            \n            # Save to database\n            if self._save_job_to_database(job_config):\n                self.logger.info(f\"[JOB_MANAGER] Successfully created job '{job_name}' with ID: {job_id}\")\n                return {\n                    'success': True,\n                    'job_id': job_id,\n                    'message': f'Job \"{job_name}\" created successfully'\n                }\n            else:\n                self.logger.error(f\"[JOB_MANAGER] Failed to save job '{job_name}' to database\")\n                return {\n                    'success': False,\n                    'error': 'Failed to save job to database'\n                }\n            \n        except Exception as e:\n            self.logger.error(f\"[JOB_MANAGER] Error creating job: {e}\")\n            return {\n                'success': False,\n                'error': f'Error creating job: {str(e)}'\n            }\n    \n    def _validate_connection(self, connection_name: str) -> bool:\n        \"\"\"Validate that a database connection exists\"\"\"\n        try:\n            connections = self.db_manager.list_connections()\n            return connection_name in connections\n        except Exception as e:\n            self.logger.warning(f\"[JOB_MANAGER] Could not validate connection '{connection_name}': {e}\")\n            return False\n    \n    def _save_job_to_database(self, job_config: Dict[str, Any]) -> bool:\n        \"\"\"Save job configuration to database\"\"\"\n        try:\n            system_connection = self.db_manager.get_connection(\"system\")\n            if not system_connection:\n                self.logger.error(\"[JOB_MANAGER] Cannot save job: system database not available\")\n                return False\n            \n            cursor = system_connection.cursor()\n            \n            # Convert configuration to JSON\n            config_json = json.dumps(job_config['configuration'], indent=2)\n            \n            # Insert job record\n            cursor.execute(\"\"\"\n                INSERT INTO job_configurations \n                (job_id, name, job_type, configuration, enabled, created_date, created_by)\n                VALUES (?, ?, ?, ?, ?, GETDATE(), SYSTEM_USER)\n            \"\"\", (\n                job_config['job_id'],\n                job_config['name'],\n                job_config['type'],\n                config_json,\n                job_config['enabled']\n            ))\n            \n            system_connection.commit()\n            cursor.close()\n            system_connection.close()\n            \n            self.logger.info(f\"[JOB_MANAGER] Saved job '{job_config['name']}' to database\")\n            return True\n            \n        except Exception as e:\n            self.logger.error(f\"[JOB_MANAGER] Error saving job to database: {e}\")\n            try:\n                system_connection.rollback()\n                system_connection.close()\n            except:\n                pass\n            return False\n    \n    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:\n        \"\"\"Retrieve job configuration by ID\"\"\"\n        try:\n            system_connection = self.db_manager.get_connection(\"system\")\n            if not system_connection:\n                return None\n            \n            cursor = system_connection.cursor()\n            cursor.execute(\"\"\"\n                SELECT job_id, name, job_type, configuration, enabled, created_date, modified_date, created_by\n                FROM job_configurations \n                WHERE job_id = ?\n            \"\"\", job_id)\n            \n            row = cursor.fetchone()\n            cursor.close()\n            system_connection.close()\n            \n            if not row:\n                return None\n            \n            # Parse configuration JSON\n            try:\n                configuration = json.loads(row[3])\n            except:\n                configuration = {}\n            \n            return {\n                'job_id': row[0],\n                'name': row[1],\n                'type': row[2],\n                'configuration': configuration,\n                'enabled': bool(row[4]),\n                'created_date': row[5],\n                'modified_date': row[6],\n                'created_by': row[7]\n            }\n            \n        except Exception as e:\n            self.logger.error(f\"[JOB_MANAGER] Error retrieving job {job_id}: {e}\")\n            return None\n    \n    def list_jobs(self, job_type: str = None, enabled_only: bool = False) -> List[Dict[str, Any]]:\n        \"\"\"List all jobs with optional filtering\"\"\"\n        try:\n            system_connection = self.db_manager.get_connection(\"system\")\n            if not system_connection:\n                return []\n            \n            cursor = system_connection.cursor()\n            \n            # Build query with filters\n            query = \"SELECT job_id, name, job_type, enabled, created_date, modified_date FROM job_configurations WHERE 1=1\"\n            params = []\n            \n            if job_type:\n                query += \" AND job_type = ?\"\n                params.append(job_type)\n            \n            if enabled_only:\n                query += \" AND enabled = 1\"\n            \n            query += \" ORDER BY created_date DESC\"\n            \n            cursor.execute(query, params)\n            rows = cursor.fetchall()\n            cursor.close()\n            system_connection.close()\n            \n            jobs = []\n            for row in rows:\n                jobs.append({\n                    'job_id': row[0],\n                    'name': row[1],\n                    'type': row[2],\n                    'enabled': bool(row[3]),\n                    'created_date': row[4],\n                    'modified_date': row[5]\n                })\n            \n            self.logger.debug(f\"[JOB_MANAGER] Retrieved {len(jobs)} jobs\")\n            return jobs\n            \n        except Exception as e:\n            self.logger.error(f\"[JOB_MANAGER] Error listing jobs: {e}\")\n            return []\n    \n    def update_job(self, job_id: str, job_data: Dict[str, Any]) -> Dict[str, Any]:\n        \"\"\"Update existing job configuration\"\"\"\n        try:\n            # First check if job exists\n            existing_job = self.get_job(job_id)\n            if not existing_job:\n                return {\n                    'success': False,\n                    'error': f'Job with ID {job_id} not found'\n                }\n            \n            system_connection = self.db_manager.get_connection(\"system\")\n            if not system_connection:\n                return {\n                    'success': False,\n                    'error': 'System database not available'\n                }\n            \n            cursor = system_connection.cursor()\n            \n            # Update job record\n            cursor.execute(\"\"\"\n                UPDATE job_configurations \n                SET name = ?, configuration = ?, enabled = ?, modified_date = GETDATE()\n                WHERE job_id = ?\n            \"\"\", (\n                job_data.get('name', existing_job['name']),\n                json.dumps(job_data.get('configuration', existing_job['configuration'])),\n                job_data.get('enabled', existing_job['enabled']),\n                job_id\n            ))\n            \n            system_connection.commit()\n            cursor.close()\n            system_connection.close()\n            \n            self.logger.info(f\"[JOB_MANAGER] Updated job {job_id}\")\n            return {\n                'success': True,\n                'message': 'Job updated successfully'\n            }\n            \n        except Exception as e:\n            self.logger.error(f\"[JOB_MANAGER] Error updating job {job_id}: {e}\")\n            return {\n                'success': False,\n                'error': f'Error updating job: {str(e)}'\n            }\n    \n    def delete_job(self, job_id: str) -> Dict[str, Any]:\n        \"\"\"Delete job configuration\"\"\"\n        try:\n            system_connection = self.db_manager.get_connection(\"system\")\n            if not system_connection:\n                return {\n                    'success': False,\n                    'error': 'System database not available'\n                }\n            \n            cursor = system_connection.cursor()\n            cursor.execute(\"DELETE FROM job_configurations WHERE job_id = ?\", job_id)\n            rows_affected = cursor.rowcount\n            \n            system_connection.commit()\n            cursor.close()\n            system_connection.close()\n            \n            if rows_affected > 0:\n                self.logger.info(f\"[JOB_MANAGER] Deleted job {job_id}\")\n                return {\n                    'success': True,\n                    'message': 'Job deleted successfully'\n                }\n            else:\n                return {\n                    'success': False,\n                    'error': f'Job with ID {job_id} not found'\n                }\n            \n        except Exception as e:\n            self.logger.error(f\"[JOB_MANAGER] Error deleting job {job_id}: {e}\")\n            return {\n                'success': False,\n                'error': f'Error deleting job: {str(e)}'\n            }
+                job_config['configuration']['sql'] = {
+                    'connection_name': job_data.get('connection_name'),
+                    'query': job_data.get('sql_query'),
+                    'query_timeout': job_data.get('query_timeout', 300),
+                    'max_rows': job_data.get('max_rows', 1000)
+                }
+            
+            elif job_type == 'powershell':
+                job_config['configuration']['powershell'] = {
+                    'script_content': job_data.get('script_content', ''),
+                    'script_path': job_data.get('script_path', ''),
+                    'execution_policy': job_data.get('execution_policy', 'RemoteSigned'),
+                    'working_directory': job_data.get('working_directory', ''),
+                    'parameters': job_data.get('parameters', [])
+                }
+            
+            # Add schedule configuration if provided
+            if job_data.get('schedule'):
+                job_config['configuration']['schedule'] = job_data['schedule']
+            
+            # Save to database
+            if self._save_job_to_database(job_config):
+                self.logger.info(f"[JOB_MANAGER] Successfully created job '{job_name}' with ID: {job_id}")
+                return {
+                    'success': True,
+                    'job_id': job_id,
+                    'message': f'Job "{job_name}" created successfully'
+                }
+            else:
+                self.logger.error(f"[JOB_MANAGER] Failed to save job '{job_name}' to database")
+                return {
+                    'success': False,
+                    'error': 'Failed to save job to database'
+                }
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error creating job: {e}")
+            return {
+                'success': False,
+                'error': f'Error creating job: {str(e)}'
+            }
+    
+    def _validate_connection(self, connection_name: str) -> bool:
+        """Validate that a database connection exists"""
+        try:
+            connections = self.connection_pool.db_manager.list_connections()
+            return connection_name in connections
+        except Exception as e:
+            self.logger.warning(f"[JOB_MANAGER] Could not validate connection '{connection_name}': {e}")
+            return False
+    
+    def _save_job_to_database(self, job_config: Dict[str, Any]) -> bool:
+        """Save job configuration to database"""
+        try:
+            system_connection = self.connection_pool.get_connection("system")
+            if not system_connection:
+                self.logger.error("[JOB_MANAGER] Cannot save job: system database not available")
+                return False
+            
+            cursor = system_connection.cursor()
+            
+            # Convert configuration to JSON
+            config_json = json.dumps(job_config['configuration'], indent=2)
+            
+            # Insert job record
+            cursor.execute("""
+                INSERT INTO job_configurations 
+                (job_id, name, job_type, configuration, enabled, created_date, created_by)
+                VALUES (?, ?, ?, ?, ?, GETDATE(), SYSTEM_USER)
+            """, (
+                job_config['job_id'],
+                job_config['name'],
+                job_config['type'],
+                config_json,
+                job_config['enabled']
+            ))
+            
+            system_connection.commit()
+            cursor.close()
+            # Don't close connection - let pool manage it
+            
+            self.logger.info(f"[JOB_MANAGER] Saved job '{job_config['name']}' to database")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error saving job to database: {e}")
+            try:
+                system_connection.rollback()
+            except:
+                pass
+            return False
+    
+    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve job configuration by ID"""
+        try:
+            system_connection = self.connection_pool.get_connection("system")
+            if not system_connection:
+                return None
+            
+            cursor = system_connection.cursor()
+            cursor.execute("""
+                SELECT job_id, name, job_type, configuration, enabled, created_date, modified_date, created_by
+                FROM job_configurations 
+                WHERE job_id = ?
+            """, job_id)
+            
+            row = cursor.fetchone()
+            cursor.close()
+            # Don't close connection - let pool manage it
+            
+            if not row:
+                return None
+            
+            # Parse configuration JSON
+            try:
+                configuration = json.loads(row[3])
+            except:
+                configuration = {}
+            
+            return {
+                'job_id': row[0],
+                'name': row[1],
+                'type': row[2],
+                'configuration': configuration,
+                'enabled': bool(row[4]),
+                'created_date': row[5],
+                'modified_date': row[6],
+                'created_by': row[7]
+            }
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error retrieving job {job_id}: {e}")
+            return None
+    
+    def list_jobs(self, job_type: str = None, enabled_only: bool = False) -> List[Dict[str, Any]]:
+        """List all jobs with optional filtering"""
+        try:
+            system_connection = self.connection_pool.get_connection("system")
+            if not system_connection:
+                return []
+            
+            cursor = system_connection.cursor()
+            
+            # Build query with filters
+            query = "SELECT job_id, name, job_type, enabled, created_date, modified_date FROM job_configurations WHERE 1=1"
+            params = []
+            
+            if job_type:
+                query += " AND job_type = ?"
+                params.append(job_type)
+            
+            if enabled_only:
+                query += " AND enabled = 1"
+            
+            query += " ORDER BY created_date DESC"
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            cursor.close()
+            # Don't close connection - let pool manage it
+            
+            jobs = []
+            for row in rows:
+                jobs.append({
+                    'job_id': row[0],
+                    'name': row[1],
+                    'type': row[2],
+                    'enabled': bool(row[3]),
+                    'created_date': row[4],
+                    'modified_date': row[5]
+                })
+            
+            self.logger.debug(f"[JOB_MANAGER] Retrieved {len(jobs)} jobs")
+            return jobs
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error listing jobs: {e}")
+            return []
+    
+    def update_job(self, job_id: str, job_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update existing job configuration"""
+        try:
+            # First check if job exists
+            existing_job = self.get_job(job_id)
+            if not existing_job:
+                return {
+                    'success': False,
+                    'error': f'Job with ID {job_id} not found'
+                }
+            
+            system_connection = self.connection_pool.get_connection("system")
+            if not system_connection:
+                return {
+                    'success': False,
+                    'error': 'System database not available'
+                }
+            
+            cursor = system_connection.cursor()
+            
+            # Update job record
+            cursor.execute("""
+                UPDATE job_configurations 
+                SET name = ?, configuration = ?, enabled = ?, modified_date = GETDATE()
+                WHERE job_id = ?
+            """, (
+                job_data.get('name', existing_job['name']),
+                json.dumps(job_data.get('configuration', existing_job['configuration'])),
+                job_data.get('enabled', existing_job['enabled']),
+                job_id
+            ))
+            
+            system_connection.commit()
+            cursor.close()
+            # Don't close connection - let pool manage it
+            
+            self.logger.info(f"[JOB_MANAGER] Updated job {job_id}")
+            return {
+                'success': True,
+                'message': 'Job updated successfully'
+            }
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error updating job {job_id}: {e}")
+            return {
+                'success': False,
+                'error': f'Error updating job: {str(e)}'
+            }
+    
+    def delete_job(self, job_id: str) -> Dict[str, Any]:
+        """Delete job configuration"""
+        try:
+            system_connection = self.connection_pool.get_connection("system")
+            if not system_connection:
+                return {
+                    'success': False,
+                    'error': 'System database not available'
+                }
+            
+            cursor = system_connection.cursor()
+            cursor.execute("DELETE FROM job_configurations WHERE job_id = ?", job_id)
+            rows_affected = cursor.rowcount
+            
+            system_connection.commit()
+            cursor.close()
+            # Don't close connection - let pool manage it
+            
+            if rows_affected > 0:
+                self.logger.info(f"[JOB_MANAGER] Deleted job {job_id}")
+                return {
+                    'success': True,
+                    'message': 'Job deleted successfully'
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'Job with ID {job_id} not found'
+                }
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error deleting job {job_id}: {e}")
+            return {
+                'success': False,
+                'error': f'Error deleting job: {str(e)}'
+            }
