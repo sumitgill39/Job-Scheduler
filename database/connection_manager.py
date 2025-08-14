@@ -35,6 +35,13 @@ class DatabaseConnectionManager:
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
+                if config is None:
+                    config = {}
+                
+                # Ensure databases section exists
+                if 'databases' not in config or config['databases'] is None:
+                    config['databases'] = {}
+                
                 if hasattr(self, 'logger'):
                     self.logger.info(f"Loaded database configuration from {config_path}")
                 return config
@@ -512,7 +519,10 @@ class DatabaseConnectionManager:
     
     def list_connections(self) -> List[str]:
         """Get list of configured connection names"""
-        return list(self.config.get('databases', {}).keys())
+        databases = self.config.get('databases')
+        if databases is None:
+            return []
+        return list(databases.keys())
     
     def get_connection_info(self, connection_name: str) -> Optional[Dict[str, Any]]:
         """Get connection information (without sensitive data)"""

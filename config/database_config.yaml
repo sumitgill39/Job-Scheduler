@@ -1,8 +1,7 @@
 # Database Configuration for Windows SQL Server
 # User-defined database connections only
 
-databases:
-  # User connections will be added here dynamically
+databases: {}
 
 # Connection pool settings
 connection_pool:
