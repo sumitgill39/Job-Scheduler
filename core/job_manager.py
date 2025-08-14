@@ -7,7 +7,7 @@ import uuid
 import time
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-from database.connection_manager import DatabaseConnectionManager
+from database.connection_pool import get_connection_pool
 from utils.logger import get_logger
 
 
@@ -15,7 +15,7 @@ class JobManager:
     """Manages job configurations in database"""
     
     def __init__(self):
-        self.db_manager = DatabaseConnectionManager()
+        self.connection_pool = get_connection_pool()
         self.logger = get_logger(__name__)
         self.logger.info("[JOB_MANAGER] Job Manager initialized")
     

@@ -271,6 +271,129 @@ class DatabaseConnectionManager:
         
         return None
     
+    def _create_new_connection(self, connection_name: str) -> Optional[pyodbc.Connection]:
+        """Create a new database connection with retry logic"""
+        retry_settings = self.config.get('retry_settings', {})
+        max_retries = retry_settings.get('max_retries', 3)
+        retry_delay = retry_settings.get('retry_delay', 5)
+        backoff_factor = retry_settings.get('backoff_factor', 2)
+        
+        connection_string = self.get_connection_string(connection_name)
+        
+        for attempt in range(max_retries + 1):
+            try:
+                self.logger.debug(f"[POOL] Attempting new database connection '{connection_name}' (attempt {attempt + 1})")
+                
+                connection = pyodbc.connect(connection_string)
+                
+                # Test connection
+                cursor = connection.cursor()
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+                cursor.close()
+                
+                self.logger.info(f"[POOL] Successfully created connection '{connection_name}'")
+                return connection
+                
+            except pyodbc.Error as e:
+                error_msg = f"Database connection failed (attempt {attempt + 1}): {str(e)}"
+                
+                if attempt < max_retries:
+                    self.logger.warning(f"[POOL] {error_msg}. Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= backoff_factor  # Exponential backoff
+                else:
+                    self.logger.error(f"[POOL] {error_msg}. Max retries exceeded.")
+                    
+            except Exception as e:
+                self.logger.error(f"[POOL] Unexpected error connecting to database: {e}")
+                break
+        
+        return None
+    
+    def _is_connection_valid(self, pool_entry: Dict) -> bool:
+        """Check if a pooled connection is still valid"""
+        try:
+            connection = pool_entry['connection']
+            
+            # Check if connection is expired
+            age = datetime.now() - pool_entry['created']
+            if age.total_seconds() > self._pool_config['connection_lifetime']:
+                self.logger.debug(f"[POOL] Connection expired (age: {age.total_seconds()}s)")
+                return False
+            
+            # Test connection with a simple query
+            cursor = connection.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+            cursor.close()
+            
+            return True
+            
+        except Exception as e:
+            self.logger.debug(f"[POOL] Connection validation failed: {e}")
+            return False
+    
+    def _close_pool_entry(self, connection_name: str):
+        """Close and remove a connection from the pool"""
+        if connection_name in self._connection_pool:
+            try:
+                pool_entry = self._connection_pool[connection_name]
+                pool_entry['connection'].close()
+                self.logger.debug(f"[POOL] Closed connection '{connection_name}'")
+            except Exception as e:
+                self.logger.warning(f"[POOL] Error closing connection '{connection_name}': {e}")
+            finally:
+                del self._connection_pool[connection_name]
+    
+    def cleanup_pool(self):
+        """Clean up expired connections from the pool"""
+        with self._pool_lock:
+            expired_connections = []
+            
+            for conn_name, pool_entry in self._connection_pool.items():
+                if not self._is_connection_valid(pool_entry):
+                    expired_connections.append(conn_name)
+            
+            for conn_name in expired_connections:
+                self.logger.info(f"[POOL] Cleaning up expired connection '{conn_name}'")
+                self._close_pool_entry(conn_name)
+            
+            if expired_connections:
+                self.logger.info(f"[POOL] Cleaned up {len(expired_connections)} expired connections")
+    
+    def get_pool_stats(self) -> Dict[str, Any]:
+        """Get connection pool statistics"""
+        with self._pool_lock:
+            stats = {
+                'total_connections': len(self._connection_pool),
+                'max_connections': self._pool_config['max_connections'],
+                'connections': {}
+            }
+            
+            for conn_name, pool_entry in self._connection_pool.items():
+                age = datetime.now() - pool_entry['created']
+                idle_time = datetime.now() - pool_entry['last_used']
+                
+                stats['connections'][conn_name] = {
+                    'use_count': pool_entry['use_count'],
+                    'age_seconds': int(age.total_seconds()),
+                    'idle_seconds': int(idle_time.total_seconds()),
+                    'created': pool_entry['created'].isoformat(),
+                    'last_used': pool_entry['last_used'].isoformat()
+                }
+            
+            return stats
+    
+    def close_all_connections(self):
+        """Close all pooled connections"""
+        with self._pool_lock:
+            connection_names = list(self._connection_pool.keys())
+            for conn_name in connection_names:
+                self._close_pool_entry(conn_name)
+            
+            self.logger.info(f"[POOL] Closed all {len(connection_names)} pooled connections")
+    
     def _test_connection_direct(self, server: str, database: str, port: int = 1433,
                               auth_type: str = "windows", username: str = None, 
                               password: str = None) -> Dict[str, Any]:

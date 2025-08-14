@@ -244,8 +244,9 @@ def create_routes(app):
     def api_get_connections():
         """API endpoint to get available database connections"""
         try:
-            from database.connection_manager import DatabaseConnectionManager
-            db_manager = DatabaseConnectionManager()
+            from database.connection_pool import get_connection_pool
+            pool = get_connection_pool()
+            db_manager = pool.db_manager
             
             connections = []
             for conn_name in db_manager.list_connections():
@@ -273,8 +274,9 @@ def create_routes(app):
             if not data:
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
             
-            from database.connection_manager import DatabaseConnectionManager
-            db_manager = DatabaseConnectionManager()
+            from database.connection_pool import get_connection_pool
+            pool = get_connection_pool()
+            db_manager = pool.db_manager
             
             result = db_manager.create_custom_connection(
                 name=data.get('name'),
@@ -308,8 +310,9 @@ def create_routes(app):
     def api_delete_connection(connection_name):
         """API endpoint to delete a database connection"""
         try:
-            from database.connection_manager import DatabaseConnectionManager
-            db_manager = DatabaseConnectionManager()
+            from database.connection_pool import get_connection_pool
+            pool = get_connection_pool()
+            db_manager = pool.db_manager
             
             success = db_manager.remove_connection(connection_name)
             
@@ -328,8 +331,9 @@ def create_routes(app):
         logger.info(f"[API_TEST] Testing existing connection '{connection_name}' via API")
         
         try:
-            from database.connection_manager import DatabaseConnectionManager
-            db_manager = DatabaseConnectionManager()
+            from database.connection_pool import get_connection_pool
+            pool = get_connection_pool()
+            db_manager = pool.db_manager
             
             # Test the existing connection
             test_result = db_manager.test_connection(connection_name)
@@ -358,8 +362,9 @@ def create_routes(app):
     def api_system_database_status():
         """Get system database connection status"""
         try:
-            from database.connection_manager import DatabaseConnectionManager
-            db_manager = DatabaseConnectionManager()
+            from database.connection_pool import get_connection_pool
+            pool = get_connection_pool()
+            db_manager = pool.db_manager
             
             # Test system database connection
             system_status = db_manager.test_connection("system")
@@ -409,12 +414,12 @@ def create_routes(app):
         logger.info("[PARALLEL_VALIDATION] Starting parallel validation of all connections")
         
         try:
-            from database.connection_manager import DatabaseConnectionManager
+            from database.connection_pool import get_connection_pool
             import concurrent.futures
             import threading
             
-            db_manager = DatabaseConnectionManager()
-            connections = db_manager.list_connections()
+            pool = get_connection_pool()
+            connections = pool.db_manager.list_connections()
             
             logger.info(f"[PARALLEL_VALIDATION] Found {len(connections)} connections to validate: {', '.join(connections)}")
             
@@ -433,7 +438,7 @@ def create_routes(app):
                 logger.debug(f"[PARALLEL_VALIDATION] Starting test for connection '{conn_name}' in thread {threading.current_thread().name}")
                 
                 try:
-                    result = db_manager.test_connection(conn_name)
+                    result = pool.db_manager.test_connection(conn_name)
                     thread_time = time.time() - thread_start
                     
                     if result['success']:
@@ -567,6 +572,65 @@ def create_routes(app):
             
         except Exception as e:
             logger.error(f"[AUDIT_API] Error retrieving audit trail: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    @app.route('/api/system/connection-pool-stats', methods=['GET'])
+    def api_connection_pool_stats():
+        """Get connection pool statistics"""
+        try:
+            from database.connection_pool import get_connection_pool
+            pool = get_connection_pool()
+            
+            stats = pool.get_pool_stats()
+            
+            logger.info(f"[POOL_STATS] Retrieved connection pool statistics: {stats['total_connections']} active connections")
+            
+            return jsonify({
+                'success': True,
+                'pool_stats': stats,
+                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+            })
+            
+        except Exception as e:
+            logger.error(f"[POOL_STATS] Error retrieving pool stats: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    @app.route('/api/system/cleanup-pool', methods=['POST'])
+    def api_cleanup_pool():
+        """Manually trigger connection pool cleanup"""
+        try:
+            from database.connection_pool import get_connection_pool
+            pool = get_connection_pool()
+            
+            # Get stats before cleanup
+            stats_before = pool.get_pool_stats()
+            
+            # Perform cleanup
+            pool.cleanup_pool()
+            
+            # Get stats after cleanup
+            stats_after = pool.get_pool_stats()
+            
+            cleaned_connections = stats_before['total_connections'] - stats_after['total_connections']
+            
+            logger.info(f"[POOL_CLEANUP] Manual cleanup completed: removed {cleaned_connections} connections")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Pool cleanup completed: removed {cleaned_connections} expired connections',
+                'before': stats_before,
+                'after': stats_after,
+                'cleaned_connections': cleaned_connections
+            })
+            
+        except Exception as e:
+            logger.error(f"[POOL_CLEANUP] Error during pool cleanup: {e}")
             return jsonify({
                 'success': False,
                 'error': str(e)
