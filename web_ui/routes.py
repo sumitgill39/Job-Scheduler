@@ -670,7 +670,7 @@ def create_routes(app):
         try:
             # Simply render the template - connections are loaded dynamically via JavaScript
             logger.info("Rendering connections page - connections will be loaded dynamically")
-            return render_template('connections_new.html')
+            return render_template('connections.html')
             
         except Exception as e:
             logger.error(f"Connections page error: {e}")
