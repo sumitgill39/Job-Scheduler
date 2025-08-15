@@ -149,6 +149,12 @@ def create_routes(app):
             
             logger.info(f"[API_JOB_CREATE] Creating {data.get('type', 'unknown')} job '{data.get('name', 'unnamed')}'")
             
+            # Debug: Log the complete received data
+            logger.info(f"[API_JOB_CREATE] Received data: {data}")
+            if data.get('type') == 'sql':
+                logger.info(f"[API_JOB_CREATE] SQL Query received: '{data.get('sql_query', 'NONE')}'")
+                logger.info(f"[API_JOB_CREATE] Connection name received: '{data.get('connection_name', 'NONE')}'")
+            
             # Use JobManager to create job
             from core.job_manager import JobManager
             job_manager = JobManager()

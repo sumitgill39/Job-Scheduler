@@ -96,12 +96,20 @@ class JobManager:
             
             # Add job-specific configuration
             if job_type == 'sql':
+                sql_query = job_data.get('sql_query')
+                connection_name = job_data.get('connection_name')
+                
+                self.logger.info(f"[JOB_MANAGER] SQL query from job_data: '{sql_query}'")
+                self.logger.info(f"[JOB_MANAGER] Connection name from job_data: '{connection_name}'")
+                
                 job_config['configuration']['sql'] = {
-                    'connection_name': job_data.get('connection_name'),
-                    'query': job_data.get('sql_query'),
+                    'connection_name': connection_name,
+                    'query': sql_query,
                     'query_timeout': job_data.get('query_timeout', 300),
                     'max_rows': job_data.get('max_rows', 1000)
                 }
+                
+                self.logger.info(f"[JOB_MANAGER] SQL config created: {job_config['configuration']['sql']}")
             
             elif job_type == 'powershell':
                 job_config['configuration']['powershell'] = {
@@ -159,6 +167,9 @@ class JobManager:
             
             # Convert configuration to JSON
             config_json = json.dumps(job_config['configuration'], indent=2)
+            
+            self.logger.info(f"[JOB_MANAGER] Configuration JSON being saved to database:")
+            self.logger.info(f"[JOB_MANAGER] {config_json}")
             
             # Insert job record
             cursor.execute("""
