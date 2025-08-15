@@ -1072,9 +1072,11 @@ def create_routes(app):
             if session_manager.validate_session():
                 return redirect(url_for('index'))
             
-            # Get domain name from config or default
-            domain_name = app.config.get('AD_DOMAIN', 'mgo.mersh.com')
-            return render_template('login.html', domain_name=domain_name)
+            # Use local authentication for now
+            return render_template('login.html', 
+                                 domain_name='Local Authentication',
+                                 auth_type='local',
+                                 available_users=['admin', 'scheduler', 'operator'])
         
         elif request.method == 'POST':
             try:
@@ -1087,12 +1089,12 @@ def create_routes(app):
                 
                 logger.info(f"[AUTH] Login attempt for user: {username}")
                 
-                # Get AD authenticator
-                domain_name = app.config.get('AD_DOMAIN', 'mgo.mersh.com')
-                ad_auth = get_ad_authenticator(domain_name)
+                # Use local authenticator instead of AD for now
+                from auth.local_authenticator import get_local_authenticator
+                local_auth = get_local_authenticator()
                 
-                # Authenticate user
-                auth_result = ad_auth.authenticate(username, password)
+                # Authenticate user locally
+                auth_result = local_auth.authenticate(username, password)
                 
                 if auth_result['success']:
                     # Create session
@@ -1128,18 +1130,26 @@ def create_routes(app):
     
     @app.route('/api/auth/test-domain', methods=['POST'])
     def api_test_domain():
-        """Test domain controller connectivity"""
+        """Test local authentication system connectivity"""
         try:
-            from auth.ad_authenticator import get_ad_authenticator
+            from auth.local_authenticator import get_local_authenticator
             
-            domain_name = app.config.get('AD_DOMAIN', 'mgo.mersh.com')
-            ad_auth = get_ad_authenticator(domain_name)
+            local_auth = get_local_authenticator()
+            test_result = local_auth.test_connection()
             
-            test_result = ad_auth.test_connection()
-            
+            # Format response similar to AD test for compatibility
             return jsonify({
                 'success': True,
-                'domain_test': test_result
+                'domain_test': {
+                    'domain': 'local',
+                    'total_controllers': 1,
+                    'reachable_controllers': 1 if test_result['success'] else 0,
+                    'domain_controllers': [{
+                        'dc': 'local_auth_system',
+                        'status': 'reachable' if test_result['success'] else 'error',
+                        'info': test_result.get('message', 'Local authentication system')
+                    }]
+                }
             })
             
         except Exception as e:

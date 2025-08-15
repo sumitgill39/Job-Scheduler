@@ -114,20 +114,42 @@
         </div>
 
         <div class="domain-info">
-            <i class="fas fa-network-wired me-2"></i>
-            Domain: <span class="domain-name">{{ domain_name }}</span>
+            <i class="fas fa-{{ 'user-shield' if auth_type == 'local' else 'network-wired' }} me-2"></i>
+            Authentication: <span class="domain-name">{{ domain_name }}</span>
+            {% if auth_type == 'local' %}
+            <div class="mt-2">
+                <small class="text-muted">
+                    Available users: 
+                    {% for user in available_users %}
+                        <code>{{ user }}</code>{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                </small>
+            </div>
+            {% endif %}
         </div>
 
         <!-- Connection Status -->
         <div class="test-connection">
             <div class="d-flex justify-content-between align-items-center">
-                <span class="connection-status">Domain Controller Status:</span>
+                <span class="connection-status">
+                    {% if auth_type == 'local' %}
+                        Authentication System Status:
+                    {% else %}
+                        Domain Controller Status:
+                    {% endif %}
+                </span>
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="testDomainConnection()">
                     <i class="fas fa-sync-alt me-1"></i>Test
                 </button>
             </div>
             <div id="connectionStatus" class="mt-2">
-                <span class="text-muted">Click test to check domain connectivity</span>
+                <span class="text-muted">
+                    {% if auth_type == 'local' %}
+                        Click test to check authentication system
+                    {% else %}
+                        Click test to check domain connectivity
+                    {% endif %}
+                </span>
             </div>
         </div>
 
@@ -177,8 +199,13 @@
 
         <div class="text-center mt-3">
             <small class="text-muted">
-                Use your {{ domain_name }} domain credentials<br>
-                Format: <code>username</code> or <code>domain\username</code>
+                {% if auth_type == 'local' %}
+                    Enter your username (any password accepted)<br>
+                    All users have full admin privileges
+                {% else %}
+                    Use your {{ domain_name }} domain credentials<br>
+                    Format: <code>username</code> or <code>domain\username</code>
+                {% endif %}
             </small>
         </div>
     </div>
