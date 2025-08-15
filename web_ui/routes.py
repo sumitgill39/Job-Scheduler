@@ -3,7 +3,7 @@ Flask Routes for Windows Job Scheduler Web UI
 """
 
 import time
-from flask import render_template, request, jsonify, redirect, url_for, flash
+from flask import render_template, request, jsonify, redirect, url_for, flash, session
 from datetime import datetime
 from utils.logger import get_logger
 
