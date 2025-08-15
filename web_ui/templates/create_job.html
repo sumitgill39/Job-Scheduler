@@ -343,6 +343,9 @@
                                 </button>
                             </div>
                             <div class="col-md-6 text-end">
+                                <button type="button" class="btn btn-outline-info me-2" onclick="debugFormData()">
+                                    <i class="fas fa-bug me-1"></i>Debug Data
+                                </button>
                                 <a href="{{ url_for('job_list') }}" class="btn btn-secondary me-2">
                                     <i class="fas fa-times me-1"></i>Cancel
                                 </a>
@@ -521,13 +524,35 @@
         }
         
         const connectionName = document.getElementById('connectionName').value;
+        if (!connectionName) {
+            showError('Please select a connection to test');
+            return;
+        }
+        
         showLoading();
         
-        // This would be implemented as an API endpoint
-        setTimeout(() => {
+        // Test the selected connection via API
+        fetch(`/api/connections/${connectionName}/test`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
             hideLoading();
-            showSuccess('Database connection test successful');
-        }, 2000);
+            if (data.success) {
+                const message = `Connection test successful${data.response_time ? ` (${data.response_time.toFixed(2)}s)` : ''}`;
+                showSuccess(message);
+            } else {
+                showError(`Connection test failed: ${data.error || 'Unknown error'}`);
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            console.error('Connection test error:', error);
+            showError('Connection test failed: ' + error.message);
+        });
     }
     
     // Form submission
@@ -629,6 +654,79 @@
             showError('Error creating job: ' + error.message);
         });
     });
+    
+    // Debug function to check form data
+    function debugFormData() {
+        if (!validateJob()) {
+            showError('Please fix validation errors before debugging');
+            return;
+        }
+        
+        // Prepare form data exactly like the submit function
+        const formData = new FormData(document.getElementById('createJobForm'));
+        const jobData = {
+            type: selectedJobType,
+            name: formData.get('name'),
+            description: formData.get('description'),
+            enabled: formData.get('enabled') === 'true',
+            timeout: parseInt(formData.get('timeout')),
+            max_retries: parseInt(formData.get('max_retries')),
+            retry_delay: parseInt(formData.get('retry_delay')),
+            run_as: formData.get('run_as')
+        };
+        
+        // Add job-specific data
+        if (selectedJobType === 'sql') {
+            const sqlQuery = formData.get('sql_query');
+            const connectionName = formData.get('connection_name');
+            
+            jobData.sql_query = sqlQuery;
+            jobData.connection_name = connectionName;
+            
+            console.log('=== SQL JOB DEBUG ===');
+            console.log('SQL Query from form:', sqlQuery);
+            console.log('SQL Query length:', sqlQuery ? sqlQuery.length : 0);
+            console.log('Connection name:', connectionName);
+            console.log('Full job data:', jobData);
+            
+            // Show debug info in alert
+            const debugInfo = `SQL Job Debug Information:
+- Job Name: ${jobData.name}
+- Job Type: ${jobData.type}
+- SQL Query: "${sqlQuery}"
+- SQL Query Length: ${sqlQuery ? sqlQuery.length : 0} characters
+- Connection: ${connectionName}
+- Has SQL Query: ${!!sqlQuery}
+- Full Data Keys: ${Object.keys(jobData).join(', ')}`;
+            
+            alert(debugInfo);
+            
+            // Send to debug endpoint
+            fetch('/api/debug/job-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(jobData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Debug endpoint response:', data);
+                if (data.success) {
+                    showSuccess('Debug data sent successfully - check console and server logs');
+                } else {
+                    showError('Debug endpoint error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Debug endpoint error:', error);
+                showError('Debug request failed: ' + error.message);
+            });
+            
+        } else {
+            alert('Debug function is currently only for SQL jobs');
+        }
+    }
     
     // Load database connections
     function loadDatabaseConnections() {

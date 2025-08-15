@@ -341,9 +341,8 @@
                 });
         }
         
-        // Auto-refresh status every 30 seconds
-        setInterval(refreshStatus, 30000);
-        setInterval(refreshDatabaseStatus, 60000); // Check database every minute
+        // Reduced frequency background checks for scheduler status
+        setInterval(refreshStatus, 60000); // Check scheduler status every minute instead of 30 seconds
         
         // Initialize tooltips and status on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -352,9 +351,17 @@
                 return new bootstrap.Tooltip(tooltipTriggerEl);
             });
             
-            // Check status immediately on page load
+            // Check scheduler status immediately on page load (lightweight)
             refreshStatus();
-            refreshDatabaseStatus();
+            
+            // Database status is now handled by ConnectionMonitor
+            // Set initial "checking" state and let the monitor handle updates
+            const statusElement = document.getElementById('database-status');
+            if (statusElement) {
+                statusElement.className = 'badge bg-secondary';
+                statusElement.textContent = 'Checking...';
+                statusElement.title = 'Database connectivity - handled by background monitor';
+            }
         });
         
         // Format job status with appropriate styling
@@ -407,6 +414,9 @@
             document.querySelector('.main-content').insertBefore(alert, document.querySelector('.main-content').firstChild);
         }
     </script>
+    
+    <!-- Background Connection Monitor -->
+    <script src="{{ url_for('static', filename='js/connection-monitor.js') }}"></script>
     
     {% block scripts %}{% endblock %}
 </body>

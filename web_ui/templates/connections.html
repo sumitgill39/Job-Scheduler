@@ -556,11 +556,22 @@
     
     // Initialize page
     document.addEventListener('DOMContentLoaded', function() {
+        // Check system database status only once on page load for connections page
         checkSystemDatabaseStatus();
         loadConnections();
         
-        // Auto-refresh system status every 2 minutes
-        setInterval(checkSystemDatabaseStatus, 120000);
+        // Don't auto-refresh system status - let user trigger it manually
+        // The status check is expensive and should be on-demand
+        
+        // Make system database status clickable for manual refresh
+        const systemStatusElement = document.getElementById('system-db-status');
+        if (systemStatusElement) {
+            systemStatusElement.style.cursor = 'pointer';
+            systemStatusElement.title = 'Click to refresh system database status';
+            systemStatusElement.onclick = function() {
+                checkSystemDatabaseStatus();
+            };
+        }
     });
 </script>
 {% endblock %}

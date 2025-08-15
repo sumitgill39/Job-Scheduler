@@ -7,21 +7,51 @@ import json
 import time
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-from database.connection_pool import get_connection_pool
 from utils.logger import get_logger
-from .job_manager import JobManager
-from .sql_job import SqlJob
-from .powershell_job import PowerShellJob
 from .job_base import JobResult, JobStatus
+
+# Import database and job manager with error handling
+try:
+    from database.connection_pool import get_connection_pool
+    from .job_manager import JobManager
+    HAS_DATABASE = True
+except ImportError as e:
+    HAS_DATABASE = False
+    get_connection_pool = None
+    JobManager = None
+
+# Import job types with error handling
+try:
+    from .sql_job import SqlJob
+    HAS_SQL_JOB = True
+except ImportError as e:
+    HAS_SQL_JOB = False
+    # Use mock implementation for testing
+    from .mock_job import MockSqlJob as SqlJob
+
+try:
+    from .powershell_job import PowerShellJob
+    HAS_POWERSHELL_JOB = True
+except ImportError as e:
+    HAS_POWERSHELL_JOB = False
+    # Use mock implementation for testing
+    from .mock_job import MockPowerShellJob as PowerShellJob
 
 
 class JobExecutor:
     """Executes jobs and logs results to database"""
     
     def __init__(self):
+        self.logger = get_logger(__name__)
+        
+        if not HAS_DATABASE:
+            self.logger.error("[JOB_EXECUTOR] Database dependencies not available - JobExecutor will not function properly")
+            self.connection_pool = None
+            self.job_manager = None
+            return
+        
         self.connection_pool = get_connection_pool()
         self.job_manager = JobManager()
-        self.logger = get_logger(__name__)
         self.logger.info("[JOB_EXECUTOR] Job executor initialized")
     
     def execute_job(self, job_id: str) -> Dict[str, Any]:
@@ -35,6 +65,14 @@ class JobExecutor:
             Dict with execution result information
         """
         self.logger.info(f"[JOB_EXECUTOR] Starting execution of job: {job_id}")
+        
+        if not HAS_DATABASE or not self.job_manager:
+            error_msg = "Database dependencies not available - cannot execute jobs"
+            self.logger.error(f"[JOB_EXECUTOR] {error_msg}")
+            return {
+                'success': False,
+                'error': error_msg
+            }
         
         # Get job configuration from database
         job_config = self.job_manager.get_job(job_id)
@@ -59,7 +97,9 @@ class JobExecutor:
             # Create job instance based on type
             job_instance = self._create_job_instance(job_config)
             if not job_instance:
-                error_msg = f"Failed to create job instance for job {job_id}"
+                job_type = job_config.get('type', 'unknown')
+                error_msg = f"Failed to create job instance for job {job_id} (type: {job_type})"
+                
                 self.logger.error(f"[JOB_EXECUTOR] {error_msg}")
                 return {
                     'success': False,
@@ -113,9 +153,18 @@ class JobExecutor:
             job_type = job_config.get('type', '').lower()
             configuration = job_config.get('configuration', {})
             
+            self.logger.debug(f"[JOB_EXECUTOR] Creating job instance for type: {job_type}")
+            self.logger.debug(f"[JOB_EXECUTOR] Job config keys: {list(job_config.keys())}")
+            self.logger.debug(f"[JOB_EXECUTOR] Configuration keys: {list(configuration.keys())}")
+            
             if job_type == 'sql':
                 sql_config = configuration.get('sql', {})
                 basic_config = configuration.get('basic', {})
+                
+                if not HAS_SQL_JOB:
+                    self.logger.warning("[JOB_EXECUTOR] Using MOCK SQL job - pyodbc dependencies not available")
+                else:
+                    self.logger.debug(f"[JOB_EXECUTOR] Creating SQL job with query: {sql_config.get('query', 'NO_QUERY')[:50]}...")
                 
                 return SqlJob(
                     job_id=job_config['job_id'],
@@ -135,6 +184,11 @@ class JobExecutor:
             elif job_type == 'powershell':
                 ps_config = configuration.get('powershell', {})
                 basic_config = configuration.get('basic', {})
+                
+                if not HAS_POWERSHELL_JOB:
+                    self.logger.warning("[JOB_EXECUTOR] Using MOCK PowerShell job - dependencies not available")
+                else:
+                    self.logger.debug(f"[JOB_EXECUTOR] Creating PowerShell job with script content length: {len(ps_config.get('script_content', ''))}")
                 
                 return PowerShellJob(
                     job_id=job_config['job_id'],
@@ -158,6 +212,7 @@ class JobExecutor:
                 
         except Exception as e:
             self.logger.error(f"[JOB_EXECUTOR] Error creating job instance: {e}")
+            self.logger.exception(f"[JOB_EXECUTOR] Full exception details:")
             return None
     
     def _log_execution_start(self, job_config: Dict[str, Any]) -> Optional[int]:

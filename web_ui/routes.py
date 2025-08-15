@@ -57,14 +57,25 @@ def create_routes(app):
             jobs_raw = job_manager.list_jobs()
             
             # Transform jobs data to match template expectations
-            from core.job_executor import JobExecutor
-            job_executor = JobExecutor()
+            try:
+                from core.job_executor import JobExecutor
+                job_executor = JobExecutor()
+            except ImportError as e:
+                # If job executor not available, create jobs without execution history
+                logger.warning(f"[JOB_LIST] JobExecutor not available: {e}")
+                job_executor = None
             
             jobs = []
             for job in jobs_raw:
-                # Get last execution for this job
-                execution_history = job_executor.get_execution_history(job['job_id'], limit=1)
-                last_execution = execution_history[0] if execution_history else None
+                # Get last execution for this job (if executor available)
+                if job_executor:
+                    try:
+                        execution_history = job_executor.get_execution_history(job['job_id'], limit=1)
+                        last_execution = execution_history[0] if execution_history else None
+                    except:
+                        last_execution = None
+                else:
+                    last_execution = None
                 
                 # Determine current status and running state
                 if last_execution:
@@ -200,10 +211,22 @@ def create_routes(app):
             logger.info(f"[API_JOB_CREATE] Creating {data.get('type', 'unknown')} job '{data.get('name', 'unnamed')}'")
             
             # Debug: Log the complete received data
+            logger.info(f"[API_JOB_CREATE] Received data keys: {list(data.keys())}")
             logger.info(f"[API_JOB_CREATE] Received data: {data}")
+            
             if data.get('type') == 'sql':
-                logger.info(f"[API_JOB_CREATE] SQL Query received: '{data.get('sql_query', 'NONE')}'")
-                logger.info(f"[API_JOB_CREATE] Connection name received: '{data.get('connection_name', 'NONE')}'")
+                sql_query = data.get('sql_query', 'NONE')
+                connection_name = data.get('connection_name', 'NONE')
+                logger.info(f"[API_JOB_CREATE] SQL Query received (length {len(sql_query) if sql_query != 'NONE' else 0}): '{sql_query}'")
+                logger.info(f"[API_JOB_CREATE] Connection name received: '{connection_name}'")
+                
+                # Validate critical fields
+                if not sql_query or sql_query == 'NONE' or sql_query.strip() == '':
+                    logger.error(f"[API_JOB_CREATE] CRITICAL: SQL query is missing or empty!")
+                    return jsonify({
+                        'success': False,
+                        'error': 'SQL query is required for SQL jobs'
+                    }), 400
             
             # Use JobManager to create job
             from core.job_manager import JobManager
@@ -231,8 +254,16 @@ def create_routes(app):
         logger.info(f"[API_RUN_JOB] Received request to run job: {job_id}")
         
         try:
-            from core.job_executor import JobExecutor
-            job_executor = JobExecutor()
+            # Try to import JobExecutor
+            try:
+                from core.job_executor import JobExecutor
+                job_executor = JobExecutor()
+            except ImportError as e:
+                logger.error(f"[API_RUN_JOB] Cannot import JobExecutor: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': 'Job execution not available: Missing database dependencies (pyodbc). Please install SQL Server drivers.'
+                }), 500
             
             result = job_executor.execute_job(job_id)
             
@@ -876,8 +907,14 @@ def create_routes(app):
     def api_job_history(job_id):
         """API endpoint for job execution history"""
         try:
-            from core.job_executor import JobExecutor
-            job_executor = JobExecutor()
+            try:
+                from core.job_executor import JobExecutor
+                job_executor = JobExecutor()
+            except ImportError as e:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job execution history not available: Missing database dependencies.'
+                }), 500
             
             limit = request.args.get('limit', 50, type=int)
             history = job_executor.get_execution_history(job_id, limit)
@@ -902,8 +939,14 @@ def create_routes(app):
     def api_job_status(job_id):
         """API endpoint for job status"""
         try:
-            from core.job_executor import JobExecutor
-            job_executor = JobExecutor()
+            try:
+                from core.job_executor import JobExecutor
+                job_executor = JobExecutor()
+            except ImportError as e:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job status not available: Missing database dependencies.'
+                }), 500
             
             status = job_executor.get_job_status(job_id)
             
@@ -920,8 +963,14 @@ def create_routes(app):
     def api_all_executions():
         """API endpoint for all job executions"""
         try:
-            from core.job_executor import JobExecutor
-            job_executor = JobExecutor()
+            try:
+                from core.job_executor import JobExecutor
+                job_executor = JobExecutor()
+            except ImportError as e:
+                return jsonify({
+                    'success': False,
+                    'error': 'Execution history not available: Missing database dependencies.'
+                }), 500
             
             limit = request.args.get('limit', 100, type=int)
             history = job_executor.get_execution_history(limit=limit)
@@ -940,3 +989,49 @@ def create_routes(app):
                 'success': False,
                 'error': str(e)
             }), 500
+    
+    @app.route('/api/debug/job-data', methods=['POST'])
+    def api_debug_job_data():
+        """Debug endpoint to check what data is being sent from frontend"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+            
+            logger.info(f"[DEBUG] Received job data for debugging")
+            logger.info(f"[DEBUG] Data keys: {list(data.keys())}")
+            
+            # Check SQL-specific fields
+            if data.get('type') == 'sql':
+                sql_query = data.get('sql_query')
+                connection_name = data.get('connection_name')
+                
+                logger.info(f"[DEBUG] SQL Query: '{sql_query}' (length: {len(sql_query) if sql_query else 0})")
+                logger.info(f"[DEBUG] Connection: '{connection_name}'")
+                
+                return jsonify({
+                    'success': True,
+                    'debug_info': {
+                        'received_data_keys': list(data.keys()),
+                        'job_type': data.get('type'),
+                        'job_name': data.get('name'),
+                        'has_sql_query': bool(sql_query),
+                        'sql_query_length': len(sql_query) if sql_query else 0,
+                        'sql_query_preview': sql_query[:100] if sql_query else 'NONE',
+                        'connection_name': connection_name,
+                        'full_data': data
+                    }
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'debug_info': {
+                        'received_data_keys': list(data.keys()),
+                        'job_type': data.get('type'),
+                        'full_data': data
+                    }
+                })
+                
+        except Exception as e:
+            logger.error(f"[DEBUG] Debug endpoint error: {e}")
+            return jsonify({'error': str(e)}), 500
