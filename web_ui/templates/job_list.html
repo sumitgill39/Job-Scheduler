@@ -9,6 +9,12 @@
         <button class="btn btn-outline-secondary me-2" onclick="refreshJobs()">
             <i class="fas fa-sync-alt me-1"></i>Refresh
         </button>
+        <button class="btn btn-outline-info me-2" onclick="toggleAutoRefresh()" title="Toggle auto-refresh (currently every 2 minutes)">
+            <i class="fas fa-clock me-1"></i>Auto-Refresh
+        </button>
+        <button class="btn btn-outline-warning me-2" onclick="loadAllJobStatus()" title="Load execution status for all jobs">
+            <i class="fas fa-history me-1"></i>Load Status
+        </button>
         <a href="{{ url_for('create_job') }}" class="btn btn-primary">
             <i class="fas fa-plus me-1"></i>Create Job
         </a>
@@ -79,6 +85,7 @@
                     <tbody>
                         {% for job in jobs %}
                         <tr class="job-row" 
+                            data-job-id="{{ job.id }}"
                             data-filter-enabled="{{ 'true' if job.enabled else 'false' }}"
                             data-filter-type="{{ job.type }}"
                             data-filter-status="{{ job.status }}"
@@ -111,21 +118,28 @@
                             </td>
                             
                             <td>
-                                {% if job.last_run != 'Never' %}
-                                    <small>{{ job.last_run }}</small>
-                                {% else %}
-                                    <small class="text-muted">Never</small>
-                                {% endif %}
+                                <span id="last-run-{{ job.id }}" class="last-run-cell" 
+                                      onclick="loadJobStatus('{{ job.id }}')" 
+                                      style="cursor: pointer;" 
+                                      title="Click to load execution status">
+                                    {% if job.last_run != 'Never' %}
+                                        <small class="text-primary">{{ job.last_run }}</small>
+                                    {% else %}
+                                        <small class="text-muted">{{ job.last_run }}</small>
+                                    {% endif %}
+                                </span>
                             </td>
                             
                             <td>
-                                {% if job.is_running %}
-                                    <span class="badge bg-info">
-                                        <i class="fas fa-spinner fa-spin me-1"></i>Running
-                                    </span>
-                                {% else %}
-                                    <span class="badge bg-secondary">Idle</span>
-                                {% endif %}
+                                <span id="running-{{ job.id }}">
+                                    {% if job.is_running %}
+                                        <span class="badge bg-info">
+                                            <i class="fas fa-spinner fa-spin me-1"></i>Running
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Idle</span>
+                                    {% endif %}
+                                </span>
                             </td>
                             
                             <td>
@@ -364,6 +378,107 @@
         window.location.reload();
     }
     
+    // Load execution status for a specific job (lazy loading)
+    function loadJobStatus(jobId) {
+        const statusElement = document.getElementById(`last-run-${jobId}`);
+        const runningElement = document.getElementById(`running-${jobId}`);
+        
+        // Show loading state
+        statusElement.innerHTML = '<small class="text-info"><i class="fas fa-spinner fa-spin"></i> Loading...</small>';
+        
+        // Fetch job status
+        fetch(`/api/jobs/${jobId}/status`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.last_execution) {
+                    const lastExecution = data.last_execution;
+                    let lastRunText = 'Never';
+                    let runningStatus = false;
+                    
+                    if (lastExecution.start_time) {
+                        if (lastExecution.end_time) {
+                            // Calculate relative time
+                            const endTime = new Date(lastExecution.end_time);
+                            const now = new Date();
+                            const diff = now - endTime;
+                            const minutes = Math.floor(diff / 60000);
+                            const hours = Math.floor(minutes / 60);
+                            const days = Math.floor(hours / 24);
+                            
+                            if (days > 0) {
+                                lastRunText = `${days}d ago`;
+                            } else if (hours > 0) {
+                                lastRunText = `${hours}h ago`;
+                            } else if (minutes > 0) {
+                                lastRunText = `${minutes}m ago`;
+                            } else {
+                                lastRunText = 'Just now';
+                            }
+                        } else {
+                            lastRunText = 'Running...';
+                            runningStatus = true;
+                        }
+                    }
+                    
+                    // Update last run time
+                    const statusClass = lastExecution.status === 'success' ? 'text-success' : 
+                                       lastExecution.status === 'failed' ? 'text-danger' :
+                                       lastExecution.status === 'running' ? 'text-info' : 'text-muted';
+                    
+                    statusElement.innerHTML = `<small class="${statusClass}">${lastRunText}</small>`;
+                    statusElement.title = `Status: ${lastExecution.status} | Click to refresh`;
+                    
+                    // Update running status if element exists
+                    if (runningElement) {
+                        if (runningStatus) {
+                            runningElement.innerHTML = '<span class="badge bg-info"><i class="fas fa-spinner fa-spin me-1"></i>Running</span>';
+                        } else {
+                            runningElement.innerHTML = '<span class="badge bg-secondary">Idle</span>';
+                        }
+                    }
+                    
+                } else {
+                    statusElement.innerHTML = '<small class="text-muted">Unknown</small>';
+                    statusElement.title = 'Failed to load status - click to retry';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading job status:', error);
+                statusElement.innerHTML = '<small class="text-danger">Error</small>';
+                statusElement.title = 'Error loading status - click to retry';
+            });
+    }
+    
+    // Load status for all visible jobs
+    function loadAllJobStatus() {
+        const jobRows = document.querySelectorAll('.job-row');
+        let loadedCount = 0;
+        const totalJobs = jobRows.length;
+        
+        if (totalJobs === 0) {
+            showError('No jobs to load status for');
+            return;
+        }
+        
+        showSuccess(`Loading execution status for ${totalJobs} jobs...`);
+        
+        jobRows.forEach(row => {
+            // Extract job ID from row data or first cell
+            const jobId = row.getAttribute('data-job-id');
+            if (jobId) {
+                // Add small delay between requests to avoid overwhelming the server
+                setTimeout(() => {
+                    loadJobStatus(jobId);
+                    loadedCount++;
+                    
+                    if (loadedCount === totalJobs) {
+                        showSuccess(`Loaded execution status for ${totalJobs} jobs`);
+                    }
+                }, loadedCount * 100); // 100ms delay between each request
+            }
+        });
+    }
+    
     // Bulk actions (placeholder for future implementation)
     function bulkEnable() {
         showError('Bulk operations not yet implemented');
@@ -377,11 +492,38 @@
         showError('Bulk operations not yet implemented');
     }
     
-    // Auto-refresh every 30 seconds
-    setInterval(() => {
-        if (!document.hidden) {
+    // Reduced auto-refresh to every 2 minutes and only if user is active
+    let refreshInterval = setInterval(() => {
+        if (!document.hidden && document.hasFocus()) {
+            console.log('Auto-refreshing jobs list...');
             refreshJobs();
         }
-    }, 30000);
+    }, 120000); // 2 minutes instead of 30 seconds
+    
+    // Stop auto-refresh when user leaves the page
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            console.log('Jobs page hidden - pausing auto-refresh');
+        } else {
+            console.log('Jobs page visible - resuming auto-refresh');
+        }
+    });
+    
+    // Allow user to disable auto-refresh
+    let autoRefreshEnabled = true;
+    function toggleAutoRefresh() {
+        autoRefreshEnabled = !autoRefreshEnabled;
+        if (autoRefreshEnabled) {
+            refreshInterval = setInterval(() => {
+                if (!document.hidden && document.hasFocus()) {
+                    refreshJobs();
+                }
+            }, 120000);
+            showSuccess('Auto-refresh enabled (every 2 minutes)');
+        } else {
+            clearInterval(refreshInterval);
+            showSuccess('Auto-refresh disabled');
+        }
+    }
 </script>
 {% endblock %}

@@ -56,54 +56,11 @@ def create_routes(app):
             
             jobs_raw = job_manager.list_jobs()
             
-            # Transform jobs data to match template expectations
-            try:
-                from core.job_executor import JobExecutor
-                job_executor = JobExecutor()
-            except ImportError as e:
-                # If job executor not available, create jobs without execution history
-                logger.warning(f"[JOB_LIST] JobExecutor not available: {e}")
-                job_executor = None
-            
+            # Transform jobs data to match template expectations (without expensive execution history lookup)
             jobs = []
             for job in jobs_raw:
-                # Get last execution for this job (if executor available)
-                if job_executor:
-                    try:
-                        execution_history = job_executor.get_execution_history(job['job_id'], limit=1)
-                        last_execution = execution_history[0] if execution_history else None
-                    except:
-                        last_execution = None
-                else:
-                    last_execution = None
-                
-                # Determine current status and running state
-                if last_execution:
-                    is_running = last_execution['status'] == 'running'
-                    last_run = last_execution['start_time'] if last_execution['start_time'] else 'Never'
-                    if last_execution['end_time']:
-                        # Format as relative time
-                        from datetime import datetime
-                        try:
-                            end_time = datetime.fromisoformat(last_execution['end_time'].replace('Z', '+00:00'))
-                            now = datetime.now()
-                            diff = now - end_time.replace(tzinfo=None)
-                            if diff.days > 0:
-                                last_run = f"{diff.days}d ago"
-                            elif diff.seconds > 3600:
-                                last_run = f"{diff.seconds // 3600}h ago"
-                            elif diff.seconds > 60:
-                                last_run = f"{diff.seconds // 60}m ago"
-                            else:
-                                last_run = "Just now"
-                        except:
-                            last_run = last_execution['start_time'][:16] if last_execution['start_time'] else 'Never'
-                    else:
-                        last_run = 'Running...'
-                else:
-                    is_running = False
-                    last_run = 'Never'
-                
+                # Don't load execution history on every page load - it's too expensive
+                # Use basic status based on job enabled state
                 job_transformed = {
                     'id': job['job_id'],  # Template expects 'id', not 'job_id'
                     'name': job['name'],
@@ -111,9 +68,9 @@ def create_routes(app):
                     'enabled': job['enabled'],
                     'created_date': job['created_date'],
                     'modified_date': job['modified_date'],
-                    'status': last_execution['status'] if last_execution else ('enabled' if job['enabled'] else 'disabled'),
-                    'is_running': is_running,
-                    'last_run': last_run
+                    'status': 'enabled' if job['enabled'] else 'disabled',
+                    'is_running': False,  # Will be updated by client-side calls if needed
+                    'last_run': 'Click to check'  # Lazy loading approach
                 }
                 jobs.append(job_transformed)
             
