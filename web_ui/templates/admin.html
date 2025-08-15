@@ -1,0 +1,525 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - Windows Job Scheduler{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="fas fa-cog me-2"></i>Administration Panel</h1>
+    <div>
+        <button class="btn btn-outline-info" onclick="refreshSystemStats()">
+            <i class="fas fa-sync-alt me-1"></i>Refresh Stats
+        </button>
+    </div>
+</div>
+
+<!-- System Overview -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-tasks fa-2x text-primary mb-2"></i>
+                <h5 class="card-title" id="totalJobs">-</h5>
+                <p class="card-text">Total Jobs</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-play fa-2x text-success mb-2"></i>
+                <h5 class="card-title" id="activeJobs">-</h5>
+                <p class="card-text">Active Jobs</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-database fa-2x text-info mb-2"></i>
+                <h5 class="card-title" id="totalConnections">-</h5>
+                <p class="card-text">DB Connections</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-users fa-2x text-warning mb-2"></i>
+                <h5 class="card-title" id="activeSessions">-</h5>
+                <p class="card-text">Active Sessions</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <!-- System Management -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-server me-2"></i>System Management
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Scheduler Control</h6>
+                        <div class="btn-group-vertical w-100 mb-3" role="group">
+                            <button class="btn btn-outline-success" onclick="startScheduler()">
+                                <i class="fas fa-play me-2"></i>Start Scheduler
+                            </button>
+                            <button class="btn btn-outline-warning" onclick="pauseScheduler()">
+                                <i class="fas fa-pause me-2"></i>Pause Scheduler
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="stopScheduler()">
+                                <i class="fas fa-stop me-2"></i>Stop Scheduler
+                            </button>
+                        </div>
+                        
+                        <h6>Database Management</h6>
+                        <div class="btn-group-vertical w-100" role="group">
+                            <button class="btn btn-outline-info" onclick="testAllConnections()">
+                                <i class="fas fa-plug me-2"></i>Test All Connections
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="cleanupConnectionPool()">
+                                <i class="fas fa-broom me-2"></i>Cleanup Connection Pool
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h6>Application Control</h6>
+                        <div class="btn-group-vertical w-100 mb-3" role="group">
+                            <button class="btn btn-outline-info" onclick="viewSystemLogs()">
+                                <i class="fas fa-file-alt me-2"></i>View System Logs
+                            </button>
+                            <button class="btn btn-outline-warning" onclick="clearSystemLogs()">
+                                <i class="fas fa-trash me-2"></i>Clear Logs
+                            </button>
+                            <button class="btn btn-outline-primary" onclick="exportConfiguration()">
+                                <i class="fas fa-download me-2"></i>Export Config
+                            </button>
+                        </div>
+                        
+                        <h6>Emergency Controls</h6>
+                        <div class="btn-group-vertical w-100" role="group">
+                            <button class="btn btn-outline-warning" onclick="killAllRunningJobs()">
+                                <i class="fas fa-stop-circle me-2"></i>Kill All Running Jobs
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="emergencyShutdown()">
+                                <i class="fas fa-power-off me-2"></i>Emergency Shutdown
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Sessions -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-users me-2"></i>Active User Sessions
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshActiveSessions()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="activeSessionsList" class="table-responsive">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Loading sessions...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- System Status -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-heartbeat me-2"></i>System Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Scheduler Status:</span>
+                        <span id="schedulerStatus" class="badge bg-secondary">Loading...</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Database Status:</span>
+                        <span id="databaseStatus" class="badge bg-secondary">Loading...</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>AD Domain Status:</span>
+                        <span id="adStatus" class="badge bg-secondary">Loading...</span>
+                    </div>
+                </div>
+                <div class="mb-0">
+                    <div class="d-flex justify-content-between">
+                        <span>Uptime:</span>
+                        <span id="systemUptime">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connection Pool Stats -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-swimming-pool me-2"></i>Connection Pool
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="connectionPoolStats">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Loading stats...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activities -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-history me-2"></i>Recent Activities
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="recentActivities">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Loading activities...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Logs Modal -->
+<div class="modal fade" id="systemLogsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-alt me-2"></i>System Logs
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <select class="form-select" id="logLevel">
+                                <option value="">All Levels</option>
+                                <option value="ERROR">ERROR</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="INFO">INFO</option>
+                                <option value="DEBUG">DEBUG</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="number" class="form-control" id="logLimit" placeholder="Lines (default 100)" value="100">
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-primary" onclick="loadSystemLogs()">
+                                <i class="fas fa-sync-alt me-1"></i>Refresh Logs
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="systemLogsContent" style="max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 1rem; border-radius: 5px;">
+                    <div class="text-center text-muted">
+                        Click "Refresh Logs" to load system logs
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Load initial data
+document.addEventListener('DOMContentLoaded', function() {
+    refreshSystemStats();
+    refreshActiveSessions();
+    loadConnectionPoolStats();
+});
+
+function refreshSystemStats() {
+    // Load system statistics
+    Promise.all([
+        fetch('/api/admin/system-stats'),
+        fetch('/api/admin/scheduler-status'),
+        fetch('/api/system/database-status'),
+        fetch('/api/auth/test-domain')
+    ]).then(responses => {
+        return Promise.all(responses.map(r => r.json()));
+    }).then(([sysStats, scheduler, database, ad]) => {
+        // Update overview cards
+        if (sysStats.success) {
+            document.getElementById('totalJobs').textContent = sysStats.stats.total_jobs || '0';
+            document.getElementById('activeJobs').textContent = sysStats.stats.active_jobs || '0';
+            document.getElementById('totalConnections').textContent = sysStats.stats.total_connections || '0';
+            document.getElementById('activeSessions').textContent = sysStats.stats.active_sessions || '0';
+            document.getElementById('systemUptime').textContent = sysStats.stats.uptime || '-';
+        }
+        
+        // Update status indicators
+        updateStatusBadge('schedulerStatus', scheduler.success, scheduler.status || 'Unknown');
+        updateStatusBadge('databaseStatus', database.success, database.connected ? 'Connected' : 'Disconnected');
+        updateStatusBadge('adStatus', ad.success && ad.domain_test.reachable_controllers > 0, 
+                         ad.success ? `${ad.domain_test.reachable_controllers}/${ad.domain_test.total_controllers} DCs` : 'Offline');
+    }).catch(error => {
+        console.error('Error loading system stats:', error);
+        showError('Failed to load system statistics');
+    });
+}
+
+function updateStatusBadge(elementId, success, text) {
+    const element = document.getElementById(elementId);
+    element.textContent = text;
+    element.className = `badge bg-${success ? 'success' : 'danger'}`;
+}
+
+function loadConnectionPoolStats() {
+    fetch('/api/system/connection-pool-stats')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const stats = data.pool_stats;
+                document.getElementById('connectionPoolStats').innerHTML = `
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between">
+                            <span>Total Connections:</span>
+                            <strong>${stats.total_connections}</strong>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between">
+                            <span>Active Connections:</span>
+                            <strong>${stats.active_connections}</strong>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between">
+                            <span>Idle Connections:</span>
+                            <strong>${stats.idle_connections}</strong>
+                        </div>
+                    </div>
+                    <div class="mb-0">
+                        <div class="d-flex justify-content-between">
+                            <span>Pool Health:</span>
+                            <span class="badge bg-${stats.health === 'healthy' ? 'success' : 'warning'}">${stats.health}</span>
+                        </div>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            document.getElementById('connectionPoolStats').innerHTML = '<div class="text-danger">Failed to load stats</div>';
+        });
+}
+
+function refreshActiveSessions() {
+    fetch('/api/admin/active-sessions')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.sessions.length > 0) {
+                let html = '<table class="table table-sm"><thead><tr><th>User</th><th>Login Time</th><th>Idle</th><th>Actions</th></tr></thead><tbody>';
+                data.sessions.forEach(session => {
+                    html += `
+                        <tr>
+                            <td>
+                                <strong>${session.username}</strong><br>
+                                <small class="text-muted">${session.client_ip}</small>
+                            </td>
+                            <td>${session.login_time}</td>
+                            <td>${session.idle_minutes}m</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger" onclick="terminateSession('${session.session_id}')">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                html += '</tbody></table>';
+                document.getElementById('activeSessionsList').innerHTML = html;
+            } else {
+                document.getElementById('activeSessionsList').innerHTML = '<div class="text-muted">No active sessions</div>';
+            }
+        })
+        .catch(error => {
+            document.getElementById('activeSessionsList').innerHTML = '<div class="text-danger">Failed to load sessions</div>';
+        });
+}
+
+// System Control Functions
+function startScheduler() {
+    if (confirm('Start the job scheduler?')) {
+        executeAdminCommand('/api/admin/scheduler/start', 'Starting scheduler...');
+    }
+}
+
+function pauseScheduler() {
+    if (confirm('Pause the job scheduler? Running jobs will continue but no new jobs will start.')) {
+        executeAdminCommand('/api/admin/scheduler/pause', 'Pausing scheduler...');
+    }
+}
+
+function stopScheduler() {
+    if (confirm('Stop the job scheduler? This will stop all running jobs.')) {
+        executeAdminCommand('/api/admin/scheduler/stop', 'Stopping scheduler...');
+    }
+}
+
+function testAllConnections() {
+    showLoading();
+    fetch('/api/connections/validate-all', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                showSuccess(`Connection test completed: ${data.valid_connections}/${data.total_connections} valid`);
+                refreshSystemStats();
+            } else {
+                showError(data.error || 'Connection test failed');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Error testing connections: ' + error.message);
+        });
+}
+
+function cleanupConnectionPool() {
+    if (confirm('Clean up idle database connections?')) {
+        executeAdminCommand('/api/system/cleanup-pool', 'Cleaning up connection pool...');
+    }
+}
+
+function killAllRunningJobs() {
+    if (confirm('⚠️ CAUTION: This will forcibly terminate all running jobs. Are you sure?')) {
+        executeAdminCommand('/api/admin/kill-all-jobs', 'Terminating all running jobs...');
+    }
+}
+
+function emergencyShutdown() {
+    if (confirm('⚠️ EMERGENCY SHUTDOWN: This will immediately stop the entire application. Are you sure?')) {
+        if (confirm('This action cannot be undone and may cause data loss. Proceed?')) {
+            executeAdminCommand('/api/admin/emergency-shutdown', 'Initiating emergency shutdown...');
+        }
+    }
+}
+
+function executeAdminCommand(endpoint, message) {
+    showLoading();
+    showInfo(message);
+    
+    fetch(endpoint, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                showSuccess(data.message || 'Command executed successfully');
+                setTimeout(() => refreshSystemStats(), 1000);
+            } else {
+                showError(data.error || 'Command failed');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Command error: ' + error.message);
+        });
+}
+
+function viewSystemLogs() {
+    document.getElementById('systemLogsModal').querySelector('.modal').show();
+    loadSystemLogs();
+}
+
+function loadSystemLogs() {
+    const level = document.getElementById('logLevel').value;
+    const limit = document.getElementById('logLimit').value || 100;
+    
+    const params = new URLSearchParams();
+    if (level) params.append('level', level);
+    params.append('limit', limit);
+    
+    document.getElementById('systemLogsContent').innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading logs...</div>';
+    
+    fetch(`/api/admin/system-logs?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const logs = data.logs.map(log => 
+                    `<div class="log-entry mb-1"><small class="text-muted">${log.timestamp}</small> <span class="badge bg-${getLogLevelClass(log.level)}">${log.level}</span> ${log.message}</div>`
+                ).join('');
+                document.getElementById('systemLogsContent').innerHTML = logs || '<div class="text-muted">No logs found</div>';
+            } else {
+                document.getElementById('systemLogsContent').innerHTML = '<div class="text-danger">Failed to load logs</div>';
+            }
+        })
+        .catch(error => {
+            document.getElementById('systemLogsContent').innerHTML = '<div class="text-danger">Error loading logs: ' + error.message + '</div>';
+        });
+}
+
+function getLogLevelClass(level) {
+    switch(level) {
+        case 'ERROR': return 'danger';
+        case 'WARNING': return 'warning';
+        case 'INFO': return 'info';
+        case 'DEBUG': return 'secondary';
+        default: return 'secondary';
+    }
+}
+
+function clearSystemLogs() {
+    if (confirm('Clear all system logs? This action cannot be undone.')) {
+        executeAdminCommand('/api/admin/clear-logs', 'Clearing system logs...');
+    }
+}
+
+function exportConfiguration() {
+    window.open('/api/admin/export-config', '_blank');
+}
+
+function terminateSession(sessionId) {
+    if (confirm('Terminate this user session?')) {
+        fetch(`/api/admin/terminate-session/${sessionId}`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSuccess('Session terminated');
+                    refreshActiveSessions();
+                } else {
+                    showError(data.error || 'Failed to terminate session');
+                }
+            })
+            .catch(error => {
+                showError('Error terminating session: ' + error.message);
+            });
+    }
+}
+
+// Auto-refresh every 30 seconds
+setInterval(() => {
+    refreshSystemStats();
+    loadConnectionPoolStats();
+}, 30000);
+</script>
+{% endblock %}

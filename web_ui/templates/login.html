@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Windows Job Scheduler</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            width: 100%;
+            max-width: 450px;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .login-header h2 {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .login-header p {
+            color: #666;
+            margin-bottom: 0;
+        }
+        .form-control {
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            margin-bottom: 1rem;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .btn-login {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+        .btn-login:hover {
+            transform: translateY(-2px);
+            color: white;
+        }
+        .input-group-text {
+            background-color: #f8f9fa;
+            border-right: none;
+            border-radius: 8px 0 0 8px;
+        }
+        .form-control.with-icon {
+            border-left: none;
+            border-radius: 0 8px 8px 0;
+        }
+        .alert {
+            border-radius: 8px;
+        }
+        .domain-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        .domain-info .domain-name {
+            font-weight: 600;
+            color: #1976d2;
+        }
+        .loading-spinner {
+            display: none;
+        }
+        .btn-login.loading .loading-spinner {
+            display: inline-block;
+        }
+        .btn-login.loading .login-text {
+            display: none;
+        }
+        .test-connection {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .connection-status {
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <i class="fas fa-tasks fa-3x text-primary mb-3"></i>
+            <h2>Windows Job Scheduler</h2>
+            <p>Sign in with your domain credentials</p>
+        </div>
+
+        <div class="domain-info">
+            <i class="fas fa-network-wired me-2"></i>
+            Domain: <span class="domain-name">{{ domain_name }}</span>
+        </div>
+
+        <!-- Connection Status -->
+        <div class="test-connection">
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="connection-status">Domain Controller Status:</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="testDomainConnection()">
+                    <i class="fas fa-sync-alt me-1"></i>Test
+                </button>
+            </div>
+            <div id="connectionStatus" class="mt-2">
+                <span class="text-muted">Click test to check domain connectivity</span>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        <i class="fas fa-{{ 'exclamation-triangle' if category == 'error' else 'info-circle' }} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" id="loginForm">
+            <div class="input-group mb-3">
+                <span class="input-group-text">
+                    <i class="fas fa-user"></i>
+                </span>
+                <input type="text" class="form-control with-icon" name="username" placeholder="Username" required autocomplete="username">
+            </div>
+
+            <div class="input-group mb-3">
+                <span class="input-group-text">
+                    <i class="fas fa-lock"></i>
+                </span>
+                <input type="password" class="form-control with-icon" name="password" placeholder="Password" required autocomplete="current-password">
+            </div>
+
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="remember_me" id="rememberMe">
+                <label class="form-check-label" for="rememberMe">
+                    Keep me signed in
+                </label>
+            </div>
+
+            <button type="submit" class="btn btn-login" id="loginBtn">
+                <span class="login-text">
+                    <i class="fas fa-sign-in-alt me-2"></i>Sign In
+                </span>
+                <span class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin me-2"></i>Authenticating...
+                </span>
+            </button>
+        </form>
+
+        <div class="text-center mt-3">
+            <small class="text-muted">
+                Use your {{ domain_name }} domain credentials<br>
+                Format: <code>username</code> or <code>domain\username</code>
+            </small>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Handle login form submission
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            const loginBtn = document.getElementById('loginBtn');
+            loginBtn.classList.add('loading');
+            loginBtn.disabled = true;
+        });
+
+        // Test domain connection
+        function testDomainConnection() {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.innerHTML = '<i class="fas fa-spinner fa-spin text-info me-2"></i>Testing connection...';
+
+            fetch('/api/auth/test-domain', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const reachable = data.domain_test.reachable_controllers;
+                    const total = data.domain_test.total_controllers;
+                    
+                    if (reachable > 0) {
+                        statusElement.innerHTML = `
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Connected to domain (${reachable}/${total} controllers)
+                        `;
+                    } else {
+                        statusElement.innerHTML = `
+                            <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                            No domain controllers reachable
+                        `;
+                    }
+                } else {
+                    statusElement.innerHTML = `
+                        <i class="fas fa-times-circle text-danger me-2"></i>
+                        ${data.error || 'Domain test failed'}
+                    `;
+                }
+            })
+            .catch(error => {
+                statusElement.innerHTML = `
+                    <i class="fas fa-times-circle text-danger me-2"></i>
+                    Connection test failed: ${error.message}
+                `;
+            });
+        }
+
+        // Auto-focus username field
+        document.querySelector('input[name="username"]').focus();
+
+        // Handle enter key in password field
+        document.querySelector('input[name="password"]').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('loginForm').submit();
+            }
+        });
+
+        // Test domain connection on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            testDomainConnection();
+        });
+    </script>
+</body>
+</html>

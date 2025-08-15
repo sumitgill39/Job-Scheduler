@@ -18,9 +18,18 @@ def create_app(scheduler_manager=None):
     app.config['WTF_CSRF_ENABLED'] = False  # Disable CSRF for simplicity
     app.config['WTF_CSRF_TIME_LIMIT'] = None
     
+    # Authentication Configuration
+    app.config['AD_DOMAIN'] = os.environ.get('AD_DOMAIN', 'mgo.mersh.com')
+    app.config['SESSION_TIMEOUT_MINUTES'] = int(os.environ.get('SESSION_TIMEOUT_MINUTES', '480'))  # 8 hours
+    app.config['PERMANENT_SESSION_LIFETIME'] = app.config['SESSION_TIMEOUT_MINUTES'] * 60  # Convert to seconds
+    
     # Initialize logger
     logger = get_logger(__name__)
     logger.info("Flask application created")
+    
+    # Track application start time for uptime calculation
+    import time
+    app._start_time = time.time()
     
     # Initialize global database connection pool and job manager (SINGLE INSTANCES)
     try:

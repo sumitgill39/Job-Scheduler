@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - Windows Job Scheduler{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="fas fa-user-circle me-2"></i>User Profile</h1>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <!-- User Information -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-id-card me-2"></i>User Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-sm-3">
+                        <strong>Display Name:</strong>
+                    </div>
+                    <div class="col-sm-9">
+                        {{ user.display_name or user.username }}
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-sm-3">
+                        <strong>Username:</strong>
+                    </div>
+                    <div class="col-sm-9">
+                        <code>{{ user.username }}</code>
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-sm-3">
+                        <strong>Domain:</strong>
+                    </div>
+                    <div class="col-sm-9">
+                        <span class="badge bg-primary">{{ user.domain }}</span>
+                    </div>
+                </div>
+                {% if user.email %}
+                <hr>
+                <div class="row">
+                    <div class="col-sm-3">
+                        <strong>Email:</strong>
+                    </div>
+                    <div class="col-sm-9">
+                        <a href="mailto:{{ user.email }}">{{ user.email }}</a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Group Memberships -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-users me-2"></i>Group Memberships
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if user.groups %}
+                    <div class="row">
+                        {% for group in user.groups %}
+                            <div class="col-md-6 mb-2">
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-users me-1"></i>{{ group }}
+                                </span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">No group memberships found</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Session Information -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-clock me-2"></i>Session Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <small class="text-muted">Login Time</small>
+                    <div>{{ session_info.login_time }}</div>
+                </div>
+                <div class="mb-3">
+                    <small class="text-muted">Session Duration</small>
+                    <div>{{ session_info.session_duration_minutes }} minutes</div>
+                </div>
+                <div class="mb-3">
+                    <small class="text-muted">Idle Time</small>
+                    <div>{{ session_info.idle_time_minutes }} minutes</div>
+                </div>
+                <div class="mb-3">
+                    <small class="text-muted">Session Timeout</small>
+                    <div>{{ session_info.timeout_minutes }} minutes</div>
+                </div>
+                <div class="mb-0">
+                    <small class="text-muted">Client IP</small>
+                    <div><code>{{ session_info.client_ip }}</code></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Permissions -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-shield-alt me-2"></i>Permissions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <i class="fas fa-{{ 'check text-success' if session_info.get('is_admin') else 'times text-muted' }} me-2"></i>
+                    Administrator
+                </div>
+                <div class="mb-2">
+                    <i class="fas fa-check text-success me-2"></i>
+                    View Jobs
+                </div>
+                <div class="mb-2">
+                    <i class="fas fa-check text-success me-2"></i>
+                    Create Jobs
+                </div>
+                <div class="mb-0">
+                    <i class="fas fa-check text-success me-2"></i>
+                    Manage Connections
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-cogs me-2"></i>Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary" onclick="refreshSession()">
+                        <i class="fas fa-sync-alt me-2"></i>Refresh Session
+                    </button>
+                    <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">
+                        <i class="fas fa-sign-out-alt me-2"></i>Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function refreshSession() {
+    showLoading();
+    
+    fetch('/api/auth/session-info')
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.authenticated) {
+                showSuccess('Session refreshed successfully');
+                // Optionally reload the page to update session info
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showError('Session expired - redirecting to login');
+                setTimeout(() => window.location.href = '/login', 1000);
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Error refreshing session: ' + error.message);
+        });
+}
+</script>
+{% endblock %}

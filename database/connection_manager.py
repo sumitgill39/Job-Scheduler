@@ -10,6 +10,7 @@ from typing import Dict, Optional, Any, List
 import time
 import os
 import socket
+from datetime import datetime
 from threading import Lock
 from utils.logger import get_logger
 
@@ -22,7 +23,14 @@ class DatabaseConnectionManager:
         self.logger = get_logger(__name__)  # Initialize logger first
         self.config = self._load_config()
         self._connection_lock = Lock()
+        self._pool_lock = Lock()  # Add pool lock for cleanup operations
         self._connection_pool = {}
+        
+        # Initialize pool configuration
+        self._pool_config = {
+            'max_connections': 50,
+            'connection_lifetime': 3600  # 1 hour in seconds
+        }
         
         # Initialize audit trail context
         self._current_user = os.getenv('USERNAME', os.getenv('USER', 'system'))
@@ -365,9 +373,23 @@ class DatabaseConnectionManager:
     def get_pool_stats(self) -> Dict[str, Any]:
         """Get connection pool statistics"""
         with self._pool_lock:
+            active_connections = 0
+            idle_connections = 0
+            
+            # Count active vs idle connections
+            for pool_entry in self._connection_pool.values():
+                idle_time = datetime.now() - pool_entry['last_used']
+                if idle_time.total_seconds() < 300:  # Active if used in last 5 minutes
+                    active_connections += 1
+                else:
+                    idle_connections += 1
+            
             stats = {
                 'total_connections': len(self._connection_pool),
+                'active_connections': active_connections,
+                'idle_connections': idle_connections,
                 'max_connections': self._pool_config['max_connections'],
+                'health': 'healthy' if len(self._connection_pool) < self._pool_config['max_connections'] else 'at_capacity',
                 'connections': {}
             }
             
@@ -567,7 +589,7 @@ class DatabaseConnectionManager:
                 "SELECT @@VERSION as server_version",
                 "SELECT @@SERVERNAME as server_name",
                 "SELECT DB_NAME() as database_name",
-                "SELECT SYSTEM_USER as current_user",
+                "SELECT SYSTEM_USER as system_user",
                 "SELECT GETDATE() as current_time"
             ]
             
