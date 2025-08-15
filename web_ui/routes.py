@@ -57,8 +57,42 @@ def create_routes(app):
             jobs_raw = job_manager.list_jobs()
             
             # Transform jobs data to match template expectations
+            from core.job_executor import JobExecutor
+            job_executor = JobExecutor()
+            
             jobs = []
             for job in jobs_raw:
+                # Get last execution for this job
+                execution_history = job_executor.get_execution_history(job['job_id'], limit=1)
+                last_execution = execution_history[0] if execution_history else None
+                
+                # Determine current status and running state
+                if last_execution:
+                    is_running = last_execution['status'] == 'running'
+                    last_run = last_execution['start_time'] if last_execution['start_time'] else 'Never'
+                    if last_execution['end_time']:
+                        # Format as relative time
+                        from datetime import datetime
+                        try:
+                            end_time = datetime.fromisoformat(last_execution['end_time'].replace('Z', '+00:00'))
+                            now = datetime.now()
+                            diff = now - end_time.replace(tzinfo=None)
+                            if diff.days > 0:
+                                last_run = f"{diff.days}d ago"
+                            elif diff.seconds > 3600:
+                                last_run = f"{diff.seconds // 3600}h ago"
+                            elif diff.seconds > 60:
+                                last_run = f"{diff.seconds // 60}m ago"
+                            else:
+                                last_run = "Just now"
+                        except:
+                            last_run = last_execution['start_time'][:16] if last_execution['start_time'] else 'Never'
+                    else:
+                        last_run = 'Running...'
+                else:
+                    is_running = False
+                    last_run = 'Never'
+                
                 job_transformed = {
                     'id': job['job_id'],  # Template expects 'id', not 'job_id'
                     'name': job['name'],
@@ -66,9 +100,9 @@ def create_routes(app):
                     'enabled': job['enabled'],
                     'created_date': job['created_date'],
                     'modified_date': job['modified_date'],
-                    'status': 'enabled' if job['enabled'] else 'disabled',  # Add status field
-                    'is_running': False,  # TODO: Connect to scheduler to get real status
-                    'last_run': 'Never'   # TODO: Get from job execution history
+                    'status': last_execution['status'] if last_execution else ('enabled' if job['enabled'] else 'disabled'),
+                    'is_running': is_running,
+                    'last_run': last_run
                 }
                 jobs.append(job_transformed)
             
@@ -194,26 +228,39 @@ def create_routes(app):
     @app.route('/api/jobs/<job_id>/run', methods=['POST'])
     def api_run_job(job_id):
         """API endpoint to run a job immediately"""
+        logger.info(f"[API_RUN_JOB] Received request to run job: {job_id}")
+        
         try:
-            scheduler = getattr(app, 'scheduler_manager', None)
-            if not scheduler:
-                return jsonify({'error': 'Scheduler not available'}), 500
+            from core.job_executor import JobExecutor
+            job_executor = JobExecutor()
             
-            result = scheduler.run_job_once(job_id)
+            result = job_executor.execute_job(job_id)
             
-            if result:
+            if result['success']:
+                logger.info(f"[API_RUN_JOB] Job {job_id} executed successfully")
                 return jsonify({
-                    'message': 'Job executed',
-                    'status': result.status.value,
-                    'duration': result.duration_seconds,
-                    'output': result.output[:1000] if result.output else ''  # Limit output
+                    'success': True,
+                    'message': f'Job executed with status: {result["status"]}',
+                    'execution_id': result['execution_id'],
+                    'status': result['status'],
+                    'duration_seconds': result['duration_seconds'],
+                    'output': result['output'],
+                    'start_time': result['start_time'],
+                    'end_time': result['end_time']
                 })
             else:
-                return jsonify({'error': 'Failed to run job'}), 500
+                logger.warning(f"[API_RUN_JOB] Job {job_id} execution failed: {result['error']}")
+                return jsonify({
+                    'success': False,
+                    'error': result['error']
+                }), 400
         
         except Exception as e:
-            logger.error(f"API run job error: {e}")
-            return jsonify({'error': str(e)}), 500
+            logger.error(f"[API_RUN_JOB] API run job error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
     
     @app.route('/api/jobs/<job_id>/toggle', methods=['POST'])
     def api_toggle_job(job_id):
@@ -829,15 +876,67 @@ def create_routes(app):
     def api_job_history(job_id):
         """API endpoint for job execution history"""
         try:
-            scheduler = getattr(app, 'scheduler_manager', None)
-            if not scheduler:
-                return jsonify({'error': 'Scheduler not available'}), 500
+            from core.job_executor import JobExecutor
+            job_executor = JobExecutor()
             
             limit = request.args.get('limit', 50, type=int)
-            history = scheduler.get_execution_history(job_id, limit)
+            history = job_executor.get_execution_history(job_id, limit)
             
-            return jsonify(history)
+            logger.info(f"[API_JOB_HISTORY] Retrieved {len(history)} execution records for job {job_id}")
+            
+            return jsonify({
+                'success': True,
+                'job_id': job_id,
+                'execution_history': history,
+                'total_count': len(history)
+            })
         
         except Exception as e:
-            logger.error(f"API job history error: {e}")
-            return jsonify({'error': str(e)}), 500
+            logger.error(f"[API_JOB_HISTORY] API job history error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    @app.route('/api/jobs/<job_id>/status')
+    def api_job_status(job_id):
+        """API endpoint for job status"""
+        try:
+            from core.job_executor import JobExecutor
+            job_executor = JobExecutor()
+            
+            status = job_executor.get_job_status(job_id)
+            
+            return jsonify(status)
+        
+        except Exception as e:
+            logger.error(f"[API_JOB_STATUS] API job status error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    @app.route('/api/executions')
+    def api_all_executions():
+        """API endpoint for all job executions"""
+        try:
+            from core.job_executor import JobExecutor
+            job_executor = JobExecutor()
+            
+            limit = request.args.get('limit', 100, type=int)
+            history = job_executor.get_execution_history(limit=limit)
+            
+            logger.info(f"[API_ALL_EXECUTIONS] Retrieved {len(history)} execution records")
+            
+            return jsonify({
+                'success': True,
+                'executions': history,
+                'total_count': len(history)
+            })
+        
+        except Exception as e:
+            logger.error(f"[API_ALL_EXECUTIONS] API all executions error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
