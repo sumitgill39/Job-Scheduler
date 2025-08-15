@@ -51,8 +51,12 @@ def create_routes(app):
     def job_list():
         """Job list page"""
         try:
-            from core.job_manager import JobManager
-            job_manager = JobManager()
+            # Use global job manager instance instead of creating new one
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                logger.error("[JOB_LIST] Job manager not available")
+                flash('Database not available', 'error')
+                return redirect(url_for('index'))
             
             jobs_raw = job_manager.list_jobs()
             
@@ -92,8 +96,12 @@ def create_routes(app):
     def job_details(job_id):
         """Job details page"""
         try:
-            from core.job_manager import JobManager
-            job_manager = JobManager()
+            # Use global job manager instance
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                logger.error("[JOB_DETAILS] Job manager not available")
+                flash('Database not available', 'error')
+                return redirect(url_for('job_list'))
             
             job = job_manager.get_job(job_id)
             if not job:
@@ -130,8 +138,13 @@ def create_routes(app):
     def api_jobs():
         """API endpoint for job list"""
         try:
-            from core.job_manager import JobManager
-            job_manager = JobManager()
+            # Use global job manager instance
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Database not available'
+                }), 500
             
             # Get query parameters
             job_type = request.args.get('type')
@@ -185,9 +198,13 @@ def create_routes(app):
                         'error': 'SQL query is required for SQL jobs'
                     }), 400
             
-            # Use JobManager to create job
-            from core.job_manager import JobManager
-            job_manager = JobManager()
+            # Use global JobManager instance
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Database not available'
+                }), 500
             
             result = job_manager.create_job(data)
             
@@ -301,8 +318,11 @@ def create_routes(app):
     def api_get_connections():
         """API endpoint to get available database connections"""
         try:
-            from database.connection_pool import get_connection_pool
-            pool = get_connection_pool()
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'error': 'Database not available'}), 500
+            
             db_manager = pool.db_manager
             
             connections = []
@@ -331,8 +351,11 @@ def create_routes(app):
             if not data:
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
             
-            from database.connection_pool import get_connection_pool
-            pool = get_connection_pool()
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'error': 'Database not available'}), 500
+            
             db_manager = pool.db_manager
             
             result = db_manager.create_custom_connection(
@@ -367,8 +390,11 @@ def create_routes(app):
     def api_delete_connection(connection_name):
         """API endpoint to delete a database connection"""
         try:
-            from database.connection_pool import get_connection_pool
-            pool = get_connection_pool()
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'error': 'Database not available'}), 500
+            
             db_manager = pool.db_manager
             
             success = db_manager.remove_connection(connection_name)
@@ -388,8 +414,11 @@ def create_routes(app):
         logger.info(f"[API_TEST] Testing existing connection '{connection_name}' via API")
         
         try:
-            from database.connection_pool import get_connection_pool
-            pool = get_connection_pool()
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'error': 'Database not available'}), 500
+            
             db_manager = pool.db_manager
             
             # Test the existing connection
@@ -419,8 +448,11 @@ def create_routes(app):
     def api_system_database_status():
         """Get system database connection status"""
         try:
-            from database.connection_pool import get_connection_pool
-            pool = get_connection_pool()
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'connected': False, 'error': 'Database not available'}), 500
+            
             db_manager = pool.db_manager
             
             # Test system database connection
@@ -471,11 +503,13 @@ def create_routes(app):
         logger.info("[PARALLEL_VALIDATION] Starting parallel validation of all connections")
         
         try:
-            from database.connection_pool import get_connection_pool
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'error': 'Database not available', 'total_time': time.time() - start_time}), 500
+            
             import concurrent.futures
             import threading
-            
-            pool = get_connection_pool()
             connections = pool.db_manager.list_connections()
             
             logger.info(f"[PARALLEL_VALIDATION] Found {len(connections)} connections to validate: {', '.join(connections)}")
@@ -592,14 +626,17 @@ def create_routes(app):
     def api_connection_audit_trail():
         """Get connection audit trail"""
         try:
-            from database.connection_manager import DatabaseConnectionManager
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'error': 'Database not available'}), 500
             
             connection_name = request.args.get('connection_name')
             limit = request.args.get('limit', 50, type=int)
             
             logger.info(f"[AUDIT_API] Retrieving audit trail" + (f" for connection '{connection_name}'" if connection_name else " (all connections)") + f" (limit: {limit})")
             
-            db_manager = DatabaseConnectionManager()
+            db_manager = pool.db_manager
             audit_entries = db_manager.get_connection_audit_trail(connection_name, limit)
             
             logger.info(f"[AUDIT_API] Retrieved {len(audit_entries)} audit entries")
@@ -638,8 +675,10 @@ def create_routes(app):
     def api_connection_pool_stats():
         """Get connection pool statistics"""
         try:
-            from database.connection_pool import get_connection_pool
-            pool = get_connection_pool()
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'error': 'Database not available'}), 500
             
             stats = pool.get_pool_stats()
             
@@ -662,8 +701,10 @@ def create_routes(app):
     def api_cleanup_pool():
         """Manually trigger connection pool cleanup"""
         try:
-            from database.connection_pool import get_connection_pool
-            pool = get_connection_pool()
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'error': 'Database not available'}), 500
             
             # Get stats before cleanup
             stats_before = pool.get_pool_stats()
