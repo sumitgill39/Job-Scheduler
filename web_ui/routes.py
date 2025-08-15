@@ -54,7 +54,23 @@ def create_routes(app):
             from core.job_manager import JobManager
             job_manager = JobManager()
             
-            jobs = job_manager.list_jobs()
+            jobs_raw = job_manager.list_jobs()
+            
+            # Transform jobs data to match template expectations
+            jobs = []
+            for job in jobs_raw:
+                job_transformed = {
+                    'id': job['job_id'],  # Template expects 'id', not 'job_id'
+                    'name': job['name'],
+                    'type': job['type'],
+                    'enabled': job['enabled'],
+                    'created_date': job['created_date'],
+                    'modified_date': job['modified_date'],
+                    'status': 'enabled' if job['enabled'] else 'disabled',  # Add status field
+                    'is_running': False,  # TODO: Connect to scheduler to get real status
+                    'last_run': 'Never'   # TODO: Get from job execution history
+                }
+                jobs.append(job_transformed)
             
             logger.info(f"[JOB_LIST] Displaying {len(jobs)} jobs")
             
