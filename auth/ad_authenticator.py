@@ -3,12 +3,26 @@ Active Directory Authentication Module for Windows Job Scheduler
 Authenticates users against local AD domain
 """
 
-import ldap3
-from ldap3 import Server, Connection, ALL, NTLM
-from ldap3.core.exceptions import LDAPException, LDAPBindError
+try:
+    import ldap3
+    from ldap3 import Server, Connection, ALL, NTLM
+    from ldap3.core.exceptions import LDAPException, LDAPBindError
+    HAS_LDAP = True
+except ImportError:
+    HAS_LDAP = False
+    ldap3 = None
+    Server = Connection = ALL = NTLM = None
+    LDAPException = LDAPBindError = Exception
+
+try:
+    import dns.resolver
+    HAS_DNS = True
+except ImportError:
+    HAS_DNS = False
+    dns = None
+
 from typing import Dict, Optional, List
 import socket
-import dns.resolver
 from utils.logger import get_logger
 
 
@@ -19,6 +33,12 @@ class ADAuthenticator:
         self.domain = domain
         self.logger = get_logger(__name__)
         self.domain_controllers = []
+        
+        if not HAS_LDAP:
+            self.logger.warning(f"[AD_AUTH] LDAP3 not available - AD authentication disabled")
+            self.logger.warning(f"[AD_AUTH] Install with: pip install ldap3 dnspython cryptography")
+            return
+            
         self.logger.info(f"[AD_AUTH] Initializing AD authenticator for domain: {domain}")
         
         # Discover domain controllers
@@ -30,15 +50,18 @@ class ADAuthenticator:
             # Try DNS SRV record lookup for domain controllers
             srv_query = f"_ldap._tcp.{self.domain}"
             
-            try:
-                answers = dns.resolver.resolve(srv_query, 'SRV')
-                for rdata in answers:
-                    dc_host = str(rdata.target).rstrip('.')
-                    dc_port = rdata.port
-                    self.domain_controllers.append((dc_host, dc_port))
-                    self.logger.info(f"[AD_AUTH] Discovered DC: {dc_host}:{dc_port}")
-            except Exception as dns_error:
-                self.logger.warning(f"[AD_AUTH] DNS SRV lookup failed: {dns_error}")
+            if HAS_DNS:
+                try:
+                    answers = dns.resolver.resolve(srv_query, 'SRV')
+                    for rdata in answers:
+                        dc_host = str(rdata.target).rstrip('.')
+                        dc_port = rdata.port
+                        self.domain_controllers.append((dc_host, dc_port))
+                        self.logger.info(f"[AD_AUTH] Discovered DC: {dc_host}:{dc_port}")
+                except Exception as dns_error:
+                    self.logger.warning(f"[AD_AUTH] DNS SRV lookup failed: {dns_error}")
+            else:
+                self.logger.warning(f"[AD_AUTH] DNS module not available - skipping SRV lookup")
                 
                 # Fallback: try common DC names
                 common_dc_names = [
@@ -79,6 +102,14 @@ class ADAuthenticator:
         Returns:
             Dict with authentication result and user information
         """
+        if not HAS_LDAP:
+            return {
+                'success': False,
+                'error': 'AD authentication not available - missing ldap3 dependencies',
+                'domain': self.domain,
+                'install_command': 'pip install ldap3 dnspython cryptography'
+            }
+            
         try:
             self.logger.info(f"[AD_AUTH] Attempting authentication for user: {username}")
             
@@ -244,6 +275,18 @@ class ADAuthenticator:
     
     def test_connection(self) -> Dict[str, any]:
         """Test connection to domain controllers"""
+        if not HAS_LDAP:
+            return {
+                'domain': self.domain,
+                'domain_controllers': [{
+                    'dc': 'N/A',
+                    'status': 'ldap3_not_available',
+                    'error': 'Missing ldap3 dependencies - install with: pip install ldap3 dnspython cryptography'
+                }],
+                'total_controllers': 1,
+                'reachable_controllers': 0
+            }
+            
         results = []
         
         for dc_host, dc_port in self.domain_controllers:
