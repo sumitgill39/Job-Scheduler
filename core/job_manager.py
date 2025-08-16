@@ -375,3 +375,78 @@ class JobManager:
                 'success': False,
                 'error': f'Error deleting job: {str(e)}'
             }
+    
+    def get_all_execution_history(self, limit: int = 1000) -> List[Dict[str, Any]]:
+        """Get complete execution history from database"""
+        try:
+            system_connection = self.connection_pool.get_connection("system")
+            if not system_connection:
+                self.logger.error("[JOB_MANAGER] Cannot retrieve execution history - database connection failed")
+                return []
+            
+            cursor = system_connection.cursor()
+            
+            # Query execution history with job details
+            cursor.execute("""
+                SELECT 
+                    jeh.execution_id,
+                    jeh.job_id,
+                    jeh.job_name,
+                    jeh.status,
+                    jeh.start_time,
+                    jeh.end_time,
+                    jeh.duration_seconds,
+                    jeh.output,
+                    jeh.error_message,
+                    jeh.return_code,
+                    jeh.retry_count,
+                    jeh.max_retries,
+                    jeh.metadata,
+                    jc.job_type
+                FROM job_execution_history jeh
+                LEFT JOIN job_configurations jc ON jeh.job_id = jc.job_id
+                ORDER BY jeh.start_time DESC
+                LIMIT ?
+            """, (limit,))
+            
+            rows = cursor.fetchall()
+            cursor.close()
+            
+            history = []
+            for row in rows:
+                execution = {
+                    'execution_id': row[0],
+                    'job_id': row[1],
+                    'job_name': row[2],
+                    'status': row[3],
+                    'start_time': row[4],
+                    'end_time': row[5],
+                    'duration_seconds': row[6],
+                    'output': row[7],
+                    'error_message': row[8],
+                    'return_code': row[9],
+                    'retry_count': row[10],
+                    'max_retries': row[11],
+                    'metadata': row[12],
+                    'job_type': row[13] if row[13] else 'unknown'
+                }
+                
+                # Parse metadata if it exists
+                if execution['metadata']:
+                    try:
+                        metadata_dict = json.loads(execution['metadata'])
+                        # Add job_type to metadata if not present
+                        if 'job_type' not in metadata_dict and execution['job_type']:
+                            metadata_dict['job_type'] = execution['job_type']
+                        execution['metadata'] = json.dumps(metadata_dict)
+                    except:
+                        pass
+                
+                history.append(execution)
+            
+            self.logger.info(f"[JOB_MANAGER] Retrieved {len(history)} execution history records")
+            return history
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error retrieving execution history: {e}")
+            return []

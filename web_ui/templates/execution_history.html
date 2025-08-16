@@ -1,0 +1,695 @@
+{% extends "base.html" %}
+
+{% block title %}Execution History - Windows Job Scheduler{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-0">
+                        <i class="fas fa-history me-2"></i>Job Execution History
+                    </h4>
+                    <small class="text-muted">Complete execution history for all jobs</small>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" onclick="refreshHistory()">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh
+                    </button>
+                    <button class="btn btn-outline-success btn-sm" onclick="exportHistory()">
+                        <i class="fas fa-download me-1"></i>Export
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card-body">
+                <!-- Filters and Search -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <label class="form-label">Status Filter</label>
+                        <select class="form-select" id="statusFilter" onchange="applyFilters()">
+                            <option value="">All Statuses</option>
+                            <option value="success">Success</option>
+                            <option value="failed">Failed</option>
+                            <option value="running">Running</option>
+                            <option value="timeout">Timeout</option>
+                            <option value="cancelled">Cancelled</option>
+                            <option value="retry">Retry</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Job Type</label>
+                        <select class="form-select" id="jobTypeFilter" onchange="applyFilters()">
+                            <option value="">All Types</option>
+                            <option value="sql">SQL Jobs</option>
+                            <option value="powershell">PowerShell Jobs</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Date Range</label>
+                        <select class="form-select" id="dateRangeFilter" onchange="applyFilters()">
+                            <option value="today">Today</option>
+                            <option value="week">Last 7 Days</option>
+                            <option value="month">Last 30 Days</option>
+                            <option value="all" selected>All Time</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Search</label>
+                        <input type="text" class="form-control" id="searchInput" placeholder="Search job name..." 
+                               oninput="applyFilters()">
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <div class="metric-number text-primary" id="totalExecutions">-</div>
+                                <div class="metric-label">Total Executions</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <div class="metric-number text-success" id="successfulExecutions">-</div>
+                                <div class="metric-label">Successful</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <div class="metric-number text-danger" id="failedExecutions">-</div>
+                                <div class="metric-label">Failed</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <div class="metric-number text-info" id="avgDuration">-</div>
+                                <div class="metric-label">Avg Duration</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History Table -->
+                <div class="table-responsive">
+                    <table class="table table-hover" id="historyTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th onclick="sortTable('start_time')" style="cursor: pointer;">
+                                    <i class="fas fa-clock me-1"></i>Execution Time
+                                    <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th onclick="sortTable('job_name')" style="cursor: pointer;">
+                                    <i class="fas fa-briefcase me-1"></i>Job Name
+                                    <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th onclick="sortTable('job_type')" style="cursor: pointer;">
+                                    <i class="fas fa-cog me-1"></i>Type
+                                    <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th onclick="sortTable('status')" style="cursor: pointer;">
+                                    <i class="fas fa-flag me-1"></i>Status
+                                    <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th onclick="sortTable('duration_seconds')" style="cursor: pointer;">
+                                    <i class="fas fa-stopwatch me-1"></i>Duration
+                                    <i class="fas fa-sort ms-1"></i>
+                                </th>
+                                <th>
+                                    <i class="fas fa-info-circle me-1"></i>Details
+                                </th>
+                                <th>
+                                    <i class="fas fa-tools me-1"></i>Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <!-- Will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div class="d-flex justify-content-between align-items-center mt-4">
+                    <div>
+                        <span id="recordsInfo">Showing 0 - 0 of 0 records</span>
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0" id="pagination">
+                            <!-- Will be populated by JavaScript -->
+                        </ul>
+                    </nav>
+                </div>
+
+                <!-- Loading State -->
+                <div id="historyLoading" class="text-center py-5" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="mt-2">Loading execution history...</div>
+                </div>
+
+                <!-- No Data State -->
+                <div id="noHistoryData" class="text-center py-5" style="display: none;">
+                    <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Execution History Found</h5>
+                    <p class="text-muted">No job executions match your current filters.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Execution Details Modal -->
+<div class="modal fade" id="executionDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-info-circle me-2"></i>Execution Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="executionDetailsBody">
+                <!-- Will be populated by JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .metric-card {
+        text-align: center;
+        padding: 1.5rem;
+    }
+    
+    .metric-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .table th {
+        white-space: nowrap;
+        user-select: none;
+    }
+    
+    .table th:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+    
+    .duration-badge {
+        font-family: 'Courier New', monospace;
+        font-size: 0.8rem;
+    }
+    
+    .job-type-icon {
+        width: 20px;
+        text-align: center;
+    }
+    
+    .execution-row:hover {
+        background-color: rgba(0, 123, 255, 0.05);
+    }
+    
+    .filters-section {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .pagination-sm .page-link {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .table-responsive {
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .card {
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border-radius: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentPage = 1;
+    let pageSize = 50;
+    let sortField = 'start_time';
+    let sortDirection = 'desc';
+    let allExecutions = [];
+    let filteredExecutions = [];
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+        loadExecutionHistory();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadExecutionHistory, 30000);
+    });
+
+    // Load execution history from API
+    function loadExecutionHistory() {
+        showLoading(true);
+        
+        fetch('/api/executions/history')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    allExecutions = data.executions || [];
+                    applyFilters();
+                    updateSummaryCards();
+                } else {
+                    showError('Failed to load execution history: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error loading execution history:', error);
+                showError('Error loading execution history: ' + error.message);
+            })
+            .finally(() => {
+                showLoading(false);
+            });
+    }
+
+    // Apply filters and search
+    function applyFilters() {
+        const statusFilter = document.getElementById('statusFilter').value;
+        const jobTypeFilter = document.getElementById('jobTypeFilter').value;
+        const dateRangeFilter = document.getElementById('dateRangeFilter').value;
+        const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+
+        filteredExecutions = allExecutions.filter(execution => {
+            // Status filter
+            if (statusFilter && execution.status !== statusFilter) return false;
+            
+            // Job type filter (extract from metadata or job_name)
+            if (jobTypeFilter) {
+                const jobType = execution.metadata?.job_type || 
+                               (execution.job_name.toLowerCase().includes('sql') ? 'sql' : 'powershell');
+                if (jobType !== jobTypeFilter) return false;
+            }
+            
+            // Date range filter
+            if (dateRangeFilter !== 'all') {
+                const executionDate = new Date(execution.start_time);
+                const now = new Date();
+                const daysDiff = (now - executionDate) / (1000 * 60 * 60 * 24);
+                
+                if (dateRangeFilter === 'today' && daysDiff > 1) return false;
+                if (dateRangeFilter === 'week' && daysDiff > 7) return false;
+                if (dateRangeFilter === 'month' && daysDiff > 30) return false;
+            }
+            
+            // Search filter
+            if (searchQuery && !execution.job_name.toLowerCase().includes(searchQuery)) return false;
+            
+            return true;
+        });
+
+        // Sort filtered results
+        sortExecutions();
+        
+        // Reset to first page
+        currentPage = 1;
+        
+        // Render table
+        renderHistoryTable();
+        renderPagination();
+    }
+
+    // Sort executions
+    function sortExecutions() {
+        filteredExecutions.sort((a, b) => {
+            let aVal = a[sortField];
+            let bVal = b[sortField];
+            
+            // Handle different data types
+            if (sortField === 'start_time' || sortField === 'end_time') {
+                aVal = new Date(aVal);
+                bVal = new Date(bVal);
+            } else if (sortField === 'duration_seconds') {
+                aVal = parseFloat(aVal) || 0;
+                bVal = parseFloat(bVal) || 0;
+            } else if (typeof aVal === 'string') {
+                aVal = aVal.toLowerCase();
+                bVal = bVal.toLowerCase();
+            }
+            
+            if (sortDirection === 'asc') {
+                return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+            } else {
+                return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
+            }
+        });
+    }
+
+    // Sort table by field
+    function sortTable(field) {
+        if (sortField === field) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortField = field;
+            sortDirection = 'desc';
+        }
+        
+        applyFilters();
+    }
+
+    // Render history table
+    function renderHistoryTable() {
+        const tbody = document.getElementById('historyTableBody');
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = Math.min(startIndex + pageSize, filteredExecutions.length);
+        const pageExecutions = filteredExecutions.slice(startIndex, endIndex);
+
+        if (pageExecutions.length === 0) {
+            tbody.innerHTML = '';
+            document.getElementById('noHistoryData').style.display = 'block';
+            document.getElementById('recordsInfo').textContent = 'Showing 0 - 0 of 0 records';
+            return;
+        }
+
+        document.getElementById('noHistoryData').style.display = 'none';
+
+        tbody.innerHTML = pageExecutions.map(execution => {
+            const startTime = new Date(execution.start_time);
+            const duration = execution.duration_seconds ? 
+                formatDuration(execution.duration_seconds) : 'N/A';
+            const status = execution.status || 'unknown';
+            const jobType = execution.metadata?.job_type || 'unknown';
+
+            return `
+                <tr class="execution-row">
+                    <td>
+                        <div>${startTime.toLocaleString()}</div>
+                        <small class="text-muted">${getRelativeTime(startTime)}</small>
+                    </td>
+                    <td>
+                        <div class="fw-bold">${execution.job_name}</div>
+                        <small class="text-muted">ID: ${execution.job_id}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-dark">
+                            <i class="${getJobTypeIcon(jobType)} job-type-icon me-1"></i>
+                            ${jobType.toUpperCase()}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="status-badge ${getStatusClass(status)}">${status.toUpperCase()}</span>
+                    </td>
+                    <td>
+                        <span class="duration-badge">${duration}</span>
+                    </td>
+                    <td>
+                        <button class="btn btn-outline-info btn-sm" onclick="showExecutionDetails(${execution.execution_id})">
+                            <i class="fas fa-eye me-1"></i>View
+                        </button>
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-outline-primary btn-sm" onclick="viewJobDetails('${execution.job_id}')" title="View Job">
+                                <i class="fas fa-briefcase"></i>
+                            </button>
+                            ${execution.status === 'failed' ? `
+                            <button class="btn btn-outline-warning btn-sm" onclick="retryJob('${execution.job_id}')" title="Retry Job">
+                                <i class="fas fa-redo"></i>
+                            </button>
+                            ` : ''}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        // Update records info
+        document.getElementById('recordsInfo').textContent = 
+            `Showing ${startIndex + 1} - ${endIndex} of ${filteredExecutions.length} records`;
+    }
+
+    // Render pagination
+    function renderPagination() {
+        const pagination = document.getElementById('pagination');
+        const totalPages = Math.ceil(filteredExecutions.length / pageSize);
+
+        if (totalPages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
+
+        let paginationHTML = '';
+
+        // Previous button
+        paginationHTML += `
+            <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">Previous</a>
+            </li>
+        `;
+
+        // Page numbers
+        const maxVisiblePages = 5;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+        if (endPage - startPage + 1 < maxVisiblePages) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            paginationHTML += `
+                <li class="page-item ${i === currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
+                </li>
+            `;
+        }
+
+        // Next button
+        paginationHTML += `
+            <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">Next</a>
+            </li>
+        `;
+
+        pagination.innerHTML = paginationHTML;
+    }
+
+    // Change page
+    function changePage(page) {
+        const totalPages = Math.ceil(filteredExecutions.length / pageSize);
+        if (page >= 1 && page <= totalPages) {
+            currentPage = page;
+            renderHistoryTable();
+            renderPagination();
+        }
+    }
+
+    // Update summary cards
+    function updateSummaryCards() {
+        const total = allExecutions.length;
+        const successful = allExecutions.filter(e => e.status === 'success').length;
+        const failed = allExecutions.filter(e => e.status === 'failed').length;
+        
+        const durations = allExecutions
+            .filter(e => e.duration_seconds)
+            .map(e => parseFloat(e.duration_seconds));
+        const avgDuration = durations.length > 0 ? 
+            durations.reduce((sum, d) => sum + d, 0) / durations.length : 0;
+
+        document.getElementById('totalExecutions').textContent = total.toLocaleString();
+        document.getElementById('successfulExecutions').textContent = successful.toLocaleString();
+        document.getElementById('failedExecutions').textContent = failed.toLocaleString();
+        document.getElementById('avgDuration').textContent = formatDuration(avgDuration);
+    }
+
+    // Show execution details modal
+    function showExecutionDetails(executionId) {
+        const execution = allExecutions.find(e => e.execution_id === executionId);
+        if (!execution) return;
+
+        const modalBody = document.getElementById('executionDetailsBody');
+        const startTime = new Date(execution.start_time);
+        const endTime = execution.end_time ? new Date(execution.end_time) : null;
+
+        modalBody.innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Execution Information</h6>
+                    <table class="table table-sm">
+                        <tr><td><strong>Execution ID:</strong></td><td>${execution.execution_id}</td></tr>
+                        <tr><td><strong>Job Name:</strong></td><td>${execution.job_name}</td></tr>
+                        <tr><td><strong>Job ID:</strong></td><td>${execution.job_id}</td></tr>
+                        <tr><td><strong>Status:</strong></td><td><span class="status-badge ${getStatusClass(execution.status)}">${execution.status.toUpperCase()}</span></td></tr>
+                        <tr><td><strong>Start Time:</strong></td><td>${startTime.toLocaleString()}</td></tr>
+                        <tr><td><strong>End Time:</strong></td><td>${endTime ? endTime.toLocaleString() : 'N/A'}</td></tr>
+                        <tr><td><strong>Duration:</strong></td><td>${execution.duration_seconds ? formatDuration(execution.duration_seconds) : 'N/A'}</td></tr>
+                        <tr><td><strong>Return Code:</strong></td><td>${execution.return_code || 'N/A'}</td></tr>
+                        <tr><td><strong>Retry Count:</strong></td><td>${execution.retry_count || 0} / ${execution.max_retries || 0}</td></tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Output</h6>
+                    <div class="bg-light p-3 rounded" style="max-height: 200px; overflow-y: auto;">
+                        <pre style="margin: 0; white-space: pre-wrap;">${execution.output || 'No output available'}</pre>
+                    </div>
+                    ${execution.error_message ? `
+                        <h6 class="mt-3">Error Message</h6>
+                        <div class="bg-danger bg-opacity-10 p-3 rounded">
+                            <pre style="margin: 0; white-space: pre-wrap;">${execution.error_message}</pre>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+            ${execution.metadata ? `
+                <div class="mt-3">
+                    <h6>Metadata</h6>
+                    <div class="bg-light p-3 rounded">
+                        <pre style="margin: 0;">${JSON.stringify(JSON.parse(execution.metadata || '{}'), null, 2)}</pre>
+                    </div>
+                </div>
+            ` : ''}
+        `;
+
+        new bootstrap.Modal(document.getElementById('executionDetailsModal')).show();
+    }
+
+    // Utility functions
+    function formatDuration(seconds) {
+        if (!seconds || seconds < 0) return 'N/A';
+        
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        
+        if (hrs > 0) return `${hrs}h ${mins}m ${secs}s`;
+        if (mins > 0) return `${mins}m ${secs}s`;
+        return `${secs}s`;
+    }
+
+    function getRelativeTime(date) {
+        const now = new Date();
+        const diff = now - date;
+        const minutes = Math.floor(diff / 60000);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+        if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+        return 'Just now';
+    }
+
+    function getStatusClass(status) {
+        const statusClasses = {
+            'success': 'status-success',
+            'failed': 'status-failed',
+            'running': 'status-running',
+            'pending': 'status-pending',
+            'cancelled': 'status-cancelled',
+            'timeout': 'status-timeout',
+            'retry': 'status-retry'
+        };
+        return statusClasses[status] || 'status-pending';
+    }
+
+    function getJobTypeIcon(type) {
+        return type === 'sql' ? 'fas fa-database' : 'fab fa-microsoft';
+    }
+
+    function showLoading(show) {
+        document.getElementById('historyLoading').style.display = show ? 'block' : 'none';
+    }
+
+    function refreshHistory() {
+        loadExecutionHistory();
+    }
+
+    function exportHistory() {
+        const csvData = filteredExecutions.map(execution => ({
+            'Execution ID': execution.execution_id,
+            'Job Name': execution.job_name,
+            'Job ID': execution.job_id,
+            'Status': execution.status,
+            'Start Time': execution.start_time,
+            'End Time': execution.end_time || '',
+            'Duration (seconds)': execution.duration_seconds || '',
+            'Return Code': execution.return_code || '',
+            'Error Message': execution.error_message || ''
+        }));
+
+        downloadCSV(csvData, 'job_execution_history.csv');
+    }
+
+    function downloadCSV(data, filename) {
+        if (data.length === 0) return;
+        
+        const headers = Object.keys(data[0]);
+        const csvContent = [
+            headers.join(','),
+            ...data.map(row => headers.map(header => `"${row[header]}"`).join(','))
+        ].join('\n');
+        
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    function viewJobDetails(jobId) {
+        window.location.href = `/jobs/${jobId}`;
+    }
+
+    function retryJob(jobId) {
+        if (confirm('Are you sure you want to retry this job?')) {
+            fetch(`/api/jobs/${jobId}/run`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showSuccess('Job retry initiated successfully');
+                        setTimeout(loadExecutionHistory, 2000);
+                    } else {
+                        showError('Failed to retry job: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    showError('Error retrying job: ' + error.message);
+                });
+        }
+    }
+</script>
+{% endblock %}

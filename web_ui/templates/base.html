@@ -164,6 +164,11 @@
                             <i class="fas fa-database me-1"></i>Connections
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'execution_history' %}active{% endif %}" href="{{ url_for('execution_history') }}">
+                            <i class="fas fa-history me-1"></i>History
+                        </a>
+                    </li>
                     {% if session.get('authenticated') %}
                         <!-- Check if user is admin before showing admin link -->
                         {% set is_admin = session.get('groups', []) %}
@@ -266,6 +271,12 @@
                             <a class="nav-link {% if request.endpoint == 'connections' %}active{% endif %}" href="{{ url_for('connections') }}">
                                 <i class="fas fa-database me-2"></i>
                                 Database Connections
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'execution_history' %}active{% endif %}" href="{{ url_for('execution_history') }}">
+                                <i class="fas fa-history me-2"></i>
+                                Execution History
                             </a>
                         </li>
                         {% if session.get('authenticated') %}

@@ -113,6 +113,18 @@ def create_routes(app):
             flash(f'Error loading jobs: {str(e)}', 'error')
             return redirect(url_for('index'))
     
+    @app.route('/executions/history')
+    def execution_history():
+        """Execution history dashboard page"""
+        try:
+            logger.info("[EXECUTION_HISTORY] Rendering execution history page")
+            return render_template('execution_history.html')
+            
+        except Exception as e:
+            logger.error(f"[EXECUTION_HISTORY] Execution history page error: {e}")
+            flash(f'Error loading execution history: {str(e)}', 'error')
+            return redirect(url_for('index'))
+
     @app.route('/jobs/create')
     def create_job():
         """Job creation page"""
@@ -279,6 +291,55 @@ def create_routes(app):
                 'error': f'Unexpected error: {str(e)}'
             }), 500
     
+    @app.route('/api/executions/history', methods=['GET'])
+    def api_execution_history():
+        """API endpoint to get complete execution history"""
+        logger.info("[API_EXECUTION_HISTORY] Fetching execution history")
+        
+        try:
+            # Get query parameters
+            limit = request.args.get('limit', 1000, type=int)
+            status_filter = request.args.get('status')
+            job_type_filter = request.args.get('job_type')
+            
+            # Use global JobManager instance
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Database not available'
+                }), 500
+            
+            # Get execution history from database
+            history = job_manager.get_all_execution_history(limit)
+            
+            # Apply filters if provided
+            if status_filter:
+                history = [h for h in history if h.get('status') == status_filter]
+            
+            if job_type_filter:
+                history = [h for h in history if h.get('job_type') == job_type_filter]
+            
+            logger.info(f"[API_EXECUTION_HISTORY] Returning {len(history)} execution records")
+            
+            return jsonify({
+                'success': True,
+                'executions': history,
+                'total_count': len(history),
+                'applied_filters': {
+                    'status': status_filter,
+                    'job_type': job_type_filter,
+                    'limit': limit
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"[API_EXECUTION_HISTORY] Error fetching execution history: {e}")
+            return jsonify({
+                'success': False,
+                'error': f'Failed to fetch execution history: {str(e)}'
+            }), 500
+
     @app.route('/api/jobs/<job_id>/run', methods=['POST'])
     def api_run_job(job_id):
         """API endpoint to run a job immediately"""
