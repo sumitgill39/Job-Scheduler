@@ -30,13 +30,14 @@ class WindowsLogger:
             except Exception:
                 pass
         
-        # Default configuration
+        # Default configuration with enhanced crash diagnosis
         return {
             'log_file': 'logs\\scheduler.log',
-            'max_file_size': '10MB',
-            'backup_count': 5,
-            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            'level': 'INFO'
+            'max_file_size': '50MB',  # Increased for more logging
+            'backup_count': 10,  # Keep more backups for crash analysis
+            'format': '%(asctime)s.%(msecs)03d [%(process)d:%(thread)d] %(name)-20s %(levelname)-8s %(funcName)-20s:%(lineno)-4d %(message)s',
+            'level': 'DEBUG',  # More verbose logging for crash diagnosis
+            'datefmt': '%Y-%m-%d %H:%M:%S'
         }
     
     def setup_logger(self, log_level: str = None) -> logging.Logger:
@@ -52,12 +53,14 @@ class WindowsLogger:
         # Clear existing handlers
         self.logger.handlers.clear()
         
-        # Create formatter
-        formatter = logging.Formatter(self.config.get('format'))
+        # Create enhanced formatter with timestamp and process info
+        log_format = self.config.get('format')
+        date_format = self.config.get('datefmt', '%Y-%m-%d %H:%M:%S')
+        formatter = logging.Formatter(log_format, datefmt=date_format)
         
-        # Console handler
+        # Console handler with DEBUG level for crash diagnosis
         console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.INFO)
+        console_handler.setLevel(logging.DEBUG)  # More verbose console output
         console_handler.setFormatter(formatter)
         self.logger.addHandler(console_handler)
         
