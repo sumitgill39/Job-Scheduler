@@ -156,12 +156,23 @@ class JobManager:
             return False
     
     def _save_job_to_database(self, job_config: Dict[str, Any]) -> bool:
-        """Save job configuration to database"""
+        """Save job configuration to database or mock storage"""
         try:
             system_connection = self.connection_pool.get_connection("system")
             if not system_connection:
-                self.logger.error("[JOB_MANAGER] Cannot save job: system database not available")
-                return False
+                self.logger.warning("[JOB_MANAGER] System database not available, using mock storage")
+                
+                # Use mock storage when database is not available
+                from .mock_job_storage import get_mock_storage
+                mock_storage = get_mock_storage()
+                result = mock_storage.save_job(job_config)
+                
+                if result['success']:
+                    self.logger.info(f"[JOB_MANAGER] Job saved to mock storage: {job_config['job_id']}")
+                    return True
+                else:
+                    self.logger.error(f"[JOB_MANAGER] Failed to save to mock storage: {result['error']}")
+                    return False
             
             cursor = system_connection.cursor()
             
@@ -200,11 +211,14 @@ class JobManager:
             return False
     
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieve job configuration by ID"""
+        """Retrieve job configuration by ID from database or mock storage"""
         try:
             system_connection = self.connection_pool.get_connection("system")
             if not system_connection:
-                return None
+                # Use mock storage when database is not available
+                from .mock_job_storage import get_mock_storage
+                mock_storage = get_mock_storage()
+                return mock_storage.get_job(job_id)
             
             cursor = system_connection.cursor()
             cursor.execute("""
@@ -242,11 +256,23 @@ class JobManager:
             return None
     
     def list_jobs(self, job_type: str = None, enabled_only: bool = False) -> List[Dict[str, Any]]:
-        """List all jobs with optional filtering"""
+        """List all jobs with optional filtering from database or mock storage"""
         try:
             system_connection = self.connection_pool.get_connection("system")
             if not system_connection:
-                return []
+                # Use mock storage when database is not available
+                from .mock_job_storage import get_mock_storage
+                mock_storage = get_mock_storage()
+                all_jobs = mock_storage.get_all_jobs()
+                
+                # Apply filters
+                filtered_jobs = all_jobs
+                if job_type:
+                    filtered_jobs = [job for job in filtered_jobs if job.get('type') == job_type]
+                if enabled_only:
+                    filtered_jobs = [job for job in filtered_jobs if job.get('enabled', True)]
+                
+                return filtered_jobs
             
             cursor = system_connection.cursor()
             

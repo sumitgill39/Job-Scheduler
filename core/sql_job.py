@@ -57,11 +57,21 @@ class SqlJob(JobBase):
         
         self.job_logger.info(f"Initialized SQL job with query: {self.sql_query[:50]}...")
     
-    def execute(self) -> JobResult:
+    def execute(self, execution_logger=None) -> JobResult:
         """Execute SQL query"""
         start_time = datetime.now()
         
+        if execution_logger:
+            execution_logger.info("Starting SQL job execution", "SQL_JOB", {
+                'query_preview': self.sql_query[:100] + "..." if len(self.sql_query) > 100 else self.sql_query,
+                'connection_name': self.connection_name,
+                'query_timeout': self.query_timeout,
+                'max_rows': self.max_rows
+            })
+        
         if not HAS_PYODBC:
+            if execution_logger:
+                execution_logger.error("pyodbc not available - SQL Server drivers not installed", "SQL_JOB")
             return JobResult(
                 job_id=self.job_id,
                 job_name=self.name,
@@ -72,9 +82,13 @@ class SqlJob(JobBase):
             )
         
         try:
+            if execution_logger:
+                execution_logger.info(f"Executing SQL query on connection: {self.connection_name}", "SQL_JOB")
             self.job_logger.info(f"Executing SQL query on connection: {self.connection_name}")
             
             # Get connection
+            if execution_logger:
+                execution_logger.debug("Attempting to get database connection", "SQL_JOB")
             connection = self._get_connection()
             if not connection:
                 return JobResult(

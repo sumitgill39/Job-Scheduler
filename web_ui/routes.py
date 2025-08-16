@@ -21,7 +21,7 @@ def create_routes(app):
         
         # Public endpoints that don't require authentication  
         # Adding API endpoints for testing job execution functionality
-        public_endpoints = ['login', 'api_test_domain', 'static', 'api_jobs', 'api_create_job', 'api_run_job']
+        public_endpoints = ['login', 'api_test_domain', 'static', 'api_jobs', 'api_create_job', 'api_run_job', 'api_job_logs']
         
         if request.endpoint in public_endpoints:
             return None
@@ -1009,6 +1009,69 @@ def create_routes(app):
         
         except Exception as e:
             logger.error(f"[API_ALL_EXECUTIONS] API all executions error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    @app.route('/api/jobs/<job_id>/logs')
+    def api_job_logs(job_id):
+        """API endpoint to get detailed execution logs for a specific job execution"""
+        logger.info(f"[API_JOB_LOGS] Getting execution logs for job: {job_id}")
+        
+        try:
+            # Get execution_id from query parameters if provided
+            execution_id = request.args.get('execution_id', type=int)
+            include_details = request.args.get('include_details', 'true').lower() == 'true'
+            
+            try:
+                from core.job_executor import JobExecutor
+                job_executor = JobExecutor()
+            except ImportError as e:
+                return jsonify({
+                    'success': False,
+                    'error': 'Execution logs not available: Missing database dependencies.'
+                }), 500
+            
+            if execution_id:
+                # Get logs for specific execution
+                history = job_executor.get_execution_history(job_id, limit=1000)
+                execution_record = next((h for h in history if h['execution_id'] == execution_id), None)
+                
+                if not execution_record:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Execution {execution_id} not found for job {job_id}'
+                    }), 404
+                
+                # Extract detailed logs from output field
+                logs_data = execution_record.get('output', 'No detailed logs available')
+                
+                return jsonify({
+                    'success': True,
+                    'job_id': job_id,
+                    'execution_id': execution_id,
+                    'execution_record': execution_record,
+                    'detailed_logs': logs_data,
+                    'logs_available': bool(logs_data and logs_data != 'No detailed logs available')
+                })
+            else:
+                # Get all executions for this job
+                history = job_executor.get_execution_history(job_id, limit=50)
+                
+                # Add log availability flag to each execution
+                for record in history:
+                    record['has_detailed_logs'] = bool(record.get('output'))
+                
+                return jsonify({
+                    'success': True,
+                    'job_id': job_id,
+                    'executions': history,
+                    'total_count': len(history)
+                })
+        
+        except Exception as e:
+            logger.error(f"[API_JOB_LOGS] API job logs error: {e}")
             return jsonify({
                 'success': False,
                 'error': str(e)

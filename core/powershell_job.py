@@ -61,11 +61,19 @@ class PowerShellJob(JobBase):
         if self.script_path and not os.path.exists(self.script_path):
             raise FileNotFoundError(f"PowerShell script file not found: {self.script_path}")
     
-    def execute(self) -> JobResult:
+    def execute(self, execution_logger=None) -> JobResult:
         """Execute PowerShell script"""
         start_time = datetime.now()
         
         try:
+            if execution_logger:
+                execution_logger.info("Starting PowerShell script execution", "POWERSHELL_JOB", {
+                    'script_type': 'file' if self.script_path else 'inline',
+                    'script_path': self.script_path if self.script_path else None,
+                    'script_length': len(self.script_content) if self.script_content else 0,
+                    'execution_policy': self.execution_policy,
+                    'parameters_count': len(self.parameters)
+                })
             self.job_logger.info("Starting PowerShell script execution")
             
             # Determine script to execute

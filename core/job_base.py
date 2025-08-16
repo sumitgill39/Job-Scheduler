@@ -112,7 +112,7 @@ class JobBase(ABC):
         self.logger.debug(f"Initialized job: {self.name} ({self.job_id})")
     
     @abstractmethod
-    def execute(self) -> JobResult:
+    def execute(self, execution_logger=None) -> JobResult:
         """
         Execute the job
         
@@ -159,11 +159,20 @@ class JobBase(ABC):
         self.last_run_time = start_time
         self.current_status = JobStatus.RUNNING
         
+        # Create execution logger for detailed logging
+        from .execution_logger import ExecutionLogger
+        execution_logger = ExecutionLogger(self.job_id, self.name)
+        execution_logger.info(f"Starting job execution (attempt {self.retry_count + 1}/{self.max_retries + 1})", "JOB_BASE")
+        
         self.job_logger.info(f"Starting job execution (attempt {self.retry_count + 1}/{self.max_retries + 1})")
         
         try:
             # Execute with timeout
-            result = self._execute_with_timeout()
+            execution_logger.debug("Starting job execution with timeout", "JOB_BASE", {
+                'timeout': self.timeout,
+                'job_type': getattr(self, 'job_type', 'unknown')
+            })
+            result = self._execute_with_timeout(execution_logger)
             
             # Update status based on result
             if result.status == JobStatus.SUCCESS:
@@ -207,7 +216,7 @@ class JobBase(ABC):
         
         return result
     
-    def _execute_with_timeout(self) -> JobResult:
+    def _execute_with_timeout(self, execution_logger=None) -> JobResult:
         """Execute job with timeout handling"""
         import threading
         import signal
@@ -218,8 +227,12 @@ class JobBase(ABC):
         
         def execute_job():
             try:
-                result_container[0] = self.execute()
+                if execution_logger:
+                    execution_logger.info("Calling job-specific execute method", "TIMEOUT_HANDLER")
+                result_container[0] = self.execute(execution_logger)
             except Exception as e:
+                if execution_logger:
+                    execution_logger.error(f"Exception in execute method: {str(e)}", "TIMEOUT_HANDLER")
                 exception_container[0] = e
         
         # Windows doesn't support SIGALRM, so use threading for timeout
@@ -231,13 +244,19 @@ class JobBase(ABC):
             
             if thread.is_alive():
                 # Thread is still running, job timed out
+                if execution_logger:
+                    execution_logger.error(f"Job execution timed out after {self.timeout} seconds", "TIMEOUT_HANDLER")
                 self.job_logger.error(f"Job execution timed out after {self.timeout} seconds")
+                
+                timeout_logs = execution_logger.get_formatted_logs() if execution_logger else "No detailed logs available"
+                
                 return JobResult(
                     job_id=self.job_id,
                     job_name=self.name,
                     status=JobStatus.TIMEOUT,
                     start_time=start_time,
                     end_time=datetime.now(),
+                    output=timeout_logs,
                     error_message=f"Job execution timed out after {self.timeout} seconds",
                     retry_count=self.retry_count,
                     max_retries=self.max_retries
@@ -273,6 +292,18 @@ class JobBase(ABC):
             result.start_time = start_time
             if not result.end_time:
                 result.end_time = datetime.now()
+            
+            # Append execution logs to the result output
+            if execution_logger:
+                execution_logger.info(f"Job execution completed with status: {result.status.value}", "JOB_BASE")
+                detailed_logs = execution_logger.get_formatted_logs()
+                
+                # Combine existing output with detailed logs
+                if result.output:
+                    result.output = f"{result.output}\n\n{detailed_logs}"
+                else:
+                    result.output = detailed_logs
+            
             return result
         
         # If we get here, something went wrong
