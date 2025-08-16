@@ -2,7 +2,14 @@
 Database Connection Manager for Windows SQL Server
 """
 
-import pyodbc
+# Import pyodbc with error handling
+try:
+    import pyodbc
+    HAS_PYODBC = True
+except ImportError:
+    HAS_PYODBC = False
+    pyodbc = None
+
 import yaml
 import uuid
 from pathlib import Path
@@ -21,6 +28,18 @@ class DatabaseConnectionManager:
     def __init__(self, config_file: str = "config/database_config.yaml"):
         self.config_file = config_file
         self.logger = get_logger(__name__)  # Initialize logger first
+        
+        if not HAS_PYODBC:
+            self.logger.warning("[INIT] pyodbc not available - DatabaseConnectionManager will operate in mock mode")
+            self.config = {}
+            self._connection_lock = Lock()
+            self._pool_lock = Lock()
+            self._connection_pool = {}
+            self._pool_config = {'max_connections': 50, 'connection_lifetime': 3600}
+            self._current_user = os.getenv('USERNAME', os.getenv('USER', 'system'))
+            self._host_name = socket.gethostname()
+            return
+        
         self.config = self._load_config()
         self._connection_lock = Lock()
         self._pool_lock = Lock()  # Add pool lock for cleanup operations
@@ -239,8 +258,12 @@ class DatabaseConnectionManager:
         
         return connection_string
     
-    def get_connection(self, connection_name: str = "default") -> Optional[pyodbc.Connection]:
+    def get_connection(self, connection_name: str = "default"):
         """Get database connection with retry logic"""
+        if not HAS_PYODBC:
+            self.logger.warning(f"[MOCK] get_connection called for '{connection_name}' - pyodbc not available, returning None")
+            return None
+            
         retry_settings = self.config.get('retry_settings', {})
         max_retries = retry_settings.get('max_retries', 3)
         retry_delay = retry_settings.get('retry_delay', 5)
@@ -279,7 +302,7 @@ class DatabaseConnectionManager:
         
         return None
     
-    def _create_new_connection(self, connection_name: str) -> Optional[pyodbc.Connection]:
+    def _create_new_connection(self, connection_name: str):
         """Create a new database connection with retry logic"""
         retry_settings = self.config.get('retry_settings', {})
         max_retries = retry_settings.get('max_retries', 3)

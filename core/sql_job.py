@@ -21,6 +21,7 @@ class SqlJob(JobBase):
     
     def __init__(self, sql_query: str = "", connection_name: str = "default",
                  connection_string: str = None, database_name: str = None,
+                 query_timeout: int = 300, fetch_size: int = 1000, max_rows: int = 10000,
                  **kwargs):
         """
         Initialize SQL job
@@ -30,9 +31,16 @@ class SqlJob(JobBase):
             connection_name: Named connection from config
             connection_string: Direct connection string (overrides connection_name)
             database_name: Target database name
+            query_timeout: Query timeout in seconds
+            fetch_size: Number of rows to fetch at once
+            max_rows: Maximum number of rows to return
             **kwargs: Base job parameters
         """
-        super().__init__(**kwargs)
+        # Extract SQL-specific parameters from kwargs to avoid passing them to base class
+        sql_specific_params = ['query_timeout', 'fetch_size', 'max_rows']
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k not in sql_specific_params}
+        
+        super().__init__(**filtered_kwargs)
         self.job_type = "sql"
         self.sql_query = sql_query
         self.connection_name = connection_name
@@ -40,9 +48,9 @@ class SqlJob(JobBase):
         self.database_name = database_name
         
         # SQL-specific settings
-        self.query_timeout = kwargs.get('query_timeout', 300)  # 5 minutes
-        self.fetch_size = kwargs.get('fetch_size', 1000)
-        self.max_rows = kwargs.get('max_rows', 10000)
+        self.query_timeout = query_timeout
+        self.fetch_size = fetch_size
+        self.max_rows = max_rows
         
         # Initialize connection manager
         self.db_manager = DatabaseConnectionManager()
@@ -186,7 +194,7 @@ class SqlJob(JobBase):
                 }
             )
     
-    def _get_connection(self) -> Optional[pyodbc.Connection]:
+    def _get_connection(self):
         """Get database connection"""
         try:
             if self.connection_string:

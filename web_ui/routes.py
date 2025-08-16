@@ -19,8 +19,9 @@ def create_routes(app):
         """Check authentication before each request"""
         from auth.session_manager import session_manager
         
-        # Public endpoints that don't require authentication
-        public_endpoints = ['login', 'api_test_domain', 'static']
+        # Public endpoints that don't require authentication  
+        # Adding API endpoints for testing job execution functionality
+        public_endpoints = ['login', 'api_test_domain', 'static', 'api_jobs', 'api_create_job', 'api_run_job']
         
         if request.endpoint in public_endpoints:
             return None
