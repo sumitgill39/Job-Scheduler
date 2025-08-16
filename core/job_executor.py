@@ -97,7 +97,7 @@ class JobExecutor:
             # Create job instance based on type
             job_instance = self._create_job_instance(job_config)
             if not job_instance:
-                job_type = job_config.get('type', 'unknown')
+                job_type = job_config.get('job_type', 'unknown')  # Changed from 'type' to 'job_type' for consistency
                 error_msg = f"Failed to create job instance for job {job_id} (type: {job_type})"
                 
                 self.logger.error(f"[JOB_EXECUTOR] {error_msg}")
@@ -150,7 +150,7 @@ class JobExecutor:
     def _create_job_instance(self, job_config: Dict[str, Any]):
         """Create job instance from configuration"""
         try:
-            job_type = job_config.get('type', '').lower()
+            job_type = job_config.get('job_type', '').lower()  # Changed from 'type' to 'job_type' for consistency
             configuration = job_config.get('configuration', {})
             
             self.logger.debug(f"[JOB_EXECUTOR] Creating job instance for type: {job_type}")
@@ -422,7 +422,7 @@ class JobExecutor:
                 'success': True,
                 'job_id': job_id,
                 'name': job_config['name'],
-                'type': job_config['type'],
+                'job_type': job_config['job_type'],  # Changed from 'type' to 'job_type' for consistency
                 'enabled': job_config['enabled'],
                 'last_execution': last_execution,
                 'is_running': last_execution and last_execution['status'] == JobStatus.RUNNING.value if last_execution else False

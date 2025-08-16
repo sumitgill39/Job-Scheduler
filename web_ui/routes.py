@@ -94,7 +94,7 @@ def create_routes(app):
                 job_transformed = {
                     'id': job['job_id'],  # Template expects 'id', not 'job_id'
                     'name': job['name'],
-                    'type': job['type'],
+                    'type': job['job_type'],  # Changed from job['type'] to job['job_type'] for consistency
                     'enabled': job['enabled'],
                     'created_date': job['created_date'],
                     'modified_date': job['modified_date'],

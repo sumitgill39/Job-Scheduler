@@ -80,7 +80,7 @@ class JobManager:
             job_config = {
                 'job_id': job_id,
                 'name': job_name.strip(),
-                'type': job_type,
+                'job_type': job_type,  # Changed from 'type' to 'job_type' for consistency
                 'description': job_data.get('description', ''),
                 'enabled': job_data.get('enabled', True),
                 'created_date': datetime.now().isoformat(),
@@ -181,7 +181,7 @@ class JobManager:
             """, (
                 job_config['job_id'],
                 job_config['name'],
-                job_config['type'],
+                job_config['job_type'],  # Changed from 'type' to 'job_type' for consistency
                 config_json,
                 job_config['enabled']
             ))
@@ -277,7 +277,7 @@ class JobManager:
                 jobs.append({
                     'job_id': row[0],
                     'name': row[1],
-                    'type': row[2],
+                    'job_type': row[2],  # Changed from 'type' to 'job_type' for consistency
                     'enabled': bool(row[3]),
                     'created_date': row[4],
                     'modified_date': row[5]
@@ -290,54 +290,6 @@ class JobManager:
             self.logger.error(f"[JOB_MANAGER] Error listing jobs: {e}")
             return []
     
-    def update_job(self, job_id: str, job_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Update existing job configuration"""
-        try:
-            # First check if job exists
-            existing_job = self.get_job(job_id)
-            if not existing_job:
-                return {
-                    'success': False,
-                    'error': f'Job with ID {job_id} not found'
-                }
-            
-            system_connection = self.connection_pool.get_connection("system")
-            if not system_connection:
-                return {
-                    'success': False,
-                    'error': 'System database not available'
-                }
-            
-            cursor = system_connection.cursor()
-            
-            # Update job record
-            cursor.execute("""
-                UPDATE job_configurations 
-                SET name = ?, configuration = ?, enabled = ?, modified_date = GETDATE()
-                WHERE job_id = ?
-            """, (
-                job_data.get('name', existing_job['name']),
-                json.dumps(job_data.get('configuration', existing_job['configuration'])),
-                job_data.get('enabled', existing_job['enabled']),
-                job_id
-            ))
-            
-            system_connection.commit()
-            cursor.close()
-            # Don't close connection - let pool manage it
-            
-            self.logger.info(f"[JOB_MANAGER] Updated job {job_id}")
-            return {
-                'success': True,
-                'message': 'Job updated successfully'
-            }
-            
-        except Exception as e:
-            self.logger.error(f"[JOB_MANAGER] Error updating job {job_id}: {e}")
-            return {
-                'success': False,
-                'error': f'Error updating job: {str(e)}'
-            }
     
     def delete_job(self, job_id: str) -> Dict[str, Any]:
         """Delete job configuration"""
@@ -504,7 +456,7 @@ class JobManager:
             job_config = {
                 'job_id': job_id,
                 'name': job_name,
-                'type': job_type,
+                'job_type': job_type,  # Changed from 'type' to 'job_type' for consistency
                 'description': job_data.get('description', ''),
                 'enabled': job_data.get('enabled', True),
                 'modified_date': datetime.now().isoformat(),
