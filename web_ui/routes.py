@@ -125,6 +125,18 @@ def create_routes(app):
             flash(f'Error loading execution history: {str(e)}', 'error')
             return redirect(url_for('index'))
 
+    @app.route('/system/workflow')
+    def system_workflow():
+        """System workflow visualization page"""
+        try:
+            logger.info("[SYSTEM_WORKFLOW] Rendering system workflow page")
+            return render_template('system_workflow.html')
+            
+        except Exception as e:
+            logger.error(f"[SYSTEM_WORKFLOW] System workflow page error: {e}")
+            flash(f'Error loading system workflow: {str(e)}', 'error')
+            return redirect(url_for('index'))
+
     @app.route('/jobs/create')
     def create_job():
         """Job creation page"""

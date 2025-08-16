@@ -386,9 +386,9 @@ class JobManager:
             
             cursor = system_connection.cursor()
             
-            # Query execution history with job details
+            # Query execution history with job details (SQL Server syntax)
             cursor.execute("""
-                SELECT 
+                SELECT TOP (?)
                     jeh.execution_id,
                     jeh.job_id,
                     jeh.job_name,
@@ -406,7 +406,6 @@ class JobManager:
                 FROM job_execution_history jeh
                 LEFT JOIN job_configurations jc ON jeh.job_id = jc.job_id
                 ORDER BY jeh.start_time DESC
-                LIMIT ?
             """, (limit,))
             
             rows = cursor.fetchall()

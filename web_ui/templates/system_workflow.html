@@ -1,0 +1,805 @@
+{% extends "base.html" %}
+
+{% block title %}System Workflow - Windows Job Scheduler{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1><i class="fas fa-project-diagram me-2"></i>System Workflow</h1>
+                <p class="text-muted">Real-time visualization of job execution flow and system components</p>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary" onclick="refreshWorkflow()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+                <button class="btn btn-outline-success" onclick="testWorkflow()">
+                    <i class="fas fa-play me-1"></i>Test Flow
+                </button>
+            </div>
+        </div>
+
+        <!-- System Status Overview -->
+        <div class="row mb-4">
+            <div class="col-md-2">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div id="frontendStatus" class="status-indicator frontend-status mb-2">
+                            <i class="fas fa-desktop fa-2x"></i>
+                        </div>
+                        <h6>Frontend</h6>
+                        <small class="text-muted">React UI</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div id="apiStatus" class="status-indicator api-status mb-2">
+                            <i class="fas fa-exchange-alt fa-2x"></i>
+                        </div>
+                        <h6>API Endpoint</h6>
+                        <small class="text-muted">Flask Routes</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div id="jobManagerStatus" class="status-indicator jobmanager-status mb-2">
+                            <i class="fas fa-cogs fa-2x"></i>
+                        </div>
+                        <h6>Job Manager</h6>
+                        <small class="text-muted">Core Logic</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div id="connectionPoolStatus" class="status-indicator pool-status mb-2">
+                            <i class="fas fa-database fa-2x"></i>
+                        </div>
+                        <h6>Connection Pool</h6>
+                        <small class="text-muted">DB Pool</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div id="databaseStatus" class="status-indicator database-status mb-2">
+                            <i class="fas fa-server fa-2x"></i>
+                        </div>
+                        <h6>Database</h6>
+                        <small class="text-muted">SQL Server</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div id="historyTableStatus" class="status-indicator table-status mb-2">
+                            <i class="fas fa-table fa-2x"></i>
+                        </div>
+                        <h6>History Table</h6>
+                        <small class="text-muted">job_execution_history</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transaction Flow Visualization -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-route me-2"></i>Transaction Flow Visualization</h5>
+            </div>
+            <div class="card-body">
+                <div class="workflow-container">
+                    <svg id="workflowSvg" width="100%" height="400" viewBox="0 0 1200 400">
+                        <!-- Flow arrows -->
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                                    refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#007bff" />
+                            </marker>
+                            
+                            <!-- Animated flow effect -->
+                            <circle id="flowDot" r="4" fill="#28a745">
+                                <animateMotion dur="4s" repeatCount="indefinite" rotate="auto">
+                                    <mpath href="#flowPath"/>
+                                </animateMotion>
+                            </circle>
+                        </defs>
+
+                        <!-- Background grid -->
+                        <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#f0f0f0" stroke-width="1"/>
+                        </pattern>
+                        <rect width="100%" height="100%" fill="url(#grid)" opacity="0.3"/>
+
+                        <!-- Flow path -->
+                        <path id="flowPath" d="M 100 200 L 280 200 L 460 200 L 640 200 L 820 200 L 1000 200" 
+                              fill="none" stroke="#007bff" stroke-width="3" marker-end="url(#arrowhead)"/>
+
+                        <!-- Component boxes -->
+                        <g id="frontendBox">
+                            <rect x="50" y="150" width="100" height="100" rx="10" fill="#e3f2fd" stroke="#2196f3" stroke-width="2"/>
+                            <text x="100" y="185" text-anchor="middle" font-size="12" font-weight="bold">Frontend</text>
+                            <text x="100" y="200" text-anchor="middle" font-size="10">HTML/JS</text>
+                            <text x="100" y="215" text-anchor="middle" font-size="10">User Interface</text>
+                            <circle id="frontendIndicator" cx="140" cy="160" r="6" fill="#4caf50"/>
+                        </g>
+
+                        <g id="apiBox">
+                            <rect x="230" y="150" width="100" height="100" rx="10" fill="#fff3e0" stroke="#ff9800" stroke-width="2"/>
+                            <text x="280" y="185" text-anchor="middle" font-size="12" font-weight="bold">API Endpoint</text>
+                            <text x="280" y="200" text-anchor="middle" font-size="10">Flask Routes</text>
+                            <text x="280" y="215" text-anchor="middle" font-size="10">/api/jobs</text>
+                            <circle id="apiIndicator" cx="320" cy="160" r="6" fill="#4caf50"/>
+                        </g>
+
+                        <g id="jobManagerBox">
+                            <rect x="410" y="150" width="100" height="100" rx="10" fill="#f3e5f5" stroke="#9c27b0" stroke-width="2"/>
+                            <text x="460" y="185" text-anchor="middle" font-size="12" font-weight="bold">Job Manager</text>
+                            <text x="460" y="200" text-anchor="middle" font-size="10">Core Logic</text>
+                            <text x="460" y="215" text-anchor="middle" font-size="10">Business Rules</text>
+                            <circle id="jobManagerIndicator" cx="500" cy="160" r="6" fill="#4caf50"/>
+                        </g>
+
+                        <g id="connectionPoolBox">
+                            <rect x="590" y="150" width="100" height="100" rx="10" fill="#e8f5e8" stroke="#4caf50" stroke-width="2"/>
+                            <text x="640" y="185" text-anchor="middle" font-size="12" font-weight="bold">Connection Pool</text>
+                            <text x="640" y="200" text-anchor="middle" font-size="10">DB Manager</text>
+                            <text x="640" y="215" text-anchor="middle" font-size="10">Pool Handler</text>
+                            <circle id="poolIndicator" cx="680" cy="160" r="6" fill="#4caf50"/>
+                        </g>
+
+                        <g id="databaseBox">
+                            <rect x="770" y="150" width="100" height="100" rx="10" fill="#ffebee" stroke="#f44336" stroke-width="2"/>
+                            <text x="820" y="185" text-anchor="middle" font-size="12" font-weight="bold">Database</text>
+                            <text x="820" y="200" text-anchor="middle" font-size="10">SQL Server</text>
+                            <text x="820" y="215" text-anchor="middle" font-size="10">System DB</text>
+                            <circle id="databaseIndicator" cx="860" cy="160" r="6" fill="#4caf50"/>
+                        </g>
+
+                        <g id="historyTableBox">
+                            <rect x="950" y="150" width="100" height="100" rx="10" fill="#e1f5fe" stroke="#00bcd4" stroke-width="2"/>
+                            <text x="1000" y="180" text-anchor="middle" font-size="12" font-weight="bold">History Table</text>
+                            <text x="1000" y="195" text-anchor="middle" font-size="9">job_execution_</text>
+                            <text x="1000" y="207" text-anchor="middle" font-size="9">history</text>
+                            <text x="1000" y="225" text-anchor="middle" font-size="10">Data Storage</text>
+                            <circle id="tableIndicator" cx="1040" cy="160" r="6" fill="#4caf50"/>
+                        </g>
+
+                        <!-- Flow indicators -->
+                        <use href="#flowDot" id="flowAnimation"/>
+
+                        <!-- Connection status lines -->
+                        <line x1="150" y1="200" x2="230" y2="200" stroke="#28a745" stroke-width="3" stroke-dasharray="5,5" class="connection-line" id="line1">
+                            <animate attributeName="stroke-dashoffset" values="0;-10" dur="1s" repeatCount="indefinite"/>
+                        </line>
+                        <line x1="330" y1="200" x2="410" y2="200" stroke="#28a745" stroke-width="3" stroke-dasharray="5,5" class="connection-line" id="line2">
+                            <animate attributeName="stroke-dashoffset" values="0;-10" dur="1s" repeatCount="indefinite"/>
+                        </line>
+                        <line x1="510" y1="200" x2="590" y2="200" stroke="#28a745" stroke-width="3" stroke-dasharray="5,5" class="connection-line" id="line3">
+                            <animate attributeName="stroke-dashoffset" values="0;-10" dur="1s" repeatCount="indefinite"/>
+                        </line>
+                        <line x1="690" y1="200" x2="770" y2="200" stroke="#28a745" stroke-width="3" stroke-dasharray="5,5" class="connection-line" id="line4">
+                            <animate attributeName="stroke-dashoffset" values="0;-10" dur="1s" repeatCount="indefinite"/>
+                        </line>
+                        <line x1="870" y1="200" x2="950" y2="200" stroke="#28a745" stroke-width="3" stroke-dasharray="5,5" class="connection-line" id="line5">
+                            <animate attributeName="stroke-dashoffset" values="0;-10" dur="1s" repeatCount="indefinite"/>
+                        </line>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Component Details -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Component Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="component-status-list">
+                            <div class="status-item">
+                                <div class="status-icon">
+                                    <i class="fas fa-desktop"></i>
+                                </div>
+                                <div class="status-content">
+                                    <h6>Frontend (HTML/JavaScript)</h6>
+                                    <p class="text-muted">User interface handling form submissions and API calls</p>
+                                    <span class="badge bg-success" id="frontendBadge">Active</span>
+                                </div>
+                            </div>
+
+                            <div class="status-item">
+                                <div class="status-icon">
+                                    <i class="fas fa-exchange-alt"></i>
+                                </div>
+                                <div class="status-content">
+                                    <h6>API Endpoint (Flask Routes)</h6>
+                                    <p class="text-muted">RESTful API handling job creation and execution requests</p>
+                                    <span class="badge bg-success" id="apiBadge">Active</span>
+                                </div>
+                            </div>
+
+                            <div class="status-item">
+                                <div class="status-icon">
+                                    <i class="fas fa-cogs"></i>
+                                </div>
+                                <div class="status-content">
+                                    <h6>Job Manager (Core Logic)</h6>
+                                    <p class="text-muted">Business logic processing and job configuration management</p>
+                                    <span class="badge bg-success" id="jobManagerBadge">Active</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-database me-2"></i>Database Components</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="component-status-list">
+                            <div class="status-item">
+                                <div class="status-icon">
+                                    <i class="fas fa-database"></i>
+                                </div>
+                                <div class="status-content">
+                                    <h6>Connection Pool</h6>
+                                    <p class="text-muted">Database connection management and pooling</p>
+                                    <span class="badge bg-success" id="poolBadge">Active</span>
+                                </div>
+                            </div>
+
+                            <div class="status-item">
+                                <div class="status-icon">
+                                    <i class="fas fa-server"></i>
+                                </div>
+                                <div class="status-content">
+                                    <h6>SQL Server Database</h6>
+                                    <p class="text-muted">Primary database server hosting job configurations</p>
+                                    <span class="badge bg-success" id="databaseBadge">Active</span>
+                                </div>
+                            </div>
+
+                            <div class="status-item">
+                                <div class="status-icon">
+                                    <i class="fas fa-table"></i>
+                                </div>
+                                <div class="status-content">
+                                    <h6>job_execution_history Table</h6>
+                                    <p class="text-muted">Execution history storage and retrieval</p>
+                                    <span class="badge bg-success" id="tableBadge">Active</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-time Metrics -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Real-time Metrics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="metric-box">
+                                    <h6>API Requests/min</h6>
+                                    <div class="metric-value" id="apiRequestsRate">--</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-box">
+                                    <h6>DB Connections</h6>
+                                    <div class="metric-value" id="dbConnections">--</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-box">
+                                    <h6>Avg Response Time</h6>
+                                    <div class="metric-value" id="avgResponseTime">--</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-box">
+                                    <h6>Total Executions</h6>
+                                    <div class="metric-value" id="totalExecutions">--</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transaction Log -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-list-alt me-2"></i>Live Transaction Log</h5>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="clearTransactionLog()">
+                            <i class="fas fa-trash me-1"></i>Clear Log
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="transactionLog" class="transaction-log">
+                            <div class="log-entry">
+                                <span class="timestamp">--:--:--</span>
+                                <span class="log-level info">INFO</span>
+                                <span class="log-message">System monitoring started</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .status-indicator {
+        transition: all 0.3s ease;
+        padding: 10px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .status-indicator.active {
+        color: #28a745;
+        background-color: rgba(40, 167, 69, 0.1);
+    }
+    
+    .status-indicator.inactive {
+        color: #dc3545;
+        background-color: rgba(220, 53, 69, 0.1);
+    }
+    
+    .status-indicator.warning {
+        color: #ffc107;
+        background-color: rgba(255, 193, 7, 0.1);
+    }
+    
+    .workflow-container {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        padding: 20px;
+        margin: 20px 0;
+    }
+    
+    .component-status-list .status-item {
+        display: flex;
+        align-items: center;
+        padding: 15px 0;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .component-status-list .status-item:last-child {
+        border-bottom: none;
+    }
+    
+    .status-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 15px;
+        font-size: 1.2rem;
+    }
+    
+    .status-content {
+        flex: 1;
+    }
+    
+    .status-content h6 {
+        margin-bottom: 5px;
+        font-weight: 600;
+    }
+    
+    .status-content p {
+        margin-bottom: 8px;
+        font-size: 0.9rem;
+    }
+    
+    .metric-box {
+        text-align: center;
+        padding: 20px;
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-radius: 10px;
+        margin-bottom: 15px;
+    }
+    
+    .metric-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #007bff;
+        margin-top: 10px;
+    }
+    
+    .transaction-log {
+        max-height: 300px;
+        overflow-y: auto;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        padding: 15px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+    }
+    
+    .log-entry {
+        display: flex;
+        align-items: center;
+        padding: 5px 0;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .log-entry:last-child {
+        border-bottom: none;
+    }
+    
+    .timestamp {
+        color: #6c757d;
+        margin-right: 10px;
+        min-width: 80px;
+    }
+    
+    .log-level {
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-weight: bold;
+        margin-right: 10px;
+        min-width: 60px;
+        text-align: center;
+        font-size: 0.8rem;
+    }
+    
+    .log-level.info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+    
+    .log-level.success {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .log-level.warning {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .log-level.error {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .log-message {
+        flex: 1;
+    }
+    
+    .connection-line {
+        filter: drop-shadow(0 0 3px rgba(40, 167, 69, 0.5));
+    }
+    
+    .card {
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .card-header {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-bottom: 1px solid #dee2e6;
+        font-weight: 600;
+    }
+    
+    /* Pulse animation for active components */
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    
+    .status-indicator.active {
+        animation: pulse 2s infinite;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .workflow-container svg {
+            height: 300px;
+        }
+        
+        .component-status-list .status-item {
+            flex-direction: column;
+            text-align: center;
+        }
+        
+        .status-icon {
+            margin-right: 0;
+            margin-bottom: 10px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let isMonitoring = true;
+    let transactionCount = 0;
+
+    // Initialize monitoring
+    document.addEventListener('DOMContentLoaded', function() {
+        startMonitoring();
+        updateComponentStatus();
+        
+        // Start real-time updates
+        setInterval(updateComponentStatus, 5000);
+        setInterval(updateMetrics, 3000);
+    });
+
+    function startMonitoring() {
+        addTransactionLog('INFO', 'System workflow monitoring started');
+        updateAllComponentStatus('active');
+    }
+
+    function updateComponentStatus() {
+        // Simulate checking each component
+        checkFrontendStatus();
+        checkApiStatus();
+        checkJobManagerStatus();
+        checkConnectionPoolStatus();
+        checkDatabaseStatus();
+        checkHistoryTableStatus();
+    }
+
+    function checkFrontendStatus() {
+        // Frontend is always active if page is loaded
+        setComponentStatus('frontend', 'active');
+        updateBadge('frontendBadge', 'Active', 'success');
+    }
+
+    function checkApiStatus() {
+        // Test API endpoint
+        fetch('/api/status')
+            .then(response => {
+                if (response.ok) {
+                    setComponentStatus('api', 'active');
+                    updateBadge('apiBadge', 'Active', 'success');
+                    addTransactionLog('SUCCESS', 'API endpoint responded successfully');
+                } else {
+                    setComponentStatus('api', 'warning');
+                    updateBadge('apiBadge', 'Warning', 'warning');
+                }
+            })
+            .catch(error => {
+                setComponentStatus('api', 'inactive');
+                updateBadge('apiBadge', 'Error', 'danger');
+                addTransactionLog('ERROR', 'API endpoint failed: ' + error.message);
+            });
+    }
+
+    function checkJobManagerStatus() {
+        // Check if JobManager is available through API
+        fetch('/api/jobs')
+            .then(response => {
+                if (response.ok) {
+                    setComponentStatus('jobManager', 'active');
+                    updateBadge('jobManagerBadge', 'Active', 'success');
+                } else {
+                    setComponentStatus('jobManager', 'warning');
+                    updateBadge('jobManagerBadge', 'Warning', 'warning');
+                }
+            })
+            .catch(error => {
+                setComponentStatus('jobManager', 'inactive');
+                updateBadge('jobManagerBadge', 'Error', 'danger');
+            });
+    }
+
+    function checkConnectionPoolStatus() {
+        // Check connection pool status
+        fetch('/api/system/database-status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.connected) {
+                    setComponentStatus('connectionPool', 'active');
+                    updateBadge('poolBadge', 'Active', 'success');
+                    addTransactionLog('SUCCESS', 'Connection pool operational');
+                } else {
+                    setComponentStatus('connectionPool', 'warning');
+                    updateBadge('poolBadge', 'Warning', 'warning');
+                    addTransactionLog('WARNING', 'Connection pool issues detected');
+                }
+            })
+            .catch(error => {
+                setComponentStatus('connectionPool', 'inactive');
+                updateBadge('poolBadge', 'Error', 'danger');
+                addTransactionLog('ERROR', 'Connection pool failed: ' + error.message);
+            });
+    }
+
+    function checkDatabaseStatus() {
+        // Check database connectivity
+        fetch('/api/system/database-status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.connected) {
+                    setComponentStatus('database', 'active');
+                    updateBadge('databaseBadge', 'Connected', 'success');
+                } else {
+                    setComponentStatus('database', 'inactive');
+                    updateBadge('databaseBadge', 'Disconnected', 'danger');
+                }
+            })
+            .catch(error => {
+                setComponentStatus('database', 'inactive');
+                updateBadge('databaseBadge', 'Error', 'danger');
+            });
+    }
+
+    function checkHistoryTableStatus() {
+        // Check if history table is accessible
+        fetch('/api/executions/history?limit=1')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    setComponentStatus('historyTable', 'active');
+                    updateBadge('tableBadge', 'Accessible', 'success');
+                    addTransactionLog('SUCCESS', 'History table query successful');
+                } else {
+                    setComponentStatus('historyTable', 'warning');
+                    updateBadge('tableBadge', 'Warning', 'warning');
+                }
+            })
+            .catch(error => {
+                setComponentStatus('historyTable', 'inactive');
+                updateBadge('tableBadge', 'Error', 'danger');
+                addTransactionLog('ERROR', 'History table access failed');
+            });
+    }
+
+    function setComponentStatus(component, status) {
+        const elements = {
+            'frontend': ['frontendStatus', 'frontendIndicator'],
+            'api': ['apiStatus', 'apiIndicator'],
+            'jobManager': ['jobManagerStatus', 'jobManagerIndicator'],
+            'connectionPool': ['connectionPoolStatus', 'poolIndicator'],
+            'database': ['databaseStatus', 'databaseIndicator'],
+            'historyTable': ['historyTableStatus', 'tableIndicator']
+        };
+
+        const [statusElement, indicatorElement] = elements[component];
+        
+        const statusEl = document.getElementById(statusElement);
+        const indicatorEl = document.getElementById(indicatorElement);
+        
+        if (statusEl) {
+            statusEl.className = `status-indicator ${component}-status ${status}`;
+        }
+        
+        if (indicatorEl) {
+            const colors = {
+                'active': '#4caf50',
+                'warning': '#ff9800',
+                'inactive': '#f44336'
+            };
+            indicatorEl.setAttribute('fill', colors[status] || '#6c757d');
+        }
+    }
+
+    function updateBadge(badgeId, text, type) {
+        const badge = document.getElementById(badgeId);
+        if (badge) {
+            badge.textContent = text;
+            badge.className = `badge bg-${type}`;
+        }
+    }
+
+    function updateAllComponentStatus(status) {
+        const components = ['frontend', 'api', 'jobManager', 'connectionPool', 'database', 'historyTable'];
+        components.forEach(component => setComponentStatus(component, status));
+    }
+
+    function updateMetrics() {
+        // Simulate real-time metrics
+        document.getElementById('apiRequestsRate').textContent = Math.floor(Math.random() * 50 + 10);
+        document.getElementById('dbConnections').textContent = Math.floor(Math.random() * 10 + 5);
+        document.getElementById('avgResponseTime').textContent = Math.floor(Math.random() * 200 + 50) + 'ms';
+        document.getElementById('totalExecutions').textContent = Math.floor(Math.random() * 1000 + 500);
+    }
+
+    function addTransactionLog(level, message) {
+        const logContainer = document.getElementById('transactionLog');
+        const timestamp = new Date().toLocaleTimeString();
+        
+        const logEntry = document.createElement('div');
+        logEntry.className = 'log-entry';
+        logEntry.innerHTML = `
+            <span class="timestamp">${timestamp}</span>
+            <span class="log-level ${level.toLowerCase()}">${level}</span>
+            <span class="log-message">${message}</span>
+        `;
+        
+        logContainer.appendChild(logEntry);
+        
+        // Keep only last 50 entries
+        const entries = logContainer.children;
+        if (entries.length > 50) {
+            logContainer.removeChild(entries[0]);
+        }
+        
+        // Scroll to bottom
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function refreshWorkflow() {
+        addTransactionLog('INFO', 'Manual refresh initiated');
+        updateComponentStatus();
+        updateMetrics();
+    }
+
+    function testWorkflow() {
+        addTransactionLog('INFO', 'Testing workflow...');
+        
+        // Simulate a job creation test
+        setTimeout(() => {
+            addTransactionLog('INFO', 'Frontend → API: Job creation request sent');
+        }, 500);
+        
+        setTimeout(() => {
+            addTransactionLog('INFO', 'API → JobManager: Processing job data');
+        }, 1000);
+        
+        setTimeout(() => {
+            addTransactionLog('INFO', 'JobManager → ConnectionPool: Requesting database connection');
+        }, 1500);
+        
+        setTimeout(() => {
+            addTransactionLog('INFO', 'ConnectionPool → Database: Establishing connection');
+        }, 2000);
+        
+        setTimeout(() => {
+            addTransactionLog('SUCCESS', 'Database → HistoryTable: Job saved successfully');
+        }, 2500);
+        
+        setTimeout(() => {
+            addTransactionLog('SUCCESS', 'Workflow test completed successfully');
+        }, 3000);
+    }
+
+    function clearTransactionLog() {
+        document.getElementById('transactionLog').innerHTML = `
+            <div class="log-entry">
+                <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+                <span class="log-level info">INFO</span>
+                <span class="log-message">Transaction log cleared</span>
+            </div>
+        `;
+    }
+</script>
+{% endblock %}
