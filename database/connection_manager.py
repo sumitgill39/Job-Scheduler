@@ -58,7 +58,8 @@ class DatabaseConnectionManager:
         # Initialize system database tables
         self._init_system_database()
         
-        self.logger.info(f"[AUDIT] Database Connection Manager initialized by {self._current_user}@{self._host_name}")
+        self.logger.info(f"[INIT] Database Connection Manager initialized by {self._current_user}@{self._host_name}")
+        self.logger.info(f"[INIT] Connection pool configured: max_connections={self._pool_config['max_connections']}, connection_lifetime={self._pool_config['connection_lifetime']}s")
     
     def _init_system_database(self):
         """Initialize system database tables for storing user connections"""
@@ -193,19 +194,16 @@ class DatabaseConnectionManager:
         if '\\' in server and port and port != 1433:
             # Named instance with custom port - add port after server name
             components.append(f"SERVER={server},{port}")
-            self.logger.debug(f"Using named instance with explicit port: {server},{port}")
+            pass  # Removed excessive debug logging
         elif '\\' in server:
             # Named instance - don't add port for default
             components.append(f"SERVER={server}")
-            self.logger.debug(f"Using named instance: {server}")
         elif port and port != 1433:
             # Custom port
             components.append(f"SERVER={server},{port}")
-            self.logger.debug(f"Using server with custom port: {server},{port}")
         else:
             # Default port or no port specified
             components.append(f"SERVER={server}")
-            self.logger.debug(f"Using default server: {server}")
         
         # Database
         database = db_config.get('database')
@@ -253,54 +251,58 @@ class DatabaseConnectionManager:
             import re
             debug_string = re.sub(r'PWD=[^;]*', 'PWD=***', debug_string)
         
-        self.logger.info(f"Built connection string for '{connection_name}': {debug_string}")
-        print(f"[DEBUG] Connection string for '{connection_name}': {debug_string}")  # Also print to console
+        self.logger.debug(f"Built connection string for '{connection_name}': {debug_string}")  # Changed from info to debug
         
         return connection_string
     
     def get_connection(self, connection_name: str = "default"):
-        """Get database connection with retry logic"""
+        """Get database connection from pool with proper lifecycle management"""
         if not HAS_PYODBC:
             self.logger.warning(f"[MOCK] get_connection called for '{connection_name}' - pyodbc not available, returning None")
             return None
-            
-        retry_settings = self.config.get('retry_settings', {})
-        max_retries = retry_settings.get('max_retries', 3)
-        retry_delay = retry_settings.get('retry_delay', 5)
-        backoff_factor = retry_settings.get('backoff_factor', 2)
         
-        connection_string = self.get_connection_string(connection_name)
-        
-        for attempt in range(max_retries + 1):
-            try:
-                self.logger.debug(f"Attempting database connection '{connection_name}' (attempt {attempt + 1})")
+        with self._connection_lock:
+            # Check if we have a valid pooled connection
+            if connection_name in self._connection_pool:
+                pool_entry = self._connection_pool[connection_name]
                 
-                connection = pyodbc.connect(connection_string)
-                
-                # Test connection
-                cursor = connection.cursor()
-                cursor.execute("SELECT 1")
-                cursor.fetchone()
-                cursor.close()
-                
-                self.logger.info(f"Successfully connected to database '{connection_name}'")
-                return connection
-                
-            except pyodbc.Error as e:
-                error_msg = f"Database connection failed (attempt {attempt + 1}): {str(e)}"
-                
-                if attempt < max_retries:
-                    self.logger.warning(f"{error_msg}. Retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                    retry_delay *= backoff_factor  # Exponential backoff
-                else:
-                    self.logger.error(f"{error_msg}. Max retries exceeded.")
+                if self._is_connection_valid(pool_entry):
+                    # Update last used time and use count
+                    pool_entry['last_used'] = datetime.now()
+                    pool_entry['use_count'] += 1
                     
-            except Exception as e:
-                self.logger.error(f"Unexpected error connecting to database: {e}")
-                break
-        
-        return None
+                    self.logger.debug(f"[POOL] Returning existing connection '{connection_name}' (uses: {pool_entry['use_count']})")
+                    return pool_entry['connection']
+                else:
+                    # Connection is invalid, remove it and create a new one
+                    self.logger.info(f"[POOL] Removing invalid connection '{connection_name}' from pool")
+                    self._close_pool_entry(connection_name)
+            
+            # Check pool capacity
+            if len(self._connection_pool) >= self._pool_config['max_connections']:
+                self.logger.warning(f"[POOL] Connection pool at capacity ({len(self._connection_pool)}/{self._pool_config['max_connections']})")
+                # Could implement LRU eviction here, but for now just create new connection
+                return self._create_new_connection(connection_name)
+            
+            # Create new pooled connection
+            connection = self._create_new_connection(connection_name)
+            
+            if connection:
+                # Add to pool
+                pool_entry = {
+                    'connection': connection,
+                    'created': datetime.now(),
+                    'last_used': datetime.now(),
+                    'use_count': 1
+                }
+                
+                self._connection_pool[connection_name] = pool_entry
+                self.logger.info(f"[POOL] Added new connection '{connection_name}' to pool (pool size: {len(self._connection_pool)})")
+                
+                return connection
+            else:
+                self.logger.error(f"[POOL] Failed to create connection '{connection_name}'")
+                return None
     
     def _create_new_connection(self, connection_name: str):
         """Create a new database connection with retry logic"""
@@ -323,7 +325,7 @@ class DatabaseConnectionManager:
                 cursor.fetchone()
                 cursor.close()
                 
-                self.logger.info(f"[POOL] Successfully created connection '{connection_name}'")
+                self.logger.debug(f"[POOL] Successfully created connection '{connection_name}'")
                 return connection
                 
             except pyodbc.Error as e:
@@ -430,14 +432,21 @@ class DatabaseConnectionManager:
             
             return stats
     
+    def return_connection(self, connection_name: str, connection):
+        """Return a connection to the pool (for future use, currently connections auto-managed)"""
+        # For now, we keep connections in pool automatically
+        # In the future, could implement explicit return-to-pool mechanism
+        # Parameters kept for future API compatibility
+        _ = connection_name, connection  # Suppress unused parameter warnings
+    
     def close_all_connections(self):
-        """Close all pooled connections"""
+        """Close all pooled connections gracefully"""
         with self._pool_lock:
             connection_names = list(self._connection_pool.keys())
             for conn_name in connection_names:
                 self._close_pool_entry(conn_name)
             
-            self.logger.info(f"[POOL] Closed all {len(connection_names)} pooled connections")
+            self.logger.info(f"[POOL] Gracefully closed all {len(connection_names)} pooled connections")
     
     def _test_connection_direct(self, server: str, database: str, port: int = 1433,
                               auth_type: str = "windows", username: str = None, 

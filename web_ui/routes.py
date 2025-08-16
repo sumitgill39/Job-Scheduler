@@ -43,31 +43,63 @@ def create_routes(app):
         from auth.session_manager import session_manager
         
         try:
+            # Try integrated scheduler first, then fall back to old scheduler manager
+            integrated_scheduler = getattr(app, 'integrated_scheduler', None)
             scheduler = getattr(app, 'scheduler_manager', None)
-            if not scheduler:
-                logger.error("Scheduler manager not found in app context")
-                return render_template('error.html', error="Scheduler not available")
+            job_manager = getattr(app, 'job_manager', None)
             
-            # Debug: Print available methods
-            available_methods = [method for method in dir(scheduler) if not method.startswith('_')]
-            logger.info(f"Available scheduler methods: {available_methods}")
-            
-            # Check if the required method exists
-            if not hasattr(scheduler, 'get_all_jobs'):
-                logger.error("SchedulerManager missing get_all_jobs method")
-                return render_template('error.html', error="Scheduler missing required methods")
-            
-            # Get scheduler status
-            status = scheduler.get_scheduler_status()
-            
-            # Get recent jobs
-            jobs = scheduler.get_all_jobs()  # This should return a dict {job_id: job_object}
-            recent_jobs = list(jobs.values())[:5] if jobs else []
+            if integrated_scheduler:
+                # Use integrated scheduler for status
+                status = integrated_scheduler.get_scheduler_status()
+                
+                # Get recent jobs from database
+                if job_manager:
+                    jobs_raw = job_manager.list_jobs()
+                    recent_jobs = jobs_raw[:5] if jobs_raw else []
+                else:
+                    recent_jobs = []
+                    
+                logger.info("[DASHBOARD] Using integrated scheduler for dashboard")
+                
+            elif scheduler:
+                # Fallback to old scheduler manager
+                # Debug: Print available methods
+                available_methods = [method for method in dir(scheduler) if not method.startswith('_')]
+                logger.info(f"Available scheduler methods: {available_methods}")
+                
+                # Check if the required method exists
+                if not hasattr(scheduler, 'get_all_jobs'):
+                    logger.error("SchedulerManager missing get_all_jobs method")
+                    return render_template('error.html', error="Scheduler missing required methods")
+                
+                # Get scheduler status
+                status = scheduler.get_scheduler_status()
+                
+                # Get recent jobs
+                jobs = scheduler.get_all_jobs()  # This should return a dict {job_id: job_object}
+                recent_jobs = list(jobs.values())[:5] if jobs else []
+                
+                logger.info("[DASHBOARD] Using legacy scheduler manager for dashboard")
+                
+            else:
+                # No scheduler available - show basic status
+                status = {
+                    'running': False,
+                    'total_jobs': 0,
+                    'enabled_jobs': 0,
+                    'scheduled_jobs': 0,
+                    'disabled_jobs': 0,
+                    'job_types': {},
+                    'next_run_times': [],
+                    'status': 'not_available'
+                }
+                recent_jobs = []
+                logger.warning("[DASHBOARD] No scheduler available - showing basic status")
             
             return render_template('index.html', 
                                  status=status, 
                                  recent_jobs=recent_jobs,
-                                 total_jobs=len(jobs) if jobs else 0)
+                                 total_jobs=len(recent_jobs) if recent_jobs else 0)
         
         except Exception as e:
             logger.error(f"Dashboard error: {e}")

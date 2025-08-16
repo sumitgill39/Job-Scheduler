@@ -44,7 +44,9 @@ def create_app(scheduler_manager=None):
         # Initialize integrated scheduler (combines job management + scheduling)
         try:
             app.integrated_scheduler = IntegratedScheduler()
-            logger.info("✅ Integrated scheduler initialized successfully")
+            # Start the scheduler
+            app.integrated_scheduler.start()
+            logger.info("✅ Integrated scheduler initialized and started successfully")
         except Exception as e:
             logger.warning(f"⚠️  Integrated scheduler initialization failed: {e}")
             logger.info("📝 Falling back to basic job manager without scheduling")
@@ -94,6 +96,14 @@ def create_app(scheduler_manager=None):
     # App shutdown handler
     def shutdown_handler():
         """Clean up resources when app shuts down"""
+        try:
+            # Stop integrated scheduler first
+            if hasattr(app, 'integrated_scheduler') and app.integrated_scheduler:
+                app.integrated_scheduler.stop(wait=True)
+                logger.info("Integrated scheduler stopped successfully")
+        except Exception as e:
+            logger.error(f"Error stopping integrated scheduler: {e}")
+        
         try:
             if hasattr(app, 'connection_pool') and app.connection_pool:
                 app.connection_pool.shutdown()

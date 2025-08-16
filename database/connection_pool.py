@@ -50,10 +50,10 @@ class ConnectionPool:
             while not self._stop_cleanup:
                 try:
                     self.db_manager.cleanup_pool()
-                    time.sleep(300)  # Clean up every 5 minutes
+                    time.sleep(1800)  # Clean up every 30 minutes (more conservative)
                 except Exception as e:
                     self.logger.error(f"[POOL_SINGLETON] Cleanup thread error: {e}")
-                    time.sleep(60)  # Wait a minute before retrying
+                    time.sleep(300)  # Wait 5 minutes before retrying
         
         self._cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
         self._cleanup_thread.start()
