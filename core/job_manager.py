@@ -229,10 +229,31 @@ class JobManager:
             except:
                 configuration = {}
             
+            # Handle legacy jobs that might have empty job_type
+            job_type = row[2]
+            if not job_type:
+                # Try to infer job type from configuration
+                if 'sql' in configuration:
+                    job_type = 'sql'
+                elif 'powershell' in configuration:
+                    job_type = 'powershell'
+                else:
+                    job_type = 'unknown'
+                
+                # Update the database with the inferred job type
+                try:
+                    update_cursor = system_connection.cursor()
+                    update_cursor.execute("UPDATE job_configurations SET job_type = ? WHERE job_id = ?", (job_type, row[0]))
+                    system_connection.commit()
+                    update_cursor.close()
+                    self.logger.info(f"[JOB_MANAGER] Updated job {row[0]} with inferred job_type: {job_type}")
+                except Exception as e:
+                    self.logger.warning(f"[JOB_MANAGER] Could not update job_type for job {row[0]}: {e}")
+            
             return {
                 'job_id': row[0],
                 'name': row[1],
-                'job_type': row[2],  # Changed from 'type' to 'job_type'
+                'job_type': job_type,  # Now guaranteed to have a value
                 'configuration': configuration,
                 'enabled': bool(row[4]),
                 'created_date': row[5],

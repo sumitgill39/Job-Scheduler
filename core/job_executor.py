@@ -84,6 +84,12 @@ class JobExecutor:
                 'error': error_msg
             }
         
+        # Debug: Log the job configuration to understand what we're getting
+        self.logger.info(f"[JOB_EXECUTOR] Retrieved job config for {job_id}: {job_config}")
+        self.logger.info(f"[JOB_EXECUTOR] Job config keys: {list(job_config.keys())}")
+        self.logger.info(f"[JOB_EXECUTOR] Job type from config: '{job_config.get('job_type', 'MISSING')}'")
+        self.logger.info(f"[JOB_EXECUTOR] Job configuration: {job_config.get('configuration', {})}")
+        
         # Check if job is enabled
         if not job_config.get('enabled', True):
             error_msg = f"Job {job_id} is disabled"
@@ -97,7 +103,8 @@ class JobExecutor:
             # Create job instance based on type
             job_instance = self._create_job_instance(job_config)
             if not job_instance:
-                job_type = job_config.get('job_type', 'unknown')  # Changed from 'type' to 'job_type' for consistency
+                # Handle both old and new field naming for backward compatibility  
+                job_type = job_config.get('job_type', '') or job_config.get('type', '') or 'unknown'
                 error_msg = f"Failed to create job instance for job {job_id} (type: {job_type})"
                 
                 self.logger.error(f"[JOB_EXECUTOR] {error_msg}")
@@ -150,12 +157,29 @@ class JobExecutor:
     def _create_job_instance(self, job_config: Dict[str, Any]):
         """Create job instance from configuration"""
         try:
-            job_type = job_config.get('job_type', '').lower()  # Changed from 'type' to 'job_type' for consistency
+            # Handle both old and new field naming for backward compatibility
+            job_type = job_config.get('job_type', '') or job_config.get('type', '')
+            if not job_type:
+                # Try to infer job type from configuration
+                configuration = job_config.get('configuration', {})
+                if 'sql' in configuration:
+                    job_type = 'sql'
+                elif 'powershell' in configuration:
+                    job_type = 'powershell'
+                else:
+                    job_type = 'unknown'
+            
+            job_type = job_type.lower()
             configuration = job_config.get('configuration', {})
             
-            self.logger.debug(f"[JOB_EXECUTOR] Creating job instance for type: {job_type}")
-            self.logger.debug(f"[JOB_EXECUTOR] Job config keys: {list(job_config.keys())}")
-            self.logger.debug(f"[JOB_EXECUTOR] Configuration keys: {list(configuration.keys())}")
+            self.logger.info(f"[JOB_EXECUTOR] Creating job instance for type: '{job_type}'")
+            self.logger.info(f"[JOB_EXECUTOR] Job config keys: {list(job_config.keys())}")
+            self.logger.info(f"[JOB_EXECUTOR] Configuration keys: {list(configuration.keys())}")
+            
+            # Additional debugging for job type detection
+            self.logger.info(f"[JOB_EXECUTOR] Raw job_type field: '{job_config.get('job_type', 'NOT_FOUND')}'")
+            self.logger.info(f"[JOB_EXECUTOR] Raw type field: '{job_config.get('type', 'NOT_FOUND')}'")
+            self.logger.info(f"[JOB_EXECUTOR] Final determined job_type: '{job_type}'")
             
             if job_type == 'sql':
                 sql_config = configuration.get('sql', {})
