@@ -66,8 +66,8 @@ class DatabaseConnectionManager:
         try:
             self.logger.info("Initializing system database tables...")
             
-            # Get system connection
-            system_connection = self.get_connection("system")
+            # Get system connection directly (avoid recursion during initialization)
+            system_connection = self._create_new_connection("system")
             if not system_connection:
                 self.logger.error("Could not connect to system database for initialization")
                 self.logger.error("Please check your system database connection in config/database_config.yaml")
@@ -105,7 +105,7 @@ class DatabaseConnectionManager:
             cursor.execute(create_table_sql)
             system_connection.commit()
             cursor.close()
-            system_connection.close()
+            system_connection.close()  # Direct connection, safe to close
             
             self.logger.info("System database tables initialized successfully")
             
@@ -811,7 +811,7 @@ class DatabaseConnectionManager:
         self.logger.info(f"[LIFECYCLE] Saving connection '{connection_name}' to database: {server_detail}")
         
         try:
-            system_connection = self.get_connection("system")
+            system_connection = self._create_new_connection("system")
             if not system_connection:
                 self.logger.error(f"[LIFECYCLE] Cannot save connection '{connection_name}': system database not available")
                 return False
@@ -858,7 +858,7 @@ class DatabaseConnectionManager:
             
             system_connection.commit()
             cursor.close()
-            system_connection.close()
+            system_connection.close()  # Direct connection, safe to close
             
             self.logger.info(f"[LIFECYCLE] Successfully saved connection '{connection_name}' to database")
             return True
@@ -1042,7 +1042,7 @@ class DatabaseConnectionManager:
         self.logger.info(f"[LIFECYCLE] Removing connection '{connection_name}' from database")
         
         try:
-            system_connection = self.get_connection("system")
+            system_connection = self._create_new_connection("system")
             if not system_connection:
                 self.logger.error(f"[LIFECYCLE] Cannot remove connection '{connection_name}': system database not available")
                 return False
@@ -1065,7 +1065,7 @@ class DatabaseConnectionManager:
             
             system_connection.commit()
             cursor.close()
-            system_connection.close()
+            system_connection.close()  # Direct connection, safe to close
             
             if rows_affected > 0:
                 self.logger.info(f"[LIFECYCLE] Successfully removed connection '{connection_name}' from database ({rows_affected} rows affected)")
@@ -1110,7 +1110,8 @@ class DatabaseConnectionManager:
         self.logger.debug(f"[LIFECYCLE] Loading connection list from database")
         
         try:
-            system_connection = self.get_connection("system")
+            # Use direct connection creation to avoid recursion when listing connections
+            system_connection = self._create_new_connection("system")
             if not system_connection:
                 self.logger.warning(f"[LIFECYCLE] Cannot load connections: system database not available")
                 return []
@@ -1119,7 +1120,7 @@ class DatabaseConnectionManager:
             cursor.execute("SELECT name, created_date FROM user_connections WHERE is_active = 1 ORDER BY name")
             rows = cursor.fetchall()
             cursor.close()
-            system_connection.close()
+            system_connection.close()  # Direct connection, safe to close immediately
             
             connection_names = [row[0] for row in rows]
             
@@ -1164,7 +1165,8 @@ class DatabaseConnectionManager:
         self.logger.debug(f"[LIFECYCLE] Loading connection '{connection_name}' configuration from database")
         
         try:
-            system_connection = self.get_connection("system")
+            # Use direct connection creation to avoid recursion when getting connection info
+            system_connection = self._create_new_connection("system")
             if not system_connection:
                 self.logger.warning(f"[LIFECYCLE] Cannot load connection '{connection_name}': system database not available")
                 return None
@@ -1181,7 +1183,7 @@ class DatabaseConnectionManager:
             
             row = cursor.fetchone()
             cursor.close()
-            system_connection.close()
+            system_connection.close()  # Direct connection, safe to close immediately
             
             if not row:
                 self.logger.warning(f"[LIFECYCLE] Connection '{connection_name}' not found in database")
@@ -1245,7 +1247,7 @@ class DatabaseConnectionManager:
     def _save_audit_to_database(self, audit_entry: Dict[str, Any]):
         """Save audit entry to database (if system connection is available)"""
         try:
-            system_connection = self.get_connection("system")
+            system_connection = self._create_new_connection("system")
             if not system_connection:
                 return  # System connection not available, skip database audit
             
@@ -1287,7 +1289,7 @@ class DatabaseConnectionManager:
             
             system_connection.commit()
             cursor.close()
-            system_connection.close()
+            system_connection.close()  # Direct connection, safe to close
             
         except Exception as e:
             # Don't let database audit failures break the main operation
@@ -1296,7 +1298,7 @@ class DatabaseConnectionManager:
     def get_connection_audit_trail(self, connection_name: str = None, limit: int = 100) -> List[Dict[str, Any]]:
         """Get audit trail for connections"""
         try:
-            system_connection = self.get_connection("system")
+            system_connection = self._create_new_connection("system")
             if not system_connection:
                 return []
             
@@ -1318,7 +1320,7 @@ class DatabaseConnectionManager:
             
             rows = cursor.fetchall()
             cursor.close()
-            system_connection.close()
+            system_connection.close()  # Direct connection, safe to close
             
             audit_trail = []
             for row in rows:
