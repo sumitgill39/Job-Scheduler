@@ -261,6 +261,11 @@ class DatabaseConnectionManager:
             self.logger.warning(f"[MOCK] get_connection called for '{connection_name}' - pyodbc not available, returning None")
             return None
         
+        # Periodically cleanup stale connections (every 10th call)
+        import random
+        if random.randint(1, 10) == 1:
+            self.cleanup_pool()
+        
         with self._connection_lock:
             # Check if we have a valid pooled connection
             if connection_name in self._connection_pool:
@@ -324,6 +329,7 @@ class DatabaseConnectionManager:
                 cursor.execute("SELECT 1")
                 cursor.fetchone()
                 cursor.close()
+                # Note: Don't close connection here - it will be managed by the pool
                 
                 self.logger.debug(f"[POOL] Successfully created connection '{connection_name}'")
                 return connection
@@ -576,7 +582,7 @@ class DatabaseConnectionManager:
             cursor.execute("SELECT 1 as test, @@VERSION as version")
             result = cursor.fetchone()
             cursor.close()
-            connection.close()
+            connection.close()  # This is OK here as it's a direct test, not using the pool
             
             response_time = time.time() - start_time
             
@@ -687,7 +693,8 @@ class DatabaseConnectionManager:
                     self.logger.warning(f"[CONNECTION_TEST] Failed to execute test query '{query}' on '{connection_name}': {e}")
             
             cursor.close()
-            connection.close()
+            # Don't close the connection here - let the pool manage it
+            # connection.close() # Removed - causes "closed connection" errors
             
             response_time = time.time() - start_time
             
@@ -714,6 +721,11 @@ class DatabaseConnectionManager:
         except Exception as e:
             response_time = time.time() - start_time
             self.logger.error(f"[CONNECTION_TEST] Connection test failed for '{connection_name}' after {response_time:.2f}s: {e}")
+            
+            # If connection test failed, remove it from pool to prevent reuse of bad connection
+            if connection_name in self._connection_pool:
+                self.logger.info(f"[CONNECTION_TEST] Removing failed connection '{connection_name}' from pool")
+                self._close_pool_entry(connection_name)
             
             # Audit log the failed test
             self._audit_log('TEST_ERROR', connection_name, {
