@@ -224,6 +224,25 @@ def create_routes(app):
                         'error': 'SQL query is required for SQL jobs'
                     }), 400
             
+            elif data.get('type') == 'powershell':
+                script_content = data.get('script_content', 'NONE')
+                script_path = data.get('script_path', 'NONE')
+                execution_policy = data.get('execution_policy', 'NONE')
+                parameters = data.get('parameters', [])
+                
+                logger.info(f"[API_JOB_CREATE] PowerShell script_content received (length {len(script_content) if script_content != 'NONE' else 0}): '{script_content[:100]}...' if script_content != 'NONE' else 'NONE'")
+                logger.info(f"[API_JOB_CREATE] PowerShell script_path received: '{script_path}'")
+                logger.info(f"[API_JOB_CREATE] PowerShell execution_policy received: '{execution_policy}'")
+                logger.info(f"[API_JOB_CREATE] PowerShell parameters received: {parameters}")
+                
+                # Validate critical fields for PowerShell
+                if (not script_content or script_content == 'NONE' or script_content.strip() == '') and (not script_path or script_path == 'NONE' or script_path.strip() == ''):
+                    logger.error(f"[API_JOB_CREATE] CRITICAL: PowerShell script content or path is missing!")
+                    return jsonify({
+                        'success': False,
+                        'error': 'PowerShell script content or script path is required for PowerShell jobs'
+                    }), 400
+            
             # Use global JobManager instance
             job_manager = getattr(app, 'job_manager', None)
             if not job_manager:
@@ -239,7 +258,19 @@ def create_routes(app):
                 return jsonify(result), 201
             else:
                 logger.warning(f"[API_JOB_CREATE] Job creation failed: {result['error']}")
-                return jsonify(result), 400
+                
+                # Provide more specific error message for database connectivity issues
+                error_message = result['error']
+                if 'Failed to save job to database' in error_message:
+                    if data.get('type') == 'powershell':
+                        error_message = 'CRITICAL: PowerShell job cannot be saved - SQL Server database connection failed. Check database configuration and ensure pyodbc is installed with SQL Server drivers.'
+                    elif data.get('type') == 'sql':
+                        error_message = 'CRITICAL: SQL job cannot be saved - SQL Server database connection failed. Check database configuration and ensure pyodbc is installed with SQL Server drivers.'
+                
+                return jsonify({
+                    'success': False,
+                    'error': error_message
+                }), 400
         
         except Exception as e:
             logger.error(f"[API_JOB_CREATE] API create job error: {e}")

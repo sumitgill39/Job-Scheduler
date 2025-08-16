@@ -331,27 +331,69 @@
                         </div>
                     </div>
 
-                    <!-- Action Buttons -->
-                    <div class="mt-4 pt-3 border-top">
+                    <!-- SQL Job Action Buttons -->
+                    <div id="sqlJobActions" class="mt-4 pt-3 border-top" style="display: none;">
                         <div class="row">
                             <div class="col-md-6">
                                 <button type="button" class="btn btn-outline-secondary me-2" onclick="validateJob()">
-                                    <i class="fas fa-check me-1"></i>Validate
+                                    <i class="fas fa-check me-1"></i>Validate SQL
                                 </button>
                                 <button type="button" class="btn btn-outline-info" onclick="testConnection()">
                                     <i class="fas fa-plug me-1"></i>Test Connection
                                 </button>
+                                <button type="button" class="btn btn-outline-info" onclick="debugFormData()">
+                                    <i class="fas fa-bug me-1"></i>Debug SQL Data
+                                </button>
                             </div>
                             <div class="col-md-6 text-end">
-                                <button type="button" class="btn btn-outline-info me-2" onclick="debugFormData()">
-                                    <i class="fas fa-bug me-1"></i>Debug Data
+                                <a href="{{ url_for('job_list') }}" class="btn btn-secondary me-2">
+                                    <i class="fas fa-times me-1"></i>Cancel
+                                </a>
+                                <button type="submit" class="btn btn-info">
+                                    <i class="fas fa-database me-1"></i>Create SQL Job
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PowerShell Job Action Buttons -->
+                    <div id="powershellJobActions" class="mt-4 pt-3 border-top" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <button type="button" class="btn btn-outline-secondary me-2" onclick="validateJob()">
+                                    <i class="fas fa-check me-1"></i>Validate PowerShell
+                                </button>
+                                <button type="button" class="btn btn-outline-warning" onclick="testPowerShellScript()">
+                                    <i class="fab fa-microsoft me-1"></i>Test Script Syntax
+                                </button>
+                                <button type="button" class="btn btn-outline-info" onclick="debugPowerShellData()">
+                                    <i class="fas fa-bug me-1"></i>Debug PowerShell Data
+                                </button>
+                            </div>
+                            <div class="col-md-6 text-end">
                                 <a href="{{ url_for('job_list') }}" class="btn btn-secondary me-2">
                                     <i class="fas fa-times me-1"></i>Cancel
                                 </a>
                                 <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-save me-1"></i>Create Job
+                                    <i class="fab fa-microsoft me-1"></i>Create PowerShell Job
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Default Action Buttons (when no job type selected) -->
+                    <div id="defaultJobActions" class="mt-4 pt-3 border-top">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Please select a job type above to see available actions
+                                </p>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <a href="{{ url_for('job_list') }}" class="btn btn-secondary">
+                                    <i class="fas fa-times me-1"></i>Cancel
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -417,6 +459,17 @@
             config.style.display = 'none';
         });
         document.getElementById(`${type}JobConfig`).style.display = 'block';
+        
+        // Show/hide appropriate action sections
+        document.getElementById('defaultJobActions').style.display = 'none';
+        document.getElementById('sqlJobActions').style.display = 'none';
+        document.getElementById('powershellJobActions').style.display = 'none';
+        
+        if (type === 'sql') {
+            document.getElementById('sqlJobActions').style.display = 'block';
+        } else if (type === 'powershell') {
+            document.getElementById('powershellJobActions').style.display = 'block';
+        }
     }
     
     // Script type toggle for PowerShell jobs
@@ -655,14 +708,19 @@
         });
     });
     
-    // Debug function to check form data
+    // Debug function for SQL jobs
     function debugFormData() {
+        if (selectedJobType !== 'sql') {
+            showError('This debug function is for SQL jobs only. Use "Debug PowerShell Data" for PowerShell jobs.');
+            return;
+        }
+        
         if (!validateJob()) {
             showError('Please fix validation errors before debugging');
             return;
         }
         
-        // Prepare form data exactly like the submit function
+        // Prepare SQL job data
         const formData = new FormData(document.getElementById('createJobForm'));
         const jobData = {
             type: selectedJobType,
@@ -675,22 +733,20 @@
             run_as: formData.get('run_as')
         };
         
-        // Add job-specific data
-        if (selectedJobType === 'sql') {
-            const sqlQuery = formData.get('sql_query');
-            const connectionName = formData.get('connection_name');
-            
-            jobData.sql_query = sqlQuery;
-            jobData.connection_name = connectionName;
-            
-            console.log('=== SQL JOB DEBUG ===');
-            console.log('SQL Query from form:', sqlQuery);
-            console.log('SQL Query length:', sqlQuery ? sqlQuery.length : 0);
-            console.log('Connection name:', connectionName);
-            console.log('Full job data:', jobData);
-            
-            // Show debug info in alert
-            const debugInfo = `SQL Job Debug Information:
+        const sqlQuery = formData.get('sql_query');
+        const connectionName = formData.get('connection_name');
+        
+        jobData.sql_query = sqlQuery;
+        jobData.connection_name = connectionName;
+        
+        console.log('=== SQL JOB DEBUG ===');
+        console.log('SQL Query from form:', sqlQuery);
+        console.log('SQL Query length:', sqlQuery ? sqlQuery.length : 0);
+        console.log('Connection name:', connectionName);
+        console.log('Full job data:', jobData);
+        
+        // Show debug info in alert
+        const debugInfo = `SQL Job Debug Information:
 - Job Name: ${jobData.name}
 - Job Type: ${jobData.type}
 - SQL Query: "${sqlQuery}"
@@ -698,33 +754,123 @@
 - Connection: ${connectionName}
 - Has SQL Query: ${!!sqlQuery}
 - Full Data Keys: ${Object.keys(jobData).join(', ')}`;
-            
-            alert(debugInfo);
-            
-            // Send to debug endpoint
-            fetch('/api/debug/job-data', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(jobData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Debug endpoint response:', data);
-                if (data.success) {
-                    showSuccess('Debug data sent successfully - check console and server logs');
-                } else {
-                    showError('Debug endpoint error: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Debug endpoint error:', error);
-                showError('Debug request failed: ' + error.message);
-            });
-            
+        
+        alert(debugInfo);
+        showSuccess('SQL job debug data logged to console');
+    }
+    
+    // Debug function for PowerShell jobs
+    function debugPowerShellData() {
+        if (selectedJobType !== 'powershell') {
+            showError('This debug function is for PowerShell jobs only.');
+            return;
+        }
+        
+        if (!validateJob()) {
+            showError('Please fix validation errors before debugging');
+            return;
+        }
+        
+        // Prepare PowerShell job data
+        const formData = new FormData(document.getElementById('createJobForm'));
+        const jobData = {
+            type: selectedJobType,
+            name: formData.get('name'),
+            description: formData.get('description'),
+            enabled: formData.get('enabled') === 'true',
+            timeout: parseInt(formData.get('timeout')),
+            max_retries: parseInt(formData.get('max_retries')),
+            retry_delay: parseInt(formData.get('retry_delay')),
+            run_as: formData.get('run_as')
+        };
+        
+        const scriptType = document.querySelector('input[name="scriptType"]:checked').value;
+        if (scriptType === 'inline') {
+            jobData.script_content = formData.get('script_content');
         } else {
-            alert('Debug function is currently only for SQL jobs');
+            jobData.script_path = formData.get('script_path');
+        }
+        jobData.execution_policy = formData.get('execution_policy');
+        jobData.working_directory = formData.get('working_directory');
+        
+        const params = formData.get('parameters');
+        if (params) {
+            jobData.parameters = params.split(' ').filter(p => p.trim());
+        }
+        
+        console.log('=== POWERSHELL JOB DEBUG ===');
+        console.log('Script type:', scriptType);
+        console.log('Script content:', jobData.script_content);
+        console.log('Script path:', jobData.script_path);
+        console.log('Execution policy:', jobData.execution_policy);
+        console.log('Parameters:', jobData.parameters);
+        console.log('Full job data:', jobData);
+        
+        // Show debug info in alert
+        const debugInfo = `PowerShell Job Debug Information:
+- Job Name: ${jobData.name}
+- Job Type: ${jobData.type}
+- Script Type: ${scriptType}
+- Script Content Length: ${jobData.script_content ? jobData.script_content.length : 0} characters
+- Script Path: ${jobData.script_path || 'None'}
+- Execution Policy: ${jobData.execution_policy}
+- Parameters: ${jobData.parameters ? jobData.parameters.length : 0} items
+- Working Directory: ${jobData.working_directory || 'Default'}
+- Full Data Keys: ${Object.keys(jobData).join(', ')}`;
+        
+        alert(debugInfo);
+        showSuccess('PowerShell job debug data logged to console');
+    }
+    
+    // Test PowerShell script syntax
+    function testPowerShellScript() {
+        if (selectedJobType !== 'powershell') {
+            showError('Script testing is only available for PowerShell jobs');
+            return;
+        }
+        
+        const scriptType = document.querySelector('input[name="scriptType"]:checked').value;
+        let scriptContent = '';
+        
+        if (scriptType === 'inline') {
+            scriptContent = document.getElementById('scriptContent').value;
+            if (!scriptContent || scriptContent.trim() === '') {
+                showError('Please enter PowerShell script content to test');
+                return;
+            }
+        } else {
+            const scriptPath = document.getElementById('scriptPath').value;
+            if (!scriptPath || scriptPath.trim() === '') {
+                showError('Please enter PowerShell script path to test');
+                return;
+            }
+            showInfo('Script syntax testing for file paths is not yet implemented. Use inline scripts for syntax testing.');
+            return;
+        }
+        
+        // Basic PowerShell syntax validation
+        const commonErrors = [];
+        
+        // Check for unclosed strings
+        const singleQuotes = (scriptContent.match(/'/g) || []).length;
+        const doubleQuotes = (scriptContent.match(/"/g) || []).length;
+        
+        if (singleQuotes % 2 !== 0) {
+            commonErrors.push('Unclosed single quote detected');
+        }
+        if (doubleQuotes % 2 !== 0) {
+            commonErrors.push('Unclosed double quote detected');
+        }
+        
+        // Check for basic PowerShell structure
+        if (scriptContent.includes('function ') && !scriptContent.includes('{')) {
+            commonErrors.push('Function definition without opening brace');
+        }
+        
+        if (commonErrors.length > 0) {
+            showError('Potential syntax issues found:\\n- ' + commonErrors.join('\\n- '));
+        } else {
+            showSuccess('Basic syntax validation passed! No obvious errors detected.');
         }
     }
     
