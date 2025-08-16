@@ -449,3 +449,165 @@ class JobManager:
         except Exception as e:
             self.logger.error(f"[JOB_MANAGER] Error retrieving execution history: {e}")
             return []
+    
+    def update_job(self, job_id: str, job_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update existing job configuration"""
+        try:
+            self.logger.info(f"[JOB_MANAGER] Updating job {job_id}")
+            
+            # First, check if job exists
+            existing_job = self.get_job(job_id)
+            if not existing_job:
+                return {
+                    'success': False,
+                    'error': f'Job {job_id} not found'
+                }
+            
+            # Validate required fields
+            job_name = job_data.get('name', '').strip()
+            if not job_name:
+                return {
+                    'success': False,
+                    'error': 'Job name is required'
+                }
+            
+            job_type = existing_job.get('job_type')  # Keep original job type
+            
+            # Validate job-specific requirements
+            if job_type == 'sql':
+                if not job_data.get('sql_query'):
+                    return {
+                        'success': False,
+                        'error': 'SQL query is required for SQL jobs'
+                    }
+                if not job_data.get('connection_name'):
+                    return {
+                        'success': False,
+                        'error': 'Database connection is required for SQL jobs'
+                    }
+                
+                # Validate connection exists
+                if not self._validate_connection(job_data.get('connection_name')):
+                    return {
+                        'success': False,
+                        'error': f'Database connection "{job_data.get("connection_name")}" not found'
+                    }
+            
+            elif job_type == 'powershell':
+                if not job_data.get('script_content') and not job_data.get('script_path'):
+                    return {
+                        'success': False,
+                        'error': 'PowerShell script content or path is required'
+                    }
+            
+            # Prepare updated job configuration
+            job_config = {
+                'job_id': job_id,
+                'name': job_name,
+                'type': job_type,
+                'description': job_data.get('description', ''),
+                'enabled': job_data.get('enabled', True),
+                'modified_date': datetime.now().isoformat(),
+                'configuration': {
+                    'basic': {
+                        'timeout': job_data.get('timeout', 300),
+                        'max_retries': job_data.get('max_retries', 3),
+                        'retry_delay': job_data.get('retry_delay', 60),
+                        'run_as': job_data.get('run_as', '')
+                    }
+                }
+            }
+            
+            # Add job-specific configuration
+            if job_type == 'sql':
+                job_config['configuration']['sql'] = {
+                    'connection_name': job_data.get('connection_name'),
+                    'query': job_data.get('sql_query'),
+                    'query_timeout': job_data.get('query_timeout', 300),
+                    'max_rows': job_data.get('max_rows', 1000)
+                }
+            
+            elif job_type == 'powershell':
+                job_config['configuration']['powershell'] = {
+                    'script_content': job_data.get('script_content', ''),
+                    'script_path': job_data.get('script_path', ''),
+                    'execution_policy': job_data.get('execution_policy', 'RemoteSigned'),
+                    'working_directory': job_data.get('working_directory', ''),
+                    'parameters': job_data.get('parameters', [])
+                }
+            
+            # Add schedule configuration if provided
+            if job_data.get('schedule'):
+                job_config['configuration']['schedule'] = job_data['schedule']
+            
+            # Update in database
+            if self._update_job_in_database(job_config):
+                self.logger.info(f"[JOB_MANAGER] Successfully updated job '{job_name}' with ID: {job_id}")
+                return {
+                    'success': True,
+                    'job_id': job_id,
+                    'message': f'Job "{job_name}" updated successfully'
+                }
+            else:
+                self.logger.error(f"[JOB_MANAGER] Failed to update job '{job_name}' in database")
+                return {
+                    'success': False,
+                    'error': 'Failed to update job in database'
+                }
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error updating job {job_id}: {e}")
+            return {
+                'success': False,
+                'error': f'Error updating job: {str(e)}'
+            }
+    
+    def _update_job_in_database(self, job_config: Dict[str, Any]) -> bool:
+        """Update job configuration in database"""
+        try:
+            system_connection = self.connection_pool.get_connection("system")
+            if not system_connection:
+                self.logger.error("[JOB_MANAGER] Cannot update job - database connection failed")
+                return False
+            
+            cursor = system_connection.cursor()
+            
+            # Convert configuration to JSON
+            config_json = json.dumps(job_config['configuration'], indent=2)
+            
+            self.logger.info(f"[JOB_MANAGER] Updating job configuration in database:")
+            self.logger.info(f"[JOB_MANAGER] {config_json}")
+            
+            # Update job record
+            cursor.execute("""
+                UPDATE job_configurations 
+                SET name = ?, 
+                    configuration = ?, 
+                    enabled = ?, 
+                    modified_date = GETDATE()
+                WHERE job_id = ?
+            """, (
+                job_config['name'],
+                config_json,
+                job_config['enabled'],
+                job_config['job_id']
+            ))
+            
+            rows_affected = cursor.rowcount
+            system_connection.commit()
+            cursor.close()
+            
+            if rows_affected > 0:
+                self.logger.info(f"[JOB_MANAGER] Updated job '{job_config['name']}' in database")
+                return True
+            else:
+                self.logger.warning(f"[JOB_MANAGER] No rows affected when updating job {job_config['job_id']}")
+                return False
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error updating job in database: {e}")
+            try:
+                system_connection.rollback()
+            except:
+                pass
+            return False

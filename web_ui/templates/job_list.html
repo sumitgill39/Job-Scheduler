@@ -152,9 +152,16 @@
                                     </button>
                                     
                                     <button type="button" class="btn btn-sm btn-outline-{{ 'warning' if job.enabled else 'success' }} btn-action" 
-                                            onclick="toggleJob('{{ job.id }}')" 
-                                            data-bs-toggle="tooltip" title="{{ 'Disable' if job.enabled else 'Enable' }}">
+                                            onclick="toggleJobStatus('{{ job.id }}', {{ 'false' if job.enabled else 'true' }})" 
+                                            data-bs-toggle="tooltip" title="{{ 'Disable' if job.enabled else 'Enable' }}"
+                                            id="toggle-btn-{{ job.id }}">
                                         <i class="fas fa-{{ 'pause' if job.enabled else 'play' }}"></i>
+                                    </button>
+                                    
+                                    <button type="button" class="btn btn-sm btn-outline-secondary btn-action" 
+                                            onclick="editJob('{{ job.id }}')" 
+                                            data-bs-toggle="tooltip" title="Edit Job">
+                                        <i class="fas fa-edit"></i>
                                     </button>
                                     
                                     <a href="{{ url_for('job_details', job_id=job.id) }}" 
@@ -321,29 +328,57 @@
         }
     }
     
-    function toggleJob(jobId) {
-        showLoading();
+    function toggleJobStatus(jobId, enableStatus) {
+        const action = enableStatus === 'true' ? 'enable' : 'disable';
+        const actionText = enableStatus === 'true' ? 'Enable' : 'Disable';
         
-        fetch(`/api/jobs/${jobId}/toggle`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            hideLoading();
-            if (data.message) {
-                showSuccess(data.message);
-                setTimeout(() => refreshJobs(), 1000);
-            } else {
-                showError(data.error || 'Failed to toggle job');
-            }
-        })
-        .catch(error => {
-            hideLoading();
-            showError('Error toggling job: ' + error.message);
-        });
+        if (confirm(`Are you sure you want to ${action} this job?`)) {
+            showLoading();
+            
+            fetch(`/api/jobs/${jobId}/toggle`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ enabled: enableStatus === 'true' })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                if (data.success) {
+                    showSuccess(`Job ${action}d successfully`);
+                    
+                    // Update the button appearance immediately
+                    const toggleBtn = document.getElementById(`toggle-btn-${jobId}`);
+                    if (toggleBtn) {
+                        if (enableStatus === 'true') {
+                            toggleBtn.className = 'btn btn-sm btn-outline-warning btn-action';
+                            toggleBtn.title = 'Disable';
+                            toggleBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                            toggleBtn.onclick = () => toggleJobStatus(jobId, 'false');
+                        } else {
+                            toggleBtn.className = 'btn btn-sm btn-outline-success btn-action';
+                            toggleBtn.title = 'Enable';
+                            toggleBtn.innerHTML = '<i class="fas fa-play"></i>';
+                            toggleBtn.onclick = () => toggleJobStatus(jobId, 'true');
+                        }
+                    }
+                    
+                    setTimeout(() => refreshJobs(), 1000);
+                } else {
+                    showError(data.error || `Failed to ${action} job`);
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showError(`Error ${action}ing job: ` + error.message);
+            });
+        }
+    }
+    
+    function editJob(jobId) {
+        // Create edit job page URL
+        window.location.href = `/jobs/${jobId}/edit`;
     }
     
     function deleteJob(jobId) {

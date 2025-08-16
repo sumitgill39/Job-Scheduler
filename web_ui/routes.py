@@ -142,6 +142,18 @@ def create_routes(app):
         """Job creation page"""
         return render_template('create_job.html')
     
+    @app.route('/jobs/<job_id>/edit')
+    def edit_job(job_id):
+        """Edit job page"""
+        try:
+            logger.info(f"[EDIT_JOB] Rendering edit job page for job {job_id}")
+            return render_template('edit_job.html', job_id=job_id)
+            
+        except Exception as e:
+            logger.error(f"[EDIT_JOB] Edit job page error: {e}")
+            flash(f'Error loading edit job page: {str(e)}', 'error')
+            return redirect(url_for('job_list'))
+
     @app.route('/jobs/<job_id>')
     def job_details(job_id):
         """Job details page"""
@@ -184,6 +196,80 @@ def create_routes(app):
             logger.error(f"API status error: {e}")
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/jobs/<job_id>', methods=['GET'])
+    def api_get_job(job_id):
+        """API endpoint to get individual job details"""
+        logger.info(f"[API_GET_JOB] Fetching job details for {job_id}")
+        
+        try:
+            # Use global JobManager instance
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Database not available'
+                }), 500
+            
+            job = job_manager.get_job(job_id)
+            
+            if job:
+                logger.info(f"[API_GET_JOB] Job {job_id} found")
+                return jsonify({
+                    'success': True,
+                    'job': job
+                })
+            else:
+                logger.warning(f"[API_GET_JOB] Job {job_id} not found")
+                return jsonify({
+                    'success': False,
+                    'error': f'Job {job_id} not found'
+                }), 404
+                
+        except Exception as e:
+            logger.error(f"[API_GET_JOB] Error fetching job {job_id}: {e}")
+            return jsonify({
+                'success': False,
+                'error': f'Error fetching job: {str(e)}'
+            }), 500
+
+    @app.route('/api/jobs/<job_id>', methods=['PUT'])
+    def api_update_job(job_id):
+        """API endpoint to update job configuration"""
+        logger.info(f"[API_UPDATE_JOB] Updating job {job_id}")
+        
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({
+                    'success': False,
+                    'error': 'No data provided'
+                }), 400
+            
+            # Use global JobManager instance
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Database not available'
+                }), 500
+            
+            # Update the job
+            result = job_manager.update_job(job_id, data)
+            
+            if result['success']:
+                logger.info(f"[API_UPDATE_JOB] Job {job_id} updated successfully")
+                return jsonify(result)
+            else:
+                logger.warning(f"[API_UPDATE_JOB] Failed to update job {job_id}: {result['error']}")
+                return jsonify(result), 400
+                
+        except Exception as e:
+            logger.error(f"[API_UPDATE_JOB] Error updating job {job_id}: {e}")
+            return jsonify({
+                'success': False,
+                'error': f'Error updating job: {str(e)}'
+            }), 500
+
     @app.route('/api/jobs', methods=['GET'])
     def api_jobs():
         """API endpoint for job list"""

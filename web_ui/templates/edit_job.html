@@ -1,0 +1,658 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Job - Windows Job Scheduler{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-0">
+                        <i class="fas fa-edit me-2"></i>Edit Job
+                    </h4>
+                    <small class="text-muted">Modify existing job configuration</small>
+                </div>
+                <div>
+                    <a href="{{ url_for('job_list') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Back to Jobs
+                    </a>
+                </div>
+            </div>
+            
+            <div class="card-body">
+                <form id="editJobForm">
+                    <input type="hidden" id="jobId" name="job_id" value="">
+                    
+                    <!-- Job Information Section -->
+                    <div class="mb-4">
+                        <h5 class="border-bottom pb-2">
+                            <i class="fas fa-info-circle me-2"></i>Job Information
+                        </h5>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="jobName" class="form-label">Job Name *</label>
+                                    <input type="text" class="form-control" id="jobName" name="name" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="jobType" class="form-label">Job Type</label>
+                                    <input type="text" class="form-control" id="jobType" name="job_type" readonly>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="jobDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="jobDescription" name="description" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="jobEnabled" name="enabled">
+                                        <label class="form-check-label" for="jobEnabled">
+                                            <strong>Job Enabled</strong>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SQL Job Configuration -->
+                    <div id="sqlJobConfig" style="display: none;">
+                        <h5 class="border-bottom pb-2">
+                            <i class="fas fa-database me-2"></i>SQL Configuration
+                        </h5>
+                        
+                        <div class="mb-3">
+                            <label for="connectionName" class="form-label">Database Connection *</label>
+                            <select class="form-select" id="connectionName" name="connection_name">
+                                <option value="">Select a connection...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="sqlQuery" class="form-label">SQL Query *</label>
+                            <textarea class="form-control" id="sqlQuery" name="sql_query" rows="8" 
+                                      placeholder="Enter your SQL query here..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- PowerShell Job Configuration -->
+                    <div id="powershellJobConfig" style="display: none;">
+                        <h5 class="border-bottom pb-2">
+                            <i class="fab fa-microsoft me-2"></i>PowerShell Configuration
+                        </h5>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Script Type</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="scriptType" id="scriptTypeInline" value="inline" checked>
+                                <label class="btn btn-outline-primary" for="scriptTypeInline">
+                                    <i class="fas fa-edit me-1"></i>Inline Script
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="scriptType" id="scriptTypeFile" value="file">
+                                <label class="btn btn-outline-primary" for="scriptTypeFile">
+                                    <i class="fas fa-file me-1"></i>Script File
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="inlineScriptSection">
+                            <div class="mb-3">
+                                <label for="scriptContent" class="form-label">PowerShell Script *</label>
+                                <textarea class="form-control" id="scriptContent" name="script_content" rows="8" 
+                                          placeholder="Enter your PowerShell script here..."></textarea>
+                            </div>
+                        </div>
+
+                        <div id="fileScriptSection" style="display: none;">
+                            <div class="mb-3">
+                                <label for="scriptPath" class="form-label">Script File Path *</label>
+                                <input type="text" class="form-control" id="scriptPath" name="script_path" 
+                                       placeholder="C:\Scripts\MyScript.ps1">
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="executionPolicy" class="form-label">Execution Policy</label>
+                                <select class="form-select" id="executionPolicy" name="execution_policy">
+                                    <option value="RemoteSigned">RemoteSigned</option>
+                                    <option value="Unrestricted">Unrestricted</option>
+                                    <option value="Bypass">Bypass</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="workingDirectory" class="form-label">Working Directory</label>
+                                <input type="text" class="form-control" id="workingDirectory" name="working_directory" 
+                                       placeholder="C:\Scripts (optional)">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="scriptParameters" class="form-label">Parameters</label>
+                            <input type="text" class="form-control" id="scriptParameters" name="parameters" 
+                                   placeholder="-Message 'Hello World' -Verbose">
+                        </div>
+                    </div>
+
+                    <!-- Advanced Settings -->
+                    <div class="mb-4">
+                        <h5 class="border-bottom pb-2">
+                            <i class="fas fa-cog me-2"></i>Advanced Settings
+                        </h5>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="jobTimeout" class="form-label">Timeout (seconds)</label>
+                                    <input type="number" class="form-control" id="jobTimeout" name="timeout" value="300" min="1">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="maxRetries" class="form-label">Max Retries</label>
+                                    <input type="number" class="form-control" id="maxRetries" name="max_retries" value="3" min="0">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="retryDelay" class="form-label">Retry Delay (seconds)</label>
+                                    <input type="number" class="form-control" id="retryDelay" name="retry_delay" value="60" min="1">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="runAs" class="form-label">Run As (optional)</label>
+                            <input type="text" class="form-control" id="runAs" name="run_as" 
+                                   placeholder="domain\username (leave empty for current user)">
+                        </div>
+                    </div>
+
+                    <!-- Schedule Configuration -->
+                    <div class="mb-4">
+                        <h5 class="border-bottom pb-2">
+                            <i class="fas fa-clock me-2"></i>Schedule Configuration
+                        </h5>
+                        
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="enableSchedule" name="enable_schedule">
+                            <label class="form-check-label" for="enableSchedule">
+                                <strong>Enable Scheduling</strong>
+                            </label>
+                        </div>
+                        
+                        <div id="scheduleSection" style="display: none;">
+                            <div class="mb-3">
+                                <label class="form-label">Schedule Type</label>
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" name="scheduleType" id="scheduleTypeCron" value="cron" checked>
+                                    <label class="btn btn-outline-secondary" for="scheduleTypeCron">
+                                        <i class="fas fa-clock me-1"></i>Cron Expression
+                                    </label>
+                                    
+                                    <input type="radio" class="btn-check" name="scheduleType" id="scheduleTypeInterval" value="interval">
+                                    <label class="btn btn-outline-secondary" for="scheduleTypeInterval">
+                                        <i class="fas fa-repeat me-1"></i>Interval
+                                    </label>
+                                    
+                                    <input type="radio" class="btn-check" name="scheduleType" id="scheduleTypeOnce" value="once">
+                                    <label class="btn btn-outline-secondary" for="scheduleTypeOnce">
+                                        <i class="fas fa-play-circle me-1"></i>One Time
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- Cron Schedule -->
+                            <div id="cronSection">
+                                <div class="mb-3">
+                                    <label for="cronExpression" class="form-label">Cron Expression</label>
+                                    <input type="text" class="form-control" id="cronExpression" name="cron_expression" 
+                                           placeholder="0 0 * * * (every day at midnight)">
+                                </div>
+                            </div>
+                            
+                            <!-- Interval Schedule -->
+                            <div id="intervalSection" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label for="intervalDays" class="form-label">Days</label>
+                                        <input type="number" class="form-control" id="intervalDays" name="interval_days" value="0" min="0">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="intervalHours" class="form-label">Hours</label>
+                                        <input type="number" class="form-control" id="intervalHours" name="interval_hours" value="1" min="0" max="23">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="intervalMinutes" class="form-label">Minutes</label>
+                                        <input type="number" class="form-control" id="intervalMinutes" name="interval_minutes" value="0" min="0" max="59">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="intervalSeconds" class="form-label">Seconds</label>
+                                        <input type="number" class="form-control" id="intervalSeconds" name="interval_seconds" value="0" min="0" max="59">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- One Time Schedule -->
+                            <div id="onceSection" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="runDate" class="form-label">Run Date</label>
+                                        <input type="date" class="form-control" id="runDate" name="run_date">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="runTime" class="form-label">Run Time</label>
+                                        <input type="time" class="form-control" id="runTime" name="run_time">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <a href="{{ url_for('job_list') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Cancel
+                            </a>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-outline-info me-2" onclick="previewChanges()">
+                                <i class="fas fa-eye me-1"></i>Preview Changes
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading and status messages -->
+<div id="loading" class="text-center py-4" style="display: none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <div class="mt-2">Loading job data...</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentJobData = {};
+    
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+        const jobId = getJobIdFromURL();
+        if (jobId) {
+            loadJobData(jobId);
+            loadConnections();
+            setupEventListeners();
+        } else {
+            showError('No job ID provided');
+            setTimeout(() => window.location.href = '/jobs', 2000);
+        }
+    });
+
+    function getJobIdFromURL() {
+        const pathParts = window.location.pathname.split('/');
+        return pathParts[pathParts.length - 2]; // Assuming URL is /jobs/{id}/edit
+    }
+
+    function loadJobData(jobId) {
+        showLoading(true);
+        
+        fetch(`/api/jobs/${jobId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.job) {
+                    currentJobData = data.job;
+                    populateForm(data.job);
+                } else {
+                    showError(data.error || 'Failed to load job data');
+                }
+            })
+            .catch(error => {
+                showError('Error loading job: ' + error.message);
+            })
+            .finally(() => {
+                showLoading(false);
+            });
+    }
+
+    function populateForm(job) {
+        // Basic job information
+        document.getElementById('jobId').value = job.job_id;
+        document.getElementById('jobName').value = job.name || '';
+        document.getElementById('jobType').value = job.job_type || '';
+        document.getElementById('jobDescription').value = job.description || '';
+        document.getElementById('jobEnabled').checked = job.enabled;
+
+        // Parse configuration
+        const config = job.configuration || {};
+        const basic = config.basic || {};
+        
+        // Advanced settings
+        document.getElementById('jobTimeout').value = basic.timeout || 300;
+        document.getElementById('maxRetries').value = basic.max_retries || 3;
+        document.getElementById('retryDelay').value = basic.retry_delay || 60;
+        document.getElementById('runAs').value = basic.run_as || '';
+
+        // Job-specific configuration
+        if (job.job_type === 'sql') {
+            showSQLConfig();
+            const sqlConfig = config.sql || {};
+            document.getElementById('connectionName').value = sqlConfig.connection_name || '';
+            document.getElementById('sqlQuery').value = sqlConfig.query || '';
+        } else if (job.job_type === 'powershell') {
+            showPowerShellConfig();
+            const psConfig = config.powershell || {};
+            
+            // Determine script type
+            if (psConfig.script_content) {
+                document.getElementById('scriptTypeInline').checked = true;
+                document.getElementById('scriptContent').value = psConfig.script_content;
+                showInlineScriptSection();
+            } else if (psConfig.script_path) {
+                document.getElementById('scriptTypeFile').checked = true;
+                document.getElementById('scriptPath').value = psConfig.script_path;
+                showFileScriptSection();
+            }
+            
+            document.getElementById('executionPolicy').value = psConfig.execution_policy || 'RemoteSigned';
+            document.getElementById('workingDirectory').value = psConfig.working_directory || '';
+            
+            // Handle parameters
+            if (psConfig.parameters && Array.isArray(psConfig.parameters)) {
+                document.getElementById('scriptParameters').value = psConfig.parameters.join(' ');
+            }
+        }
+
+        // Schedule configuration
+        if (config.schedule) {
+            document.getElementById('enableSchedule').checked = true;
+            showScheduleSection();
+            
+            const schedule = config.schedule;
+            if (schedule.type === 'cron') {
+                document.getElementById('scheduleTypeCron').checked = true;
+                document.getElementById('cronExpression').value = schedule.cron || '';
+                showCronSection();
+            } else if (schedule.type === 'interval') {
+                document.getElementById('scheduleTypeInterval').checked = true;
+                const interval = schedule.interval || {};
+                document.getElementById('intervalDays').value = interval.days || 0;
+                document.getElementById('intervalHours').value = interval.hours || 1;
+                document.getElementById('intervalMinutes').value = interval.minutes || 0;
+                document.getElementById('intervalSeconds').value = interval.seconds || 0;
+                showIntervalSection();
+            } else if (schedule.type === 'date') {
+                document.getElementById('scheduleTypeOnce').checked = true;
+                if (schedule.run_date) {
+                    const runDate = new Date(schedule.run_date);
+                    document.getElementById('runDate').value = runDate.toISOString().split('T')[0];
+                    document.getElementById('runTime').value = runDate.toISOString().split('T')[1].substr(0, 5);
+                }
+                showOnceSection();
+            }
+        }
+    }
+
+    function loadConnections() {
+        fetch('/api/connections')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.connections) {
+                    const select = document.getElementById('connectionName');
+                    select.innerHTML = '<option value="">Select a connection...</option>';
+                    
+                    Object.keys(data.connections).forEach(connectionName => {
+                        const option = document.createElement('option');
+                        option.value = connectionName;
+                        option.textContent = connectionName;
+                        select.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading connections:', error);
+            });
+    }
+
+    function setupEventListeners() {
+        // Schedule toggle
+        document.getElementById('enableSchedule').addEventListener('change', function() {
+            if (this.checked) {
+                showScheduleSection();
+            } else {
+                hideScheduleSection();
+            }
+        });
+
+        // Schedule type radios
+        document.querySelectorAll('input[name="scheduleType"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                if (this.value === 'cron') {
+                    showCronSection();
+                } else if (this.value === 'interval') {
+                    showIntervalSection();
+                } else if (this.value === 'once') {
+                    showOnceSection();
+                }
+            });
+        });
+
+        // Script type radios
+        document.querySelectorAll('input[name="scriptType"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                if (this.value === 'inline') {
+                    showInlineScriptSection();
+                } else {
+                    showFileScriptSection();
+                }
+            });
+        });
+
+        // Form submission
+        document.getElementById('editJobForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveJobChanges();
+        });
+    }
+
+    function showSQLConfig() {
+        document.getElementById('sqlJobConfig').style.display = 'block';
+        document.getElementById('powershellJobConfig').style.display = 'none';
+    }
+
+    function showPowerShellConfig() {
+        document.getElementById('sqlJobConfig').style.display = 'none';
+        document.getElementById('powershellJobConfig').style.display = 'block';
+    }
+
+    function showScheduleSection() {
+        document.getElementById('scheduleSection').style.display = 'block';
+    }
+
+    function hideScheduleSection() {
+        document.getElementById('scheduleSection').style.display = 'none';
+    }
+
+    function showCronSection() {
+        document.getElementById('cronSection').style.display = 'block';
+        document.getElementById('intervalSection').style.display = 'none';
+        document.getElementById('onceSection').style.display = 'none';
+    }
+
+    function showIntervalSection() {
+        document.getElementById('cronSection').style.display = 'none';
+        document.getElementById('intervalSection').style.display = 'block';
+        document.getElementById('onceSection').style.display = 'none';
+    }
+
+    function showOnceSection() {
+        document.getElementById('cronSection').style.display = 'none';
+        document.getElementById('intervalSection').style.display = 'none';
+        document.getElementById('onceSection').style.display = 'block';
+    }
+
+    function showInlineScriptSection() {
+        document.getElementById('inlineScriptSection').style.display = 'block';
+        document.getElementById('fileScriptSection').style.display = 'none';
+    }
+
+    function showFileScriptSection() {
+        document.getElementById('inlineScriptSection').style.display = 'none';
+        document.getElementById('fileScriptSection').style.display = 'block';
+    }
+
+    function previewChanges() {
+        const updatedJobData = collectFormData();
+        const changes = findChanges(currentJobData, updatedJobData);
+        
+        let changesList = '<ul>';
+        Object.keys(changes).forEach(key => {
+            changesList += `<li><strong>${key}:</strong> ${changes[key].old} → ${changes[key].new}</li>`;
+        });
+        changesList += '</ul>';
+        
+        if (Object.keys(changes).length === 0) {
+            alert('No changes detected.');
+        } else {
+            const confirmed = confirm(`The following changes will be made:\n\n${changesList}\n\nDo you want to proceed?`);
+            if (confirmed) {
+                saveJobChanges();
+            }
+        }
+    }
+
+    function collectFormData() {
+        const formData = new FormData(document.getElementById('editJobForm'));
+        const jobData = {
+            job_id: formData.get('job_id'),
+            name: formData.get('name'),
+            job_type: formData.get('job_type'),
+            description: formData.get('description'),
+            enabled: document.getElementById('jobEnabled').checked,
+            timeout: parseInt(formData.get('timeout')),
+            max_retries: parseInt(formData.get('max_retries')),
+            retry_delay: parseInt(formData.get('retry_delay')),
+            run_as: formData.get('run_as')
+        };
+
+        // Add job-specific data
+        if (jobData.job_type === 'sql') {
+            jobData.sql_query = formData.get('sql_query');
+            jobData.connection_name = formData.get('connection_name');
+        } else if (jobData.job_type === 'powershell') {
+            const scriptType = document.querySelector('input[name="scriptType"]:checked').value;
+            if (scriptType === 'inline') {
+                jobData.script_content = formData.get('script_content');
+            } else {
+                jobData.script_path = formData.get('script_path');
+            }
+            jobData.execution_policy = formData.get('execution_policy');
+            jobData.working_directory = formData.get('working_directory');
+            
+            const params = formData.get('parameters');
+            if (params) {
+                jobData.parameters = params.split(' ').filter(p => p.trim());
+            }
+        }
+
+        // Add schedule if enabled
+        if (document.getElementById('enableSchedule').checked) {
+            const scheduleType = document.querySelector('input[name="scheduleType"]:checked').value;
+            
+            if (scheduleType === 'cron') {
+                jobData.schedule = {
+                    type: 'cron',
+                    cron: formData.get('cron_expression')
+                };
+            } else if (scheduleType === 'interval') {
+                jobData.schedule = {
+                    type: 'interval',
+                    interval: {
+                        days: parseInt(formData.get('interval_days')),
+                        hours: parseInt(formData.get('interval_hours')),
+                        minutes: parseInt(formData.get('interval_minutes')),
+                        seconds: parseInt(formData.get('interval_seconds'))
+                    }
+                };
+            } else if (scheduleType === 'once') {
+                const date = formData.get('run_date');
+                const time = formData.get('run_time');
+                jobData.schedule = {
+                    type: 'date',
+                    run_date: `${date}T${time}:00`
+                };
+            }
+        }
+
+        return jobData;
+    }
+
+    function findChanges(original, updated) {
+        const changes = {};
+        
+        // Compare simple fields
+        const simpleFields = ['name', 'description', 'enabled', 'timeout', 'max_retries', 'retry_delay', 'run_as'];
+        simpleFields.forEach(field => {
+            if (original[field] !== updated[field]) {
+                changes[field] = { old: original[field], new: updated[field] };
+            }
+        });
+
+        return changes;
+    }
+
+    function saveJobChanges() {
+        const jobData = collectFormData();
+        const jobId = jobData.job_id;
+        
+        showLoading(true);
+        
+        fetch(`/api/jobs/${jobId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(jobData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSuccess('Job updated successfully!');
+                setTimeout(() => {
+                    window.location.href = `/jobs/${jobId}`;
+                }, 2000);
+            } else {
+                showError(data.error || 'Failed to update job');
+            }
+        })
+        .catch(error => {
+            showError('Error updating job: ' + error.message);
+        })
+        .finally(() => {
+            showLoading(false);
+        });
+    }
+
+    function showLoading(show) {
+        document.getElementById('loading').style.display = show ? 'block' : 'none';
+    }
+</script>
+{% endblock %}
