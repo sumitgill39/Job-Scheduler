@@ -160,7 +160,7 @@
                                 <th>Name</th>
                                 <th>Type</th>
                                 <th>Status</th>
-                                <th>Last Run</th>
+                                <th>Created</th>
                                 <th>Enabled</th>
                                 <th>Actions</th>
                             </tr>
@@ -181,16 +181,12 @@
                                     {{ job.job_type.upper() }}
                                 </td>
                                 <td>
-                                    <span class="status-badge status-{{ job.current_status.value.lower() }}">
-                                        {{ job.current_status.value.upper() }}
+                                    <span class="status-badge status-{{ 'enabled' if job.enabled else 'disabled' }}">
+                                        {{ 'ENABLED' if job.enabled else 'DISABLED' }}
                                     </span>
                                 </td>
                                 <td>
-                                    {% if job.last_run_time %}
-                                        <small>{{ job.last_run_time.strftime('%Y-%m-%d %H:%M') }}</small>
-                                    {% else %}
-                                        <small class="text-muted">Never</small>
-                                    {% endif %}
+                                    <small class="text-muted">{{ job.created_date|string if job.created_date else 'Unknown' }}</small>
                                 </td>
                                 <td>
                                     <span class="badge bg-{{ 'success' if job.enabled else 'secondary' }}">
