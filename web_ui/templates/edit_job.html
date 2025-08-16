@@ -318,8 +318,10 @@
         fetch(`/api/jobs/${jobId}`)
             .then(response => response.json())
             .then(data => {
+                console.log('API Response:', data); // Debug log
                 if (data.success && data.job) {
                     currentJobData = data.job;
+                    console.log('Job Data:', data.job); // Debug log
                     populateForm(data.job);
                 } else {
                     showError(data.error || 'Failed to load job data');
@@ -334,6 +336,10 @@
     }
 
     function populateForm(job) {
+        console.log('Populating form with job:', job); // Debug log
+        console.log('Job type:', job.job_type); // Debug log
+        console.log('Configuration:', job.configuration); // Debug log
+        
         // Basic job information
         document.getElementById('jobId').value = job.job_id;
         document.getElementById('jobName').value = job.name || '';
@@ -345,6 +351,8 @@
         const config = job.configuration || {};
         const basic = config.basic || {};
         
+        console.log('Basic config:', basic); // Debug log
+        
         // Advanced settings
         document.getElementById('jobTimeout').value = basic.timeout || 300;
         document.getElementById('maxRetries').value = basic.max_retries || 3;
@@ -353,13 +361,17 @@
 
         // Job-specific configuration
         if (job.job_type === 'sql') {
+            console.log('Loading SQL job configuration'); // Debug log
             showSQLConfig();
             const sqlConfig = config.sql || {};
+            console.log('SQL config:', sqlConfig); // Debug log
             document.getElementById('connectionName').value = sqlConfig.connection_name || '';
             document.getElementById('sqlQuery').value = sqlConfig.query || '';
         } else if (job.job_type === 'powershell') {
+            console.log('Loading PowerShell job configuration'); // Debug log
             showPowerShellConfig();
             const psConfig = config.powershell || {};
+            console.log('PowerShell config:', psConfig); // Debug log
             
             // Determine script type
             if (psConfig.script_content) {
@@ -412,9 +424,11 @@
     }
 
     function loadConnections() {
+        console.log('Loading database connections...'); // Debug log
         fetch('/api/connections')
             .then(response => response.json())
             .then(data => {
+                console.log('Connections API response:', data); // Debug log
                 if (data.success && data.connections) {
                     const select = document.getElementById('connectionName');
                     select.innerHTML = '<option value="">Select a connection...</option>';
@@ -425,6 +439,9 @@
                         option.textContent = connectionName;
                         select.appendChild(option);
                     });
+                    console.log('Loaded connections:', Object.keys(data.connections)); // Debug log
+                } else {
+                    console.error('Failed to load connections:', data); // Debug log
                 }
             })
             .catch(error => {

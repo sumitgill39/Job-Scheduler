@@ -232,7 +232,7 @@ class JobManager:
             return {
                 'job_id': row[0],
                 'name': row[1],
-                'type': row[2],
+                'job_type': row[2],  # Changed from 'type' to 'job_type'
                 'configuration': configuration,
                 'enabled': bool(row[4]),
                 'created_date': row[5],
