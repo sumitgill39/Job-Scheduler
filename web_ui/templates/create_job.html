@@ -332,13 +332,13 @@
                     </div>
 
                     <!-- SQL Job Action Buttons -->
-                    <div id="sqlJobActions" class="mt-4 pt-3 border-top" style="display: none;">
+                    <div id="sqlJobActions" class="mt-4 pt-3 border-top sql-job-actions" style="display: none;">
                         <div class="row">
                             <div class="col-md-6">
                                 <button type="button" class="btn btn-outline-secondary me-2" onclick="validateJob()">
                                     <i class="fas fa-check me-1"></i>Validate SQL
                                 </button>
-                                <button type="button" class="btn btn-outline-info" onclick="testConnection()">
+                                <button type="button" class="btn btn-outline-info me-2" onclick="testConnection()">
                                     <i class="fas fa-plug me-1"></i>Test Connection
                                 </button>
                                 <button type="button" class="btn btn-outline-info" onclick="debugFormData()">
@@ -346,24 +346,24 @@
                                 </button>
                             </div>
                             <div class="col-md-6 text-end">
-                                <a href="{{ url_for('job_list') }}" class="btn btn-secondary me-2">
+                                <a href="{{ url_for('job_list') }}" class="btn btn-secondary me-3">
                                     <i class="fas fa-times me-1"></i>Cancel
                                 </a>
-                                <button type="submit" class="btn btn-info">
-                                    <i class="fas fa-database me-1"></i>Create SQL Job
+                                <button type="submit" class="btn btn-info btn-lg sql-submit-btn">
+                                    <i class="fas fa-database me-2"></i>Create SQL Job
                                 </button>
                             </div>
                         </div>
                     </div>
 
                     <!-- PowerShell Job Action Buttons -->
-                    <div id="powershellJobActions" class="mt-4 pt-3 border-top" style="display: none;">
+                    <div id="powershellJobActions" class="mt-4 pt-3 border-top powershell-job-actions" style="display: none;">
                         <div class="row">
                             <div class="col-md-6">
                                 <button type="button" class="btn btn-outline-secondary me-2" onclick="validateJob()">
                                     <i class="fas fa-check me-1"></i>Validate PowerShell
                                 </button>
-                                <button type="button" class="btn btn-outline-warning" onclick="testPowerShellScript()">
+                                <button type="button" class="btn btn-outline-warning me-2" onclick="testPowerShellScript()">
                                     <i class="fab fa-microsoft me-1"></i>Test Script Syntax
                                 </button>
                                 <button type="button" class="btn btn-outline-info" onclick="debugPowerShellData()">
@@ -371,11 +371,11 @@
                                 </button>
                             </div>
                             <div class="col-md-6 text-end">
-                                <a href="{{ url_for('job_list') }}" class="btn btn-secondary me-2">
+                                <a href="{{ url_for('job_list') }}" class="btn btn-secondary me-3">
                                     <i class="fas fa-times me-1"></i>Cancel
                                 </a>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="fab fa-microsoft me-1"></i>Create PowerShell Job
+                                <button type="submit" class="btn btn-primary btn-lg powershell-submit-btn">
+                                    <i class="fab fa-microsoft me-2"></i>Create PowerShell Job
                                 </button>
                             </div>
                         </div>
@@ -435,6 +435,46 @@
         border-radius: 8px;
         padding: 1rem;
         border: 1px solid #dee2e6;
+    }
+    
+    /* Job-specific action sections */
+    .sql-job-actions {
+        background: linear-gradient(135deg, rgba(23, 162, 184, 0.05), rgba(23, 162, 184, 0.1));
+        border-radius: 10px;
+        padding: 1.5rem;
+        border: 1px solid rgba(23, 162, 184, 0.2);
+    }
+    
+    .powershell-job-actions {
+        background: linear-gradient(135deg, rgba(0, 123, 255, 0.05), rgba(0, 123, 255, 0.1));
+        border-radius: 10px;
+        padding: 1.5rem;
+        border: 1px solid rgba(0, 123, 255, 0.2);
+    }
+    
+    /* Enhanced submit buttons */
+    .sql-submit-btn {
+        box-shadow: 0 4px 12px rgba(23, 162, 184, 0.3);
+        transition: all 0.3s ease;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+    
+    .sql-submit-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(23, 162, 184, 0.4);
+    }
+    
+    .powershell-submit-btn {
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+        transition: all 0.3s ease;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+    
+    .powershell-submit-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0, 123, 255, 0.4);
     }
 </style>
 {% endblock %}
