@@ -375,7 +375,7 @@
                                 <a href="{{ url_for('job_list') }}" class="btn btn-secondary me-3">
                                     <i class="fas fa-times me-1"></i>Cancel
                                 </a>
-                                <button type="button" class="btn btn-primary btn-lg powershell-submit-btn" onclick="showPowerShellPopup()">
+                                <button type="button" class="btn btn-primary btn-lg powershell-submit-btn" onclick="showPowerShellJobJson()">
                                     <i class="fab fa-microsoft me-2"></i>Create PowerShell Job
                                 </button>
                             </div>
@@ -484,9 +484,107 @@
 <script>
     let selectedJobType = null;
     
-    // Show PowerShell popup
-    function showPowerShellPopup() {
-        alert('PowerShell Job Creation Clicked!');
+    // Show PowerShell job JSON configuration
+    function showPowerShellJobJson() {
+        if (!validateJob()) {
+            return;
+        }
+        
+        // Prepare form data
+        const formData = new FormData(document.getElementById('createJobForm'));
+        const jobData = {
+            type: 'powershell',
+            name: formData.get('name'),
+            description: formData.get('description'),
+            enabled: formData.get('enabled') === 'true',
+            timeout: parseInt(formData.get('timeout')),
+            max_retries: parseInt(formData.get('max_retries')),
+            retry_delay: parseInt(formData.get('retry_delay')),
+            run_as: formData.get('run_as')
+        };
+        
+        // Add PowerShell-specific data
+        const scriptType = document.querySelector('input[name="scriptType"]:checked').value;
+        if (scriptType === 'inline') {
+            jobData.script_content = formData.get('script_content');
+        } else {
+            jobData.script_path = formData.get('script_path');
+        }
+        jobData.execution_policy = formData.get('execution_policy');
+        jobData.working_directory = formData.get('working_directory');
+        
+        // Parse parameters
+        const params = formData.get('parameters');
+        if (params) {
+            jobData.parameters = params.split(' ').filter(p => p.trim());
+        }
+        
+        // Add schedule if enabled
+        if (document.getElementById('enableSchedule').checked) {
+            const scheduleType = document.querySelector('input[name="scheduleType"]:checked').value;
+            
+            if (scheduleType === 'cron') {
+                jobData.schedule = {
+                    type: 'cron',
+                    cron: document.getElementById('cronExpression').value
+                };
+            } else if (scheduleType === 'interval') {
+                jobData.schedule = {
+                    type: 'interval',
+                    interval: {
+                        days: parseInt(document.getElementById('intervalDays').value),
+                        hours: parseInt(document.getElementById('intervalHours').value),
+                        minutes: parseInt(document.getElementById('intervalMinutes').value),
+                        seconds: parseInt(document.getElementById('intervalSeconds').value)
+                    }
+                };
+            } else if (scheduleType === 'once') {
+                const date = document.getElementById('runDate').value;
+                const time = document.getElementById('runTime').value;
+                jobData.schedule = {
+                    type: 'date',
+                    run_date: `${date}T${time}:00`
+                };
+            }
+        }
+        
+        // Show JSON configuration in popup
+        const jsonConfig = JSON.stringify(jobData, null, 2);
+        const confirmed = confirm(`PowerShell Job Configuration:\n\n${jsonConfig}\n\nDo you want to save this job?`);
+        
+        if (confirmed) {
+            // Proceed with actual form submission
+            submitPowerShellJob(jobData);
+        }
+    }
+    
+    // Submit PowerShell job to API
+    function submitPowerShellJob(jobData) {
+        showLoading();
+        
+        fetch('/api/jobs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(jobData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                showSuccess(data.message || 'PowerShell job created successfully!');
+                setTimeout(() => {
+                    window.location.href = `/jobs/${data.job_id}`;
+                }, 2000);
+            } else {
+                showError(data.error || 'Failed to create PowerShell job');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Error creating PowerShell job: ' + error.message);
+        });
     }
     
     // Job type selection
