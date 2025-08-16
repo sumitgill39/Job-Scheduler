@@ -26,6 +26,7 @@ if "%VIRTUAL_ENV%"=="" (
 REM Install dependencies if requirements.txt is newer than installed packages
 if exist requirements.txt (
     echo Installing/updating dependencies...
+    py -m pip install --only-binary=all pyodbc
     py -m pip install -r requirements.txt
     py -m pip install ldap3 dnspython cryptography 
 )
