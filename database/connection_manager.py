@@ -609,11 +609,11 @@ class DatabaseConnectionManager:
             
             # Test query with server info
             test_queries = [
-                "SELECT @@VERSION as server_version",
-                "SELECT @@SERVERNAME as server_name",
-                "SELECT DB_NAME() as database_name",
-                "SELECT SYSTEM_USER as system_user",
-                "SELECT GETDATE() as current_time"
+                "SELECT @@VERSION as server_version"
+                #"SELECT @@SERVERNAME as server_name",
+                #"SELECT DB_NAME() as database_name",
+                #"SELECT SYSTEM_USER as system_user",
+                #"SELECT GETDATE() as current_time"
             ]
             
             self.logger.debug(f"[CONNECTION_TEST] Executing {len(test_queries)} test queries on '{connection_name}'")
