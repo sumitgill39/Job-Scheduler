@@ -35,10 +35,20 @@ def create_app(scheduler_manager=None):
     try:
         from database.connection_pool import get_connection_pool
         from core.job_manager import JobManager
+        from core.integrated_scheduler import IntegratedScheduler
         
         # Create single instances to be shared across all routes
         app.connection_pool = get_connection_pool()
         app.job_manager = JobManager()
+        
+        # Initialize integrated scheduler (combines job management + scheduling)
+        try:
+            app.integrated_scheduler = IntegratedScheduler()
+            logger.info("✅ Integrated scheduler initialized successfully")
+        except Exception as e:
+            logger.warning(f"⚠️  Integrated scheduler initialization failed: {e}")
+            logger.info("📝 Falling back to basic job manager without scheduling")
+            app.integrated_scheduler = None
         
         logger.info("✅ Global connection pool and job manager initialized successfully")
         
@@ -46,11 +56,13 @@ def create_app(scheduler_manager=None):
         logger.warning(f"⚠️  Database components not available: {e}")
         app.connection_pool = None
         app.job_manager = None
+        app.integrated_scheduler = None
     
     except Exception as e:
         logger.error(f"❌ Failed to initialize database components: {e}")
         app.connection_pool = None
         app.job_manager = None
+        app.integrated_scheduler = None
     
     # Store scheduler manager in app context
     if scheduler_manager:

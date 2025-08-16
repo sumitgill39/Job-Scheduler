@@ -305,7 +305,7 @@ def create_routes(app):
     
     @app.route('/api/jobs', methods=['POST'])
     def api_create_job():
-        """API endpoint for job creation"""
+        """API endpoint for job creation with integrated scheduling"""
         logger.info("[API_JOB_CREATE] Received job creation request")
         
         try:
@@ -318,7 +318,8 @@ def create_routes(app):
             
             # Debug: Log the complete received data
             logger.info(f"[API_JOB_CREATE] Received data keys: {list(data.keys())}")
-            logger.info(f"[API_JOB_CREATE] Received data: {data}")
+            if data.get('schedule'):
+                logger.info(f"[API_JOB_CREATE] Schedule configuration: {data['schedule']}")
             
             if data.get('type') == 'sql':
                 sql_query = data.get('sql_query', 'NONE')
@@ -353,34 +354,51 @@ def create_routes(app):
                         'error': 'PowerShell script content or script path is required for PowerShell jobs'
                     }), 400
             
-            # Use global JobManager instance
-            job_manager = getattr(app, 'job_manager', None)
-            if not job_manager:
-                return jsonify({
-                    'success': False,
-                    'error': 'Database not available'
-                }), 500
-            
-            result = job_manager.create_job(data)
-            
-            if result['success']:
-                logger.info(f"[API_JOB_CREATE] Job created successfully: {result['job_id']}")
-                return jsonify(result), 201
+            # Use integrated scheduler instead of just job manager
+            integrated_scheduler = getattr(app, 'integrated_scheduler', None)
+            if integrated_scheduler:
+                # Use integrated scheduler for job creation with scheduling
+                result = integrated_scheduler.create_job_with_schedule(data)
+                
+                if result['success']:
+                    logger.info(f"[API_JOB_CREATE] Job created successfully: {result['job_id']}")
+                    if result.get('scheduled'):
+                        logger.info(f"[API_JOB_CREATE] Job {result['job_id']} was also scheduled")
+                    return jsonify(result), 201
+                else:
+                    logger.warning(f"[API_JOB_CREATE] Job creation failed: {result['error']}")
+                    return jsonify(result), 400
             else:
-                logger.warning(f"[API_JOB_CREATE] Job creation failed: {result['error']}")
+                # Fallback to basic job manager if integrated scheduler not available
+                job_manager = getattr(app, 'job_manager', None)
+                if not job_manager:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Job management system not available'
+                    }), 500
                 
-                # Provide more specific error message for database connectivity issues
-                error_message = result['error']
-                if 'Failed to save job to database' in error_message:
-                    if data.get('type') == 'powershell':
-                        error_message = 'CRITICAL: PowerShell job cannot be saved - SQL Server database connection failed. Check database configuration and ensure pyodbc is installed with SQL Server drivers.'
-                    elif data.get('type') == 'sql':
-                        error_message = 'CRITICAL: SQL job cannot be saved - SQL Server database connection failed. Check database configuration and ensure pyodbc is installed with SQL Server drivers.'
+                result = job_manager.create_job(data)
                 
-                return jsonify({
-                    'success': False,
-                    'error': error_message
-                }), 400
+                if result['success']:
+                    logger.info(f"[API_JOB_CREATE] Job created successfully (no scheduling): {result['job_id']}")
+                    if data.get('schedule'):
+                        result['warning'] = 'Job created but scheduling not available - integrated scheduler not initialized'
+                    return jsonify(result), 201
+                else:
+                    logger.warning(f"[API_JOB_CREATE] Job creation failed: {result['error']}")
+                    
+                    # Provide more specific error message for database connectivity issues
+                    error_message = result['error']
+                    if 'Failed to save job to database' in error_message:
+                        if data.get('type') == 'powershell':
+                            error_message = 'CRITICAL: PowerShell job cannot be saved - SQL Server database connection failed. Check database configuration and ensure pyodbc is installed with SQL Server drivers.'
+                        elif data.get('type') == 'sql':
+                            error_message = 'CRITICAL: SQL job cannot be saved - SQL Server database connection failed. Check database configuration and ensure pyodbc is installed with SQL Server drivers.'
+                    
+                    return jsonify({
+                        'success': False,
+                        'error': error_message
+                    }), 400
         
         except Exception as e:
             logger.error(f"[API_JOB_CREATE] API create job error: {e}")
@@ -444,37 +462,61 @@ def create_routes(app):
         logger.info(f"[API_RUN_JOB] Received request to run job: {job_id}")
         
         try:
-            # Try to import JobExecutor
-            try:
-                from core.job_executor import JobExecutor
-                job_executor = JobExecutor()
-            except ImportError as e:
-                logger.error(f"[API_RUN_JOB] Cannot import JobExecutor: {e}")
-                return jsonify({
-                    'success': False,
-                    'error': 'Job execution not available: Missing database dependencies (pyodbc). Please install SQL Server drivers.'
-                }), 500
-            
-            result = job_executor.execute_job(job_id)
-            
-            if result['success']:
-                logger.info(f"[API_RUN_JOB] Job {job_id} executed successfully")
-                return jsonify({
-                    'success': True,
-                    'message': f'Job executed with status: {result["status"]}',
-                    'execution_id': result['execution_id'],
-                    'status': result['status'],
-                    'duration_seconds': result['duration_seconds'],
-                    'output': result['output'],
-                    'start_time': result['start_time'],
-                    'end_time': result['end_time']
-                })
+            # Try to use integrated scheduler first
+            integrated_scheduler = getattr(app, 'integrated_scheduler', None)
+            if integrated_scheduler:
+                result = integrated_scheduler.run_job_now(job_id)
+                
+                if result['success']:
+                    logger.info(f"[API_RUN_JOB] Job {job_id} executed successfully via integrated scheduler")
+                    return jsonify({
+                        'success': True,
+                        'message': f'Job executed with status: {result["status"]}',
+                        'execution_id': result['execution_id'],
+                        'status': result['status'],
+                        'duration_seconds': result['duration_seconds'],
+                        'output': result['output'],
+                        'start_time': result['start_time'],
+                        'end_time': result['end_time']
+                    })
+                else:
+                    logger.warning(f"[API_RUN_JOB] Job {job_id} execution failed: {result['error']}")
+                    return jsonify({
+                        'success': False,
+                        'error': result['error']
+                    }), 400
             else:
-                logger.warning(f"[API_RUN_JOB] Job {job_id} execution failed: {result['error']}")
-                return jsonify({
-                    'success': False,
-                    'error': result['error']
-                }), 400
+                # Fallback to direct JobExecutor
+                try:
+                    from core.job_executor import JobExecutor
+                    job_executor = JobExecutor()
+                except ImportError as e:
+                    logger.error(f"[API_RUN_JOB] Cannot import JobExecutor: {e}")
+                    return jsonify({
+                        'success': False,
+                        'error': 'Job execution not available: Missing database dependencies (pyodbc). Please install SQL Server drivers.'
+                    }), 500
+                
+                result = job_executor.execute_job(job_id)
+                
+                if result['success']:
+                    logger.info(f"[API_RUN_JOB] Job {job_id} executed successfully via fallback executor")
+                    return jsonify({
+                        'success': True,
+                        'message': f'Job executed with status: {result["status"]}',
+                        'execution_id': result['execution_id'],
+                        'status': result['status'],
+                        'duration_seconds': result['duration_seconds'],
+                        'output': result['output'],
+                        'start_time': result['start_time'],
+                        'end_time': result['end_time']
+                    })
+                else:
+                    logger.warning(f"[API_RUN_JOB] Job {job_id} execution failed: {result['error']}")
+                    return jsonify({
+                        'success': False,
+                        'error': result['error']
+                    }), 400
         
         except Exception as e:
             logger.error(f"[API_RUN_JOB] API run job error: {e}")
