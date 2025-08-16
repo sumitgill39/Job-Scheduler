@@ -375,7 +375,7 @@
                                 <a href="{{ url_for('job_list') }}" class="btn btn-secondary me-3">
                                     <i class="fas fa-times me-1"></i>Cancel
                                 </a>
-                                <button type="submit" class="btn btn-primary btn-lg powershell-submit-btn">
+                                <button type="button" class="btn btn-primary btn-lg powershell-submit-btn" onclick="showPowerShellPopup()">
                                     <i class="fab fa-microsoft me-2"></i>Create PowerShell Job
                                 </button>
                             </div>
@@ -483,6 +483,11 @@
 {% block scripts %}
 <script>
     let selectedJobType = null;
+    
+    // Show PowerShell popup
+    function showPowerShellPopup() {
+        alert('PowerShell Job Creation Clicked!');
+    }
     
     // Job type selection
     function selectJobType(type) {
