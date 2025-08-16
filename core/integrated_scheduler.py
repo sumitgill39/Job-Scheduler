@@ -76,16 +76,20 @@ class IntegratedScheduler:
                 self.logger.info("[INTEGRATED_SCHEDULER] Scheduler started successfully")
         except Exception as e:
             self.logger.error(f"[INTEGRATED_SCHEDULER] Failed to start scheduler: {e}")
-            raise
+            # Don't raise - allow application to continue without scheduler
+            self.logger.warning("[INTEGRATED_SCHEDULER] Application will continue without scheduling functionality")
     
     def stop(self, wait: bool = True):
-        """Stop the scheduler"""
+        """Stop the scheduler gracefully"""
         try:
-            if self.scheduler.running:
+            if hasattr(self, 'scheduler') and self.scheduler and self.scheduler.running:
                 self.scheduler.shutdown(wait=wait)
                 self.logger.info("[INTEGRATED_SCHEDULER] Scheduler stopped successfully")
+            else:
+                self.logger.debug("[INTEGRATED_SCHEDULER] Scheduler was not running or not initialized")
         except Exception as e:
             self.logger.error(f"[INTEGRATED_SCHEDULER] Error stopping scheduler: {e}")
+            # Don't re-raise - continue with shutdown
     
     def create_job_with_schedule(self, job_data: Dict[str, Any]) -> Dict[str, Any]:
         """

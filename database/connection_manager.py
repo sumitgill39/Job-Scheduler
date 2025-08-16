@@ -349,6 +349,11 @@ class DatabaseConnectionManager:
         try:
             connection = pool_entry['connection']
             
+            # Check if connection is already closed
+            if hasattr(connection, 'closed') and connection.closed:
+                self.logger.debug(f"[POOL] Connection is closed")
+                return False
+            
             # Check if connection is expired
             age = datetime.now() - pool_entry['created']
             if age.total_seconds() > self._pool_config['connection_lifetime']:
@@ -368,32 +373,68 @@ class DatabaseConnectionManager:
             return False
     
     def _close_pool_entry(self, connection_name: str):
-        """Close and remove a connection from the pool"""
+        """Close and remove a connection from the pool safely"""
         if connection_name in self._connection_pool:
             try:
                 pool_entry = self._connection_pool[connection_name]
-                pool_entry['connection'].close()
-                self.logger.debug(f"[POOL] Closed connection '{connection_name}'")
+                connection = pool_entry['connection']
+                
+                # Check if connection is still open before trying to close
+                if hasattr(connection, 'closed') and connection.closed:
+                    self.logger.debug(f"[POOL] Connection '{connection_name}' already closed")
+                else:
+                    # Try to close the connection safely
+                    try:
+                        connection.close()
+                        self.logger.debug(f"[POOL] Closed connection '{connection_name}'")
+                    except Exception as close_error:
+                        # Connection might already be closed or in an invalid state
+                        self.logger.debug(f"[POOL] Connection '{connection_name}' could not be closed gracefully: {close_error}")
+                        
             except Exception as e:
-                self.logger.warning(f"[POOL] Error closing connection '{connection_name}': {e}")
+                self.logger.warning(f"[POOL] Error accessing connection '{connection_name}' for closure: {e}")
             finally:
+                # Always remove from pool regardless of close success
                 del self._connection_pool[connection_name]
     
     def cleanup_pool(self):
-        """Clean up expired connections from the pool"""
-        with self._pool_lock:
-            expired_connections = []
-            
-            for conn_name, pool_entry in self._connection_pool.items():
-                if not self._is_connection_valid(pool_entry):
-                    expired_connections.append(conn_name)
-            
-            for conn_name in expired_connections:
-                self.logger.info(f"[POOL] Cleaning up expired connection '{conn_name}'")
-                self._close_pool_entry(conn_name)
-            
-            if expired_connections:
-                self.logger.info(f"[POOL] Cleaned up {len(expired_connections)} expired connections")
+        """Clean up expired connections from the pool safely"""
+        try:
+            with self._pool_lock:
+                expired_connections = []
+                current_time = datetime.now()
+                
+                # Only cleanup connections that are truly expired and not recently used
+                for conn_name, pool_entry in self._connection_pool.items():
+                    try:
+                        # Skip recently used connections (within last 5 minutes)
+                        time_since_use = current_time - pool_entry['last_used']
+                        if time_since_use.total_seconds() < 300:  # 5 minutes
+                            continue
+                            
+                        # Only cleanup if connection is invalid
+                        if not self._is_connection_valid(pool_entry):
+                            expired_connections.append(conn_name)
+                    except Exception as e:
+                        self.logger.debug(f"[POOL] Error checking connection '{conn_name}' during cleanup: {e}")
+                        # Add to cleanup list if we can't even check it
+                        expired_connections.append(conn_name)
+                
+                # Clean up expired connections
+                cleaned_count = 0
+                for conn_name in expired_connections:
+                    try:
+                        self.logger.debug(f"[POOL] Cleaning up expired connection '{conn_name}'")
+                        self._close_pool_entry(conn_name)
+                        cleaned_count += 1
+                    except Exception as e:
+                        self.logger.warning(f"[POOL] Error during cleanup of connection '{conn_name}': {e}")
+                
+                if cleaned_count > 0:
+                    self.logger.info(f"[POOL] Cleaned up {cleaned_count} expired connections")
+                    
+        except Exception as e:
+            self.logger.error(f"[POOL] Error during pool cleanup: {e}")
     
     def get_pool_stats(self) -> Dict[str, Any]:
         """Get connection pool statistics"""
@@ -443,10 +484,16 @@ class DatabaseConnectionManager:
         """Close all pooled connections gracefully"""
         with self._pool_lock:
             connection_names = list(self._connection_pool.keys())
-            for conn_name in connection_names:
-                self._close_pool_entry(conn_name)
+            closed_count = 0
             
-            self.logger.info(f"[POOL] Gracefully closed all {len(connection_names)} pooled connections")
+            for conn_name in connection_names:
+                try:
+                    self._close_pool_entry(conn_name)
+                    closed_count += 1
+                except Exception as e:
+                    self.logger.warning(f"[POOL] Error closing connection '{conn_name}' during shutdown: {e}")
+            
+            self.logger.info(f"[POOL] Gracefully closed {closed_count}/{len(connection_names)} pooled connections")
     
     def _test_connection_direct(self, server: str, database: str, port: int = 1433,
                               auth_type: str = "windows", username: str = None, 
