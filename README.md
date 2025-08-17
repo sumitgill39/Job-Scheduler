@@ -128,10 +128,10 @@ scheduler:
 
 security:
   allowed_domains: 
-    - "dmzprod01"
+    - "dmz1"
     - "dmzweb01" 
-    - "MGD"
-    - "Mercer"
+    - "MGO"
+    - "Mercury"
 ```
 
 ## Usage Examples
