@@ -677,8 +677,11 @@ def create_routes(app):
     
     @app.route('/api/connections', methods=['GET'])
     def api_get_connections():
-        """API endpoint to get available database connections"""
+        """API endpoint to get available database connections (optimized for fast loading)"""
         try:
+            # Check if fast loading is requested
+            fast_mode = request.args.get('fast', 'false').lower() == 'true'
+            
             # Use global connection pool instance
             pool = getattr(app, 'connection_pool', None)
             if not pool:
@@ -687,17 +690,30 @@ def create_routes(app):
             db_manager = pool.db_manager
             
             connections = []
-            for conn_name in db_manager.list_connections():
+            connection_names = db_manager.list_connections()
+            
+            logger.info(f"[API_CONNECTIONS] Loading {len(connection_names)} connections (fast_mode: {fast_mode})")
+            
+            for conn_name in connection_names:
                 conn_info = db_manager.get_connection_info(conn_name)
                 if conn_info:
-                    connections.append({
+                    connection_data = {
                         'name': conn_name,
                         'server': conn_info.get('server'),
                         'database': conn_info.get('database'),
                         'description': conn_info.get('description', ''),
-                        'auth_type': 'windows' if conn_info.get('trusted_connection') else 'sql'
-                    })
+                        'auth_type': 'windows' if conn_info.get('trusted_connection') else 'sql',
+                        'port': conn_info.get('port', 1433)
+                    }
+                    
+                    # In fast mode, don't test connections - just return the data
+                    if fast_mode:
+                        connection_data['status'] = 'pending'
+                        connection_data['response_time'] = None
+                    
+                    connections.append(connection_data)
             
+            logger.info(f"[API_CONNECTIONS] Returning {len(connections)} connections")
             return jsonify({'success': True, 'connections': connections})
             
         except Exception as e:
@@ -981,6 +997,229 @@ def create_routes(app):
                 'success': False, 
                 'error': str(e), 
                 'total_time': total_time
+            }), 500
+    
+    @app.route('/api/connections/validate-all-detailed', methods=['POST'])
+    def api_validate_all_connections_detailed():
+        """Validate all connections with detailed logging and error information"""
+        import time
+        start_time = time.time()
+        
+        logger.info("[DETAILED_VALIDATION] Starting detailed validation of all connections")
+        
+        try:
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'error': 'Database not available'}), 500
+            
+            db_manager = pool.db_manager
+            connections = db_manager.list_connections()
+            
+            logger.info(f"[DETAILED_VALIDATION] Found {len(connections)} connections to validate")
+            
+            if not connections:
+                return jsonify({
+                    'success': True,
+                    'results': {},
+                    'total_connections': 0,
+                    'valid_connections': 0,
+                    'invalid_connections': 0
+                })
+            
+            import concurrent.futures
+            
+            def test_connection_detailed(conn_name):
+                """Test a single connection with detailed error information"""
+                try:
+                    logger.debug(f"[DETAILED_VALIDATION] Starting detailed test for '{conn_name}'")
+                    test_start = time.time()
+                    
+                    result = db_manager.test_connection(conn_name)
+                    test_time = time.time() - test_start
+                    
+                    if result.get('success'):
+                        return conn_name, {
+                            'success': True,
+                            'response_time': result.get('response_time', test_time),
+                            'server_info': result.get('server_info', 'Connected successfully'),
+                            'connection_method': result.get('connection_method', 'Standard'),
+                            'database_version': result.get('database_version', 'Unknown'),
+                            'test_query': result.get('test_query', 'SELECT 1'),
+                            'validation_time': test_time
+                        }
+                    else:
+                        # Detailed error information
+                        error_msg = result.get('error', 'Unknown error')
+                        error_code = None
+                        error_details = None
+                        suggested_fix = "Check connection parameters"
+                        
+                        # Parse common SQL Server errors
+                        if 'timeout' in error_msg.lower():
+                            error_code = 'TIMEOUT'
+                            error_details = 'Connection timeout - server may be unreachable or overloaded'
+                            suggested_fix = 'Check server availability and network connectivity'
+                        elif 'login failed' in error_msg.lower():
+                            error_code = 'AUTH_FAILED'
+                            error_details = 'Authentication failed - invalid credentials'
+                            suggested_fix = 'Verify username and password, check authentication type'
+                        elif 'cannot open database' in error_msg.lower():
+                            error_code = 'DB_NOT_FOUND'
+                            error_details = 'Database not found or access denied'
+                            suggested_fix = 'Verify database name and user permissions'
+                        elif 'network-related' in error_msg.lower():
+                            error_code = 'NETWORK_ERROR'
+                            error_details = 'Network connectivity issue'
+                            suggested_fix = 'Check server name, port, and firewall settings'
+                        else:
+                            error_code = 'UNKNOWN_ERROR'
+                            error_details = f'Unhandled error: {error_msg}'
+                        
+                        return conn_name, {
+                            'success': False,
+                            'error': error_msg,
+                            'error_code': error_code,
+                            'error_details': error_details,
+                            'suggested_fix': suggested_fix,
+                            'response_time': test_time,
+                            'validation_time': test_time
+                        }
+                        
+                except Exception as e:
+                    test_time = time.time() - test_start
+                    logger.error(f"[DETAILED_VALIDATION] Exception testing '{conn_name}': {e}")
+                    
+                    return conn_name, {
+                        'success': False,
+                        'error': str(e),
+                        'error_code': 'EXCEPTION',
+                        'error_details': f'Unexpected error during validation: {str(e)}',
+                        'suggested_fix': 'Check system logs and connection configuration',
+                        'response_time': test_time,
+                        'validation_time': test_time
+                    }
+            
+            # Execute detailed validation in parallel
+            results = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                future_to_conn = {
+                    executor.submit(test_connection_detailed, conn_name): conn_name 
+                    for conn_name in connections
+                }
+                
+                for future in concurrent.futures.as_completed(future_to_conn):
+                    conn_name, result = future.result()
+                    results[conn_name] = result
+            
+            # Calculate summary statistics
+            valid_count = sum(1 for r in results.values() if r['success'])
+            invalid_count = len(results) - valid_count
+            total_time = time.time() - start_time
+            
+            logger.info(f"[DETAILED_VALIDATION] Completed: {valid_count} valid, {invalid_count} invalid in {total_time:.2f}s")
+            
+            return jsonify({
+                'success': True,
+                'results': results,
+                'total_connections': len(connections),
+                'valid_connections': valid_count,
+                'invalid_connections': invalid_count,
+                'validation_time': total_time
+            })
+            
+        except Exception as e:
+            total_time = time.time() - start_time
+            logger.error(f"[DETAILED_VALIDATION] Error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'validation_time': total_time
+            }), 500
+    
+    @app.route('/api/connections/<connection_name>/test-detailed', methods=['POST'])
+    def api_test_connection_detailed(connection_name):
+        """Test a single connection with detailed logging and error information"""
+        import time
+        start_time = time.time()
+        
+        logger.info(f"[DETAILED_TEST] Starting detailed test for connection '{connection_name}'")
+        
+        try:
+            # Use global connection pool instance
+            pool = getattr(app, 'connection_pool', None)
+            if not pool:
+                return jsonify({'success': False, 'error': 'Database not available'}), 500
+            
+            db_manager = pool.db_manager
+            result = db_manager.test_connection(connection_name)
+            test_time = time.time() - start_time
+            
+            if result.get('success'):
+                logger.info(f"[DETAILED_TEST] Connection '{connection_name}' test successful in {test_time:.2f}s")
+                
+                return jsonify({
+                    'success': True,
+                    'response_time': result.get('response_time', test_time),
+                    'server_info': result.get('server_info', 'Connected successfully'),
+                    'connection_method': result.get('connection_method', 'Standard'),
+                    'database_version': result.get('database_version', 'Unknown'),
+                    'test_query': result.get('test_query', 'SELECT 1'),
+                    'validation_time': test_time,
+                    'connection_details': {
+                        'server': result.get('server', 'Unknown'),
+                        'database': result.get('database', 'Unknown'),
+                        'auth_type': result.get('auth_type', 'Unknown')
+                    }
+                })
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                logger.warning(f"[DETAILED_TEST] Connection '{connection_name}' test failed: {error_msg}")
+                
+                # Detailed error analysis
+                error_code = 'UNKNOWN_ERROR'
+                error_details = f'Connection test failed: {error_msg}'
+                suggested_fix = "Check connection parameters"
+                
+                if 'timeout' in error_msg.lower():
+                    error_code = 'TIMEOUT'
+                    error_details = 'Connection timeout - server may be unreachable or overloaded'
+                    suggested_fix = 'Check server availability, increase timeout, or verify network connectivity'
+                elif 'login failed' in error_msg.lower():
+                    error_code = 'AUTH_FAILED'
+                    error_details = 'Authentication failed - invalid credentials or insufficient permissions'
+                    suggested_fix = 'Verify username/password, check authentication type, or contact database administrator'
+                elif 'cannot open database' in error_msg.lower():
+                    error_code = 'DB_NOT_FOUND'
+                    error_details = 'Database not found or access denied'
+                    suggested_fix = 'Verify database name exists and user has proper access permissions'
+                elif 'network-related' in error_msg.lower():
+                    error_code = 'NETWORK_ERROR'
+                    error_details = 'Network connectivity issue - server unreachable'
+                    suggested_fix = 'Check server name/IP, port number, firewall settings, and VPN connection'
+                
+                return jsonify({
+                    'success': False,
+                    'error': error_msg,
+                    'error_code': error_code,
+                    'error_details': error_details,
+                    'suggested_fix': suggested_fix,
+                    'response_time': test_time,
+                    'validation_time': test_time
+                })
+                
+        except Exception as e:
+            test_time = time.time() - start_time
+            logger.error(f"[DETAILED_TEST] Exception testing connection '{connection_name}': {e}")
+            
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'error_code': 'EXCEPTION',
+                'error_details': f'Unexpected error during connection test: {str(e)}',
+                'suggested_fix': 'Check system logs, connection configuration, and database server status',
+                'response_time': test_time,
+                'validation_time': test_time
             }), 500
     
     @app.route('/api/connections/audit-trail', methods=['GET'])
