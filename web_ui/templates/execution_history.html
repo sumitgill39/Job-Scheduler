@@ -170,7 +170,7 @@
 
 <!-- Execution Details Modal -->
 <div class="modal fade" id="executionDetailsModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
@@ -182,6 +182,9 @@
                 <!-- Will be populated by JavaScript -->
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" onclick="exportExecutionDetails()">
+                    <i class="fas fa-download me-1"></i>Export Details
+                </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -260,6 +263,48 @@
         border: none;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         border-radius: 10px;
+    }
+    
+    .status-success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    
+    .status-failed {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    
+    .status-running {
+        background-color: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+    }
+    
+    .status-pending {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+    }
+    
+    .status-cancelled {
+        background-color: #f8f9fa;
+        color: #6c757d;
+        border: 1px solid #dee2e6;
+    }
+    
+    .status-timeout {
+        background-color: #ffeaa7;
+        color: #856404;
+        border: 1px solid #fdd835;
+    }
+    
+    .status-retry {
+        background-color: #e2e3e5;
+        color: #41464b;
+        border: 1px solid #d6d8db;
     }
 </style>
 {% endblock %}
@@ -542,12 +587,28 @@
         const modalBody = document.getElementById('executionDetailsBody');
         const startTime = new Date(execution.start_time);
         const endTime = execution.end_time ? new Date(execution.end_time) : null;
+        
+        // Parse metadata to extract result data and other information
+        let metadata = {};
+        let resultData = null;
+        let connectionInfo = null;
+        
+        try {
+            metadata = JSON.parse(execution.metadata || '{}');
+            resultData = metadata.result_data;
+            connectionInfo = {
+                connection_name: metadata.connection_name,
+                query: metadata.query
+            };
+        } catch (e) {
+            console.warn('Failed to parse metadata:', e);
+        }
 
         modalBody.innerHTML = `
             <div class="row">
                 <div class="col-md-6">
-                    <h6>Execution Information</h6>
-                    <table class="table table-sm">
+                    <h6><i class="fas fa-info-circle me-2"></i>Execution Information</h6>
+                    <table class="table table-sm table-bordered">
                         <tr><td><strong>Execution ID:</strong></td><td>${execution.execution_id}</td></tr>
                         <tr><td><strong>Job Name:</strong></td><td>${execution.job_name}</td></tr>
                         <tr><td><strong>Job ID:</strong></td><td>${execution.job_id}</td></tr>
@@ -557,32 +618,162 @@
                         <tr><td><strong>Duration:</strong></td><td>${execution.duration_seconds ? formatDuration(execution.duration_seconds) : 'N/A'}</td></tr>
                         <tr><td><strong>Return Code:</strong></td><td>${execution.return_code || 'N/A'}</td></tr>
                         <tr><td><strong>Retry Count:</strong></td><td>${execution.retry_count || 0} / ${execution.max_retries || 0}</td></tr>
+                        ${connectionInfo && connectionInfo.connection_name ? `
+                            <tr><td><strong>Connection:</strong></td><td>${maskSensitiveData(connectionInfo.connection_name)}</td></tr>
+                        ` : ''}
                     </table>
                 </div>
                 <div class="col-md-6">
-                    <h6>Output</h6>
+                    <h6><i class="fas fa-terminal me-2"></i>Output Summary</h6>
                     <div class="bg-light p-3 rounded" style="max-height: 200px; overflow-y: auto;">
-                        <pre style="margin: 0; white-space: pre-wrap;">${execution.output || 'No output available'}</pre>
+                        <pre style="margin: 0; white-space: pre-wrap;">${maskSensitiveData(execution.output || 'No output available')}</pre>
                     </div>
                     ${execution.error_message ? `
-                        <h6 class="mt-3">Error Message</h6>
+                        <h6 class="mt-3"><i class="fas fa-exclamation-triangle me-2 text-danger"></i>Error Message</h6>
                         <div class="bg-danger bg-opacity-10 p-3 rounded">
-                            <pre style="margin: 0; white-space: pre-wrap;">${execution.error_message}</pre>
+                            <pre style="margin: 0; white-space: pre-wrap;">${maskSensitiveData(execution.error_message)}</pre>
                         </div>
                     ` : ''}
                 </div>
             </div>
+            
+            ${resultData ? renderQueryResults(resultData) : ''}
+            
+            ${connectionInfo && connectionInfo.query ? `
+                <div class="mt-3">
+                    <h6><i class="fas fa-code me-2"></i>SQL Query</h6>
+                    <div class="bg-light p-3 rounded">
+                        <pre style="margin: 0; font-family: 'Courier New', monospace; font-size: 0.9rem;">${maskSensitiveData(connectionInfo.query)}</pre>
+                    </div>
+                </div>
+            ` : ''}
+            
             ${execution.metadata ? `
                 <div class="mt-3">
-                    <h6>Metadata</h6>
+                    <h6><i class="fas fa-database me-2"></i>Technical Metadata</h6>
                     <div class="bg-light p-3 rounded">
-                        <pre style="margin: 0;">${JSON.stringify(JSON.parse(execution.metadata || '{}'), null, 2)}</pre>
+                        <pre style="margin: 0; font-size: 0.85rem;">${JSON.stringify(sanitizeMetadata(metadata), null, 2)}</pre>
                     </div>
                 </div>
             ` : ''}
         `;
 
         new bootstrap.Modal(document.getElementById('executionDetailsModal')).show();
+    }
+    
+    // Render SQL query results in tabular format
+    function renderQueryResults(resultData) {
+        if (!resultData) return '';
+        
+        // Handle different result types
+        if (resultData.query_type === 'non_select') {
+            return `
+                <div class="mt-3">
+                    <h6><i class="fas fa-check-circle me-2 text-success"></i>Execution Result</h6>
+                    <div class="alert alert-success">
+                        <i class="fas fa-database me-2"></i>
+                        <strong>Rows Affected:</strong> ${resultData.rows_affected || 0}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Handle SELECT query results
+        if (resultData.columns && resultData.rows) {
+            const maxDisplayRows = 50; // Limit display for performance
+            const displayRows = resultData.rows.slice(0, maxDisplayRows);
+            const hasMoreRows = resultData.rows.length > maxDisplayRows;
+            
+            return `
+                <div class="mt-3">
+                    <h6><i class="fas fa-table me-2 text-primary"></i>Query Results 
+                        <span class="badge bg-secondary">${resultData.row_count || 0} rows</span>
+                        ${resultData.truncated ? '<span class="badge bg-warning ms-1">Truncated</span>' : ''}
+                    </h6>
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-striped table-bordered">
+                            <thead class="table-dark sticky-top">
+                                <tr>
+                                    ${resultData.columns.map(col => `<th style="font-size: 0.85rem;">${maskSensitiveData(col)}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${displayRows.map((row, index) => `
+                                    <tr>
+                                        ${row.map(cell => `<td style="font-size: 0.8rem;">${maskSensitiveData(String(cell || ''))}</td>`).join('')}
+                                    </tr>
+                                `).join('')}
+                                ${hasMoreRows ? `
+                                    <tr>
+                                        <td colspan="${resultData.columns.length}" class="text-center text-muted fst-italic">
+                                            ... and ${resultData.rows.length - maxDisplayRows} more rows
+                                        </td>
+                                    </tr>
+                                ` : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+        
+        return '';
+    }
+    
+    // Mask sensitive data based on environment
+    function maskSensitiveData(data) {
+        if (!data || typeof data !== 'string') return data || '';
+        
+        // Simple masking rules - can be enhanced based on environment configuration
+        const sensitivePatterns = [
+            // SQL connection strings
+            /(server|data source)\s*=\s*[^;]+/gi,
+            // Passwords
+            /(password|pwd)\s*=\s*[^;\s]+/gi,
+            // IP addresses (basic pattern)
+            /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/g,
+            // Email addresses
+            /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g
+        ];
+        
+        let maskedData = data;
+        
+        // Apply masking patterns
+        sensitivePatterns.forEach(pattern => {
+            maskedData = maskedData.replace(pattern, (match) => {
+                if (match.includes('=')) {
+                    const [key, value] = match.split('=');
+                    return `${key}=***MASKED***`;
+                }
+                return '***MASKED***';
+            });
+        });
+        
+        return maskedData;
+    }
+    
+    // Sanitize metadata for display
+    function sanitizeMetadata(metadata) {
+        const sanitized = { ...metadata };
+        
+        // Remove or mask sensitive fields
+        if (sanitized.query) {
+            sanitized.query = maskSensitiveData(sanitized.query);
+        }
+        
+        if (sanitized.connection_name) {
+            sanitized.connection_name = maskSensitiveData(sanitized.connection_name);
+        }
+        
+        // Remove large result data from metadata display (already shown in results section)
+        if (sanitized.result_data && sanitized.result_data.rows) {
+            sanitized.result_data = {
+                ...sanitized.result_data,
+                rows: `[${sanitized.result_data.rows.length} rows - displayed above]`
+            };
+        }
+        
+        return sanitized;
     }
 
     // Utility functions
@@ -690,6 +881,31 @@
                     showError('Error retrying job: ' + error.message);
                 });
         }
+    }
+
+    function exportExecutionDetails() {
+        const modalBody = document.getElementById('executionDetailsBody');
+        if (!modalBody) return;
+        
+        // Create a simplified text version of the execution details
+        const content = modalBody.innerText || modalBody.textContent || '';
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `execution_details_${Date.now()}.txt`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    function showSuccess(message) {
+        // You can implement a toast notification here
+        alert(message);
+    }
+
+    function showError(message) {
+        // You can implement a toast notification here
+        alert(message);
     }
 </script>
 {% endblock %}

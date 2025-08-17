@@ -50,6 +50,14 @@ security:
     - "Mercer"
   require_authentication: false  # Set to true for production
   
+# Environment Settings
+environment:
+  zone: "development"  # development, staging, production
+  data_masking:
+    enabled: true
+    mask_sensitive_data: true
+    production_masking: false  # Set to true for production environments
+  
 # Default job settings
 defaults:
   sql_job:
