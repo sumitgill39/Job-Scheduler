@@ -179,9 +179,61 @@ def create_routes(app):
                 flash('Job not found', 'error')
                 return redirect(url_for('job_list'))
             
+            # Get job execution history
+            try:
+                history = job_manager.get_job_execution_history(job_id, limit=20)
+            except Exception as e:
+                logger.warning(f"[JOB_DETAILS] Could not load execution history: {e}")
+                history = []
+            
+            # Flatten job configuration for template
+            config = job.get('configuration', {})
+            
+            # Add configuration fields to job object for template compatibility
+            job['timeout'] = config.get('timeout', 300)
+            job['max_retries'] = config.get('max_retries', 3)
+            job['retry_delay'] = config.get('retry_delay', 30)
+            job['run_as'] = config.get('run_as')
+            job['description'] = config.get('description', '')
+            job['metadata'] = {'created_date': job.get('created_date')}
+            
+            # Job-specific configuration
+            if job['job_type'] == 'sql':
+                sql_config = config.get('sql', {})
+                job['connection_name'] = sql_config.get('connection_name', '')
+                job['database_name'] = sql_config.get('database_name', '')
+                job['sql_query'] = sql_config.get('query', '')
+                job['query_timeout'] = sql_config.get('query_timeout', job['timeout'])
+                job['max_rows'] = sql_config.get('max_rows', '')
+                job['fetch_size'] = sql_config.get('fetch_size', '')
+            elif job['job_type'] == 'powershell':
+                ps_config = config.get('powershell', {})
+                job['script_content'] = ps_config.get('script_content', '')
+                job['script_path'] = ps_config.get('script_path', '')
+                job['execution_policy'] = ps_config.get('execution_policy', 'RemoteSigned')
+                job['working_directory'] = ps_config.get('working_directory', '')
+                job['parameters'] = ps_config.get('parameters', [])
+            
+            # Create status object with available information
+            status = {
+                'enabled': job['enabled'],
+                'current_status': 'enabled' if job['enabled'] else 'disabled',
+                'is_running': False,  # TODO: Get from scheduler if available
+                'retry_count': 0,     # TODO: Get from execution history
+                'max_retries': job['max_retries'],
+                'schedule': config.get('schedule'),
+                'next_run_time': None,  # TODO: Get from scheduler
+                'last_run_time': None,  # TODO: Get from execution history
+                'last_result': history[0] if history else None
+            }
+            
+            # Add last run time if we have history
+            if history:
+                status['last_run_time'] = history[0].get('start_time')
+            
             logger.info(f"[JOB_DETAILS] Displaying details for job: {job['name']}")
             
-            return render_template('job_details.html', job=job)
+            return render_template('job_details.html', job=job, status=status, history=history)
         
         except Exception as e:
             logger.error(f"[JOB_DETAILS] Job details error: {e}")
@@ -538,48 +590,56 @@ def create_routes(app):
     def api_toggle_job(job_id):
         """API endpoint to enable/disable a job"""
         try:
-            scheduler = getattr(app, 'scheduler_manager', None)
-            if not scheduler:
-                return jsonify({'error': 'Scheduler not available'}), 500
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({'error': 'Job manager not available'}), 500
             
-            job = scheduler.get_job(job_id)
-            if not job:
-                return jsonify({'error': 'Job not found'}), 404
+            # Get enabled state from request body if provided
+            data = request.get_json() or {}
+            enabled = data.get('enabled')
             
-            if job.enabled:
-                success = scheduler.pause_job(job_id)
-                action = 'disabled'
+            result = job_manager.toggle_job(job_id, enabled)
+            
+            if result['success']:
+                return jsonify({
+                    'success': True,
+                    'message': result['message'],
+                    'enabled': result['enabled']
+                })
             else:
-                success = scheduler.resume_job(job_id)
-                action = 'enabled'
-            
-            if success:
-                return jsonify({'message': f'Job {action} successfully'})
-            else:
-                return jsonify({'error': f'Failed to {action[:-1]} job'}), 500
+                return jsonify({
+                    'success': False,
+                    'error': result['error']
+                }), 400
         
         except Exception as e:
             logger.error(f"API toggle job error: {e}")
-            return jsonify({'error': str(e)}), 500
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/jobs/<job_id>', methods=['DELETE'])
     def api_delete_job(job_id):
         """API endpoint to delete a job"""
         try:
-            scheduler = getattr(app, 'scheduler_manager', None)
-            if not scheduler:
-                return jsonify({'error': 'Scheduler not available'}), 500
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({'error': 'Job manager not available'}), 500
             
-            success = scheduler.remove_job(job_id)
+            result = job_manager.delete_job(job_id)
             
-            if success:
-                return jsonify({'message': 'Job deleted successfully'})
+            if result['success']:
+                return jsonify({
+                    'success': True,
+                    'message': result['message']
+                })
             else:
-                return jsonify({'error': 'Failed to delete job'}), 500
+                return jsonify({
+                    'success': False,
+                    'error': result['error']
+                }), 400
         
         except Exception as e:
             logger.error(f"API delete job error: {e}")
-            return jsonify({'error': str(e)}), 500
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/connections', methods=['GET'])
     def api_get_connections():

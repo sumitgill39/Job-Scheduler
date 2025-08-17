@@ -349,6 +349,64 @@ class JobManager:
                 'error': f'Error deleting job: {str(e)}'
             }
     
+    def toggle_job(self, job_id: str, enabled: bool = None) -> Dict[str, Any]:
+        """Toggle job enabled/disabled state or set specific state"""
+        try:
+            # First get the current job state
+            job = self.get_job(job_id)
+            if not job:
+                return {
+                    'success': False,
+                    'error': f'Job with ID {job_id} not found'
+                }
+            
+            # Determine new enabled state
+            if enabled is None:
+                new_enabled = not job['enabled']
+            else:
+                new_enabled = bool(enabled)
+            
+            # Update the job enabled state
+            system_connection = self.connection_pool.get_connection("system")
+            if not system_connection:
+                return {
+                    'success': False,
+                    'error': 'System database not available'
+                }
+            
+            cursor = system_connection.cursor()
+            cursor.execute("""
+                UPDATE job_configurations 
+                SET enabled = ?, modified_date = GETDATE()
+                WHERE job_id = ?
+            """, (new_enabled, job_id))
+            
+            rows_affected = cursor.rowcount
+            system_connection.commit()
+            cursor.close()
+            # Don't close connection - let pool manage it
+            
+            if rows_affected > 0:
+                action = 'enabled' if new_enabled else 'disabled'
+                self.logger.info(f"[JOB_MANAGER] Job {job_id} {action}")
+                return {
+                    'success': True,
+                    'message': f'Job {action} successfully',
+                    'enabled': new_enabled
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'Failed to update job {job_id}'
+                }
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error toggling job {job_id}: {e}")
+            return {
+                'success': False,
+                'error': f'Error toggling job: {str(e)}'
+            }
+    
     def get_all_execution_history(self, limit: int = 1000) -> List[Dict[str, Any]]:
         """Get complete execution history from database"""
         try:
