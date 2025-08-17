@@ -675,8 +675,8 @@ def create_routes(app):
             logger.error(f"API delete job error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
-    # Connection cache to avoid race conditions
-    _connection_cache = {'data': None, 'timestamp': 0, 'cache_duration': 30}  # Cache for 30 seconds
+    # Connection cache to avoid race conditions (temporarily disabled for debugging)
+    _connection_cache = {'data': None, 'timestamp': 0, 'cache_duration': 0}  # Cache disabled for debugging
     
     @app.route('/api/connections', methods=['GET'])
     def api_get_connections():
@@ -691,10 +691,14 @@ def create_routes(app):
             
             # Check cache first to avoid database race conditions
             current_time = time.time()
+            cache_age = current_time - _connection_cache['timestamp']
             if (_connection_cache['data'] is not None and 
-                current_time - _connection_cache['timestamp'] < _connection_cache['cache_duration']):
-                logger.info(f"[API_CONNECTIONS] Returning cached data ({len(_connection_cache['data'])} connections)")
+                cache_age < _connection_cache['cache_duration']):
+                logger.info(f"[API_CONNECTIONS] Returning cached data ({len(_connection_cache['data'])} connections, cache age: {cache_age:.1f}s)")
                 return jsonify({'success': True, 'connections': _connection_cache['data']})
+            else:
+                if _connection_cache['data'] is not None:
+                    logger.info(f"[API_CONNECTIONS] Cache expired (age: {cache_age:.1f}s), loading fresh data")
             
             # Use global connection pool instance
             pool = getattr(app, 'connection_pool', None)
@@ -739,47 +743,53 @@ def create_routes(app):
         
         try:
             # Get system connection once and reuse it
+            logger.debug("[BATCH_LOAD] Attempting to create system connection")
             system_connection = db_manager._create_new_connection("system")
             if not system_connection:
                 logger.warning("[BATCH_LOAD] No system connection available, using fallback")
-                return _load_connections_individually(db_manager)
+                raise Exception("System connection not available")
             
+            logger.debug("[BATCH_LOAD] Creating cursor and executing query")
             cursor = system_connection.cursor()
             
-            # Single query to get all connection data
-            cursor.execute("""
+            # Single query to get all connection data (using correct column names)
+            query = """
                 SELECT 
-                    connection_name,
-                    server,
+                    name,
+                    server_name,
                     database_name,
                     port,
-                    auth_type,
                     description,
                     trusted_connection,
                     created_date,
                     modified_date
                 FROM user_connections 
-                WHERE active = 1
-                ORDER BY connection_name
-            """)
+                WHERE is_active = 1
+                ORDER BY name
+            """
+            
+            logger.debug(f"[BATCH_LOAD] Executing query: {query.strip()}")
+            cursor.execute(query)
             
             rows = cursor.fetchall()
+            logger.debug(f"[BATCH_LOAD] Query returned {len(rows)} rows")
+            
             cursor.close()
             system_connection.close()
             
-            # Process all rows at once
+            # Process all rows at once (matching the SELECT column order)
             for row in rows:
                 connections.append({
-                    'name': row[0],
-                    'server': row[1],
-                    'database': row[2],
-                    'port': row[3] or 1433,
-                    'auth_type': 'windows' if row[6] else 'sql',
-                    'description': row[5] or '',
+                    'name': row[0],          # name
+                    'server': row[1],        # server_name
+                    'database': row[2],      # database_name
+                    'port': row[3] or 1433,  # port
+                    'description': row[4] or '',  # description
+                    'auth_type': 'windows' if row[5] else 'sql',  # trusted_connection
                     'status': 'pending',
                     'response_time': None,
-                    'created_date': str(row[7]) if row[7] else None,
-                    'modified_date': str(row[8]) if row[8] else None
+                    'created_date': str(row[6]) if row[6] else None,   # created_date
+                    'modified_date': str(row[7]) if row[7] else None   # modified_date
                 })
             
             batch_time = time.time() - batch_start
@@ -803,13 +813,21 @@ def create_routes(app):
             # Get connection names (this should be fast from config)
             connection_names = []
             
-            # Try to get from config first (faster, no database call)
-            databases = db_manager.config.get('databases', {})
-            for conn_name, conn_config in databases.items():
-                if not conn_config.get('is_system_connection', False):
-                    connection_names.append(conn_name)
+            # Try database first, then config as fallback
+            logger.info(f"[INDIVIDUAL_LOAD] Attempting to load connections using original methods")
             
-            logger.info(f"[INDIVIDUAL_LOAD] Loading {len(connection_names)} connections individually")
+            try:
+                # Use the original database method
+                connection_names = db_manager.list_connections()
+                logger.info(f"[INDIVIDUAL_LOAD] Found {len(connection_names)} connections from list_connections()")
+            except Exception as e:
+                logger.warning(f"[INDIVIDUAL_LOAD] list_connections() failed: {e}, trying config fallback")
+                # Fallback to config
+                databases = db_manager.config.get('databases', {})
+                for conn_name, conn_config in databases.items():
+                    if not conn_config.get('is_system_connection', False):
+                        connection_names.append(conn_name)
+                logger.info(f"[INDIVIDUAL_LOAD] Found {len(connection_names)} connections from config fallback")
             
             # Process each connection
             for conn_name in connection_names:
