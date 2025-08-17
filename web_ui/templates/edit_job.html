@@ -72,9 +72,9 @@
                         
                         <div class="mb-3">
                             <label for="connectionName" class="form-label">Database Connection *</label>
-                            <select class="form-select" id="connectionName" name="connection_name">
-                                <option value="">Select a connection...</option>
-                            </select>
+                            <input type="text" class="form-control" id="connectionName" name="connection_name" 
+                                   placeholder="Connection name" readonly>
+                            <div class="form-text">Connection name used by this job (cannot be changed during edit)</div>
                         </div>
                         
                         <div class="mb-3">
@@ -308,22 +308,13 @@
 {% block scripts %}
 <script>
     let currentJobData = {};
-    let connectionsLoaded = false;
-    let jobDataLoaded = false;
     
     // Initialize page
     document.addEventListener('DOMContentLoaded', function() {
         const jobId = getJobIdFromURL();
         if (jobId) {
-            // Load both connections and job data in parallel
-            Promise.all([
-                loadConnections(),
-                loadJobData(jobId)
-            ]).then(() => {
-                // Both are loaded, now populate the form properly
-                if (currentJobData && currentJobData.job_type === 'sql') {
-                    populateConnectionSelection();
-                }
+            // Just load job data since connection is now a text field
+            loadJobData(jobId).then(() => {
                 setupEventListeners();
             }).catch(error => {
                 console.error('Error loading data:', error);
@@ -367,9 +358,10 @@
     }
 
     function populateForm(job) {
-        console.log('Populating form with job:', job); // Debug log
-        console.log('Job type:', job.job_type); // Debug log
-        console.log('Configuration:', job.configuration); // Debug log
+        console.log('=================== POPULATE FORM DEBUG ===================');
+        console.log('Full job object:', JSON.stringify(job, null, 2));
+        console.log('Job type:', job.job_type);
+        console.log('Configuration object:', JSON.stringify(job.configuration, null, 2));
         
         // Basic job information
         document.getElementById('jobId').value = job.job_id;
@@ -397,12 +389,8 @@
             const sqlConfig = config.sql || {};
             console.log('SQL config:', sqlConfig); // Debug log
             
-            // Store the connection name for later setting when connections are loaded
-            if (sqlConfig.connection_name) {
-                currentJobData.selectedConnectionName = sqlConfig.connection_name;
-                console.log('Stored selected connection name:', sqlConfig.connection_name);
-            }
-            
+            // Set the connection name directly in the text field
+            document.getElementById('connectionName').value = sqlConfig.connection_name || '';
             document.getElementById('sqlQuery').value = sqlConfig.query || '';
             document.getElementById('queryTimeout').value = sqlConfig.query_timeout || 300;
             document.getElementById('maxRows').value = sqlConfig.max_rows || 1000;
@@ -433,14 +421,18 @@
         }
 
         // Schedule configuration
-        console.log('Processing schedule configuration:', config.schedule); // Debug log
+        console.log('=================== SCHEDULE DEBUG ===================');
+        console.log('Full config object for schedule lookup:', JSON.stringify(config, null, 2));
+        console.log('config.schedule:', JSON.stringify(config.schedule, null, 2));
+        
         if (config.schedule) {
-            console.log('Schedule found, enabling schedule section'); // Debug log
+            console.log('✅ Schedule found, enabling schedule section');
             document.getElementById('enableSchedule').checked = true;
             showScheduleSection();
             
             const schedule = config.schedule;
-            console.log('Schedule type:', schedule.type); // Debug log
+            console.log('Schedule object:', JSON.stringify(schedule, null, 2));
+            console.log('Schedule type detected:', schedule.type);
             
             if (schedule.type === 'cron') {
                 console.log('Setting up cron schedule:', schedule.cron); // Debug log
@@ -471,54 +463,17 @@
                 showOnceSection();
             }
         } else {
-            console.log('No schedule configuration found'); // Debug log
+            console.log('❌ No schedule configuration found in config.schedule');
+            // Check if schedule might be stored elsewhere
+            console.log('Checking for schedule in other locations...');
+            console.log('job.schedule:', job.schedule);
+            console.log('config.scheduling:', config.scheduling);
+            console.log('Looking for any schedule-related keys in config:', 
+                Object.keys(config).filter(key => key.toLowerCase().includes('schedule')));
         }
     }
 
-    function loadConnections() {
-        console.log('Loading database connections...'); // Debug log
-        return fetch('/api/connections')
-            .then(response => response.json())
-            .then(data => {
-                console.log('Connections API response:', data); // Debug log
-                if (data.success && data.connections) {
-                    const select = document.getElementById('connectionName');
-                    select.innerHTML = '<option value="">Select a connection...</option>';
-                    
-                    Object.keys(data.connections).forEach(connectionName => {
-                        const option = document.createElement('option');
-                        option.value = connectionName;
-                        option.textContent = connectionName;
-                        select.appendChild(option);
-                    });
-                    console.log('Loaded connections:', Object.keys(data.connections)); // Debug log
-                    connectionsLoaded = true;
-                    return data.connections;
-                } else {
-                    console.error('Failed to load connections:', data); // Debug log
-                    throw new Error('Failed to load connections');
-                }
-            })
-            .catch(error => {
-                console.error('Error loading connections:', error);
-                throw error;
-            });
-    }
-    
-    function populateConnectionSelection() {
-        if (currentJobData && currentJobData.selectedConnectionName && connectionsLoaded) {
-            console.log('Setting connection selection to:', currentJobData.selectedConnectionName);
-            const select = document.getElementById('connectionName');
-            select.value = currentJobData.selectedConnectionName;
-            
-            // Verify the selection worked
-            if (select.value === currentJobData.selectedConnectionName) {
-                console.log('Connection selection successful');
-            } else {
-                console.warn('Connection selection failed - connection may not exist:', currentJobData.selectedConnectionName);
-            }
-        }
-    }
+    // Connection loading functions removed since connection is now a text field
 
     function setupEventListeners() {
         // Schedule toggle
