@@ -36,7 +36,7 @@ class DatabaseConnectionManager:
             self._pool_lock = Lock()
             self._connection_pool = {}
             self._pool_config = {'max_connections': 50, 'connection_lifetime': 3600}
-            self._current_user = os.getenv('USERNAME', os.getenv('USER', 'system'))
+            self._current_user = 'system'
             self._host_name = socket.gethostname()
             return
         
@@ -51,8 +51,8 @@ class DatabaseConnectionManager:
             'connection_lifetime': 3600  # 1 hour in seconds
         }
         
-        # Initialize audit trail context
-        self._current_user = os.getenv('USERNAME', os.getenv('USER', 'system'))
+        # Initialize audit trail context (simplified - no session tracking)
+        self._current_user = 'system'
         self._host_name = socket.gethostname()
         
         # Initialize system database tables

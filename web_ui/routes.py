@@ -3,7 +3,7 @@ Flask Routes for Windows Job Scheduler Web UI
 """
 
 import time
-from flask import render_template, request, jsonify, redirect, url_for, flash, session
+from flask import render_template, request, jsonify, redirect, url_for, flash
 from datetime import datetime
 from utils.logger import get_logger
 
@@ -13,34 +13,11 @@ def create_routes(app):
     
     logger = get_logger(__name__)
     
-    # Authentication middleware
-    @app.before_request
-    def check_authentication():
-        """Check authentication before each request"""
-        from auth.session_manager import session_manager
-        
-        # Public endpoints that don't require authentication  
-        # Adding API endpoints for testing job execution functionality
-        public_endpoints = ['login', 'api_test_domain', 'static', 'api_jobs', 'api_create_job', 'api_run_job', 'api_job_logs']
-        
-        if request.endpoint in public_endpoints:
-            return None
-        
-        # Check if user is authenticated
-        if not session_manager.validate_session():
-            # Store the original URL for redirect after login
-            if request.endpoint and request.endpoint != 'logout':
-                session['next_url'] = request.url
-            return redirect(url_for('login'))
-        
-        # Refresh session activity
-        session_manager.refresh_session()
-        return None
+    # Authentication removed - direct access to all functionality
     
     @app.route('/')
     def index():
         """Dashboard page"""
-        from auth.session_manager import session_manager
         
         try:
             # Try integrated scheduler first, then fall back to old scheduler manager
@@ -1387,153 +1364,16 @@ def create_routes(app):
             logger.error(f"[DEBUG] Debug endpoint error: {e}")
             return jsonify({'error': str(e)}), 500
     
-    # Authentication Routes
-    
-    @app.route('/login', methods=['GET', 'POST'])
-    def login():
-        """Login page and authentication handler"""
-        from auth.ad_authenticator import get_ad_authenticator
-        from auth.session_manager import session_manager
-        
-        if request.method == 'GET':
-            # Check if already logged in
-            if session_manager.validate_session():
-                return redirect(url_for('index'))
-            
-            # Use local authentication for now
-            return render_template('login.html', 
-                                 domain_name='Local Authentication',
-                                 auth_type='local',
-                                 available_users=['admin', 'scheduler', 'operator'])
-        
-        elif request.method == 'POST':
-            try:
-                username = request.form.get('username', '').strip()
-                password = request.form.get('password', '').strip()
-                
-                if not username or not password:
-                    flash('Username and password are required', 'error')
-                    return redirect(url_for('login'))
-                
-                logger.info(f"[AUTH] Login attempt for user: {username}")
-                
-                # Use local authenticator instead of AD for now
-                from auth.local_authenticator import get_local_authenticator
-                local_auth = get_local_authenticator()
-                
-                # Authenticate user locally
-                auth_result = local_auth.authenticate(username, password)
-                
-                if auth_result['success']:
-                    # Create session
-                    session_manager.create_session(auth_result)
-                    
-                    logger.info(f"[AUTH] Login successful for user: {username}")
-                    flash(f'Welcome, {auth_result.get("display_name", username)}!', 'success')
-                    
-                    # Redirect to next URL or dashboard
-                    next_url = session.pop('next_url', url_for('index'))
-                    return redirect(next_url)
-                else:
-                    logger.warning(f"[AUTH] Login failed for user: {username}")
-                    flash(auth_result.get('error', 'Authentication failed'), 'error')
-                    return redirect(url_for('login'))
-                
-            except Exception as e:
-                logger.error(f"[AUTH] Login error: {e}")
-                flash(f'Login system error: {str(e)}', 'error')
-                return redirect(url_for('login'))
-    
-    @app.route('/logout')
-    def logout():
-        """Logout handler"""
-        from auth.session_manager import session_manager
-        
-        username = session.get('username', 'unknown')
-        session_manager.destroy_session()
-        
-        logger.info(f"[AUTH] User {username} logged out")
-        flash('You have been logged out successfully', 'info')
-        return redirect(url_for('login'))
-    
-    @app.route('/api/auth/test-domain', methods=['POST'])
-    def api_test_domain():
-        """Test local authentication system connectivity"""
-        try:
-            from auth.local_authenticator import get_local_authenticator
-            
-            local_auth = get_local_authenticator()
-            test_result = local_auth.test_connection()
-            
-            # Format response similar to AD test for compatibility
-            return jsonify({
-                'success': True,
-                'domain_test': {
-                    'domain': 'local',
-                    'total_controllers': 1,
-                    'reachable_controllers': 1 if test_result['success'] else 0,
-                    'domain_controllers': [{
-                        'dc': 'local_auth_system',
-                        'status': 'reachable' if test_result['success'] else 'error',
-                        'info': test_result.get('message', 'Local authentication system')
-                    }]
-                }
-            })
-            
-        except Exception as e:
-            logger.error(f"[AUTH] Domain test error: {e}")
-            return jsonify({
-                'success': False,
-                'error': str(e)
-            }), 500
-    
-    @app.route('/api/auth/session-info')
-    def api_session_info():
-        """Get current session information"""
-        from auth.session_manager import session_manager
-        
-        session_info = session_manager.get_session_info()
-        return jsonify(session_info)
-    
-    @app.route('/profile')
-    def user_profile():
-        """User profile page"""
-        from auth.session_manager import session_manager, login_required
-        
-        @login_required
-        def profile_view():
-            user = session_manager.get_current_user()
-            if not user:
-                return redirect(url_for('login'))
-            
-            session_info = session_manager.get_session_info()
-            return render_template('profile.html', user=user, session_info=session_info)
-        
-        return profile_view()
-    
-    # Admin Routes
+    # Authentication removed - all routes now publicly accessible
     
     @app.route('/admin')
     def admin_panel():
-        """Admin control panel - requires admin privileges"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session():
-            return redirect(url_for('login'))
-        
-        if not session_manager.is_admin():
-            flash('Admin privileges required', 'error')
-            return redirect(url_for('index'))
-        
+        """Admin control panel - now publicly accessible"""
         return render_template('admin.html')
     
     @app.route('/api/admin/system-stats')
     def api_admin_system_stats():
         """Get system statistics for admin panel"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
             # Get job statistics
@@ -1555,8 +1395,8 @@ def create_routes(app):
             else:
                 total_connections = 0
             
-            # Mock active sessions (implement proper session tracking if needed)
-            active_sessions = 1 if session_manager.validate_session() else 0
+            # No session tracking - simplified
+            active_sessions = 1
             
             # Calculate uptime (approximate)
             import time
@@ -1583,10 +1423,6 @@ def create_routes(app):
     @app.route('/api/admin/scheduler-status')
     def api_admin_scheduler_status():
         """Get scheduler status"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
             scheduler = getattr(app, 'scheduler_manager', None)
@@ -1611,28 +1447,18 @@ def create_routes(app):
     @app.route('/api/admin/active-sessions')
     def api_admin_active_sessions():
         """Get active user sessions"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
-            # For now, return current session info
-            # In a full implementation, you'd track all active sessions
-            current_user = session_manager.get_current_user()
-            session_info = session_manager.get_session_info()
-            
-            sessions = []
-            if current_user:
-                sessions.append({
-                    'session_id': session.get('session_token', 'unknown'),
-                    'username': current_user['username'],
-                    'display_name': current_user['display_name'],
-                    'login_time': session_info.get('login_time', ''),
-                    'idle_minutes': session_info.get('idle_time_minutes', 0),
-                    'client_ip': current_user.get('client_ip', ''),
-                    'is_current': True
-                })
+            # No session tracking - simplified
+            sessions = [{
+                'session_id': 'no-auth',
+                'username': 'system',
+                'display_name': 'System User',
+                'login_time': 'No authentication required',
+                'idle_minutes': 0,
+                'client_ip': 'localhost',
+                'is_current': True
+            }]
             
             return jsonify({
                 'success': True,
@@ -1647,17 +1473,13 @@ def create_routes(app):
     @app.route('/api/admin/scheduler/start', methods=['POST'])
     def api_admin_start_scheduler():
         """Start the scheduler"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
             scheduler = getattr(app, 'scheduler_manager', None)
             if scheduler:
                 # Implementation depends on your scheduler manager
                 # scheduler.start()
-                logger.info(f"[ADMIN] Scheduler start requested by {session.get('username')}")
+                logger.info(f"[ADMIN] Scheduler start requested by {'system'}")
                 return jsonify({
                     'success': True,
                     'message': 'Scheduler start command sent'
@@ -1675,15 +1497,11 @@ def create_routes(app):
     @app.route('/api/admin/scheduler/pause', methods=['POST'])
     def api_admin_pause_scheduler():
         """Pause the scheduler"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
             scheduler = getattr(app, 'scheduler_manager', None)
             if scheduler:
-                logger.info(f"[ADMIN] Scheduler pause requested by {session.get('username')}")
+                logger.info(f"[ADMIN] Scheduler pause requested by {'system'}")
                 return jsonify({
                     'success': True,
                     'message': 'Scheduler paused successfully'
@@ -1701,15 +1519,11 @@ def create_routes(app):
     @app.route('/api/admin/scheduler/stop', methods=['POST'])
     def api_admin_stop_scheduler():
         """Stop the scheduler"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
             scheduler = getattr(app, 'scheduler_manager', None)
             if scheduler:
-                logger.info(f"[ADMIN] Scheduler stop requested by {session.get('username')}")
+                logger.info(f"[ADMIN] Scheduler stop requested by {'system'}")
                 return jsonify({
                     'success': True,
                     'message': 'Scheduler stopped successfully'
@@ -1727,13 +1541,9 @@ def create_routes(app):
     @app.route('/api/admin/kill-all-jobs', methods=['POST'])
     def api_admin_kill_all_jobs():
         """Kill all running jobs"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
-            logger.warning(f"[ADMIN] Kill all jobs requested by {session.get('username')}")
+            logger.warning(f"[ADMIN] Kill all jobs requested by {'system'}")
             
             # Implementation would depend on your job execution system
             # For now, return success message
@@ -1749,13 +1559,9 @@ def create_routes(app):
     @app.route('/api/admin/emergency-shutdown', methods=['POST'])
     def api_admin_emergency_shutdown():
         """Emergency application shutdown"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
-            logger.critical(f"[ADMIN] EMERGENCY SHUTDOWN requested by {session.get('username')}")
+            logger.critical(f"[ADMIN] EMERGENCY SHUTDOWN requested by {'system'}")
             
             # In a real implementation, you might:
             # - Stop all running jobs
@@ -1775,10 +1581,6 @@ def create_routes(app):
     @app.route('/api/admin/system-logs')
     def api_admin_system_logs():
         """Get system logs"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
             level = request.args.get('level')
@@ -1823,13 +1625,9 @@ def create_routes(app):
     @app.route('/api/admin/clear-logs', methods=['POST'])
     def api_admin_clear_logs():
         """Clear system logs"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
-            logger.warning(f"[ADMIN] Clear logs requested by {session.get('username')}")
+            logger.warning(f"[ADMIN] Clear logs requested by {'system'}")
             
             # Implementation would clear actual log files
             return jsonify({
@@ -1844,13 +1642,9 @@ def create_routes(app):
     @app.route('/api/admin/export-config')
     def api_admin_export_config():
         """Export system configuration"""
-        from auth.session_manager import session_manager
-        
-        if not session_manager.validate_session() or not session_manager.is_admin():
-            return jsonify({'success': False, 'error': 'Admin access required'}), 403
         
         try:
-            logger.info(f"[ADMIN] Configuration export requested by {session.get('username')}")
+            logger.info(f"[ADMIN] Configuration export requested by {'system'}")
             
             # Create configuration export
             config_data = {
@@ -1859,7 +1653,7 @@ def create_routes(app):
                     'session_timeout': app.config.get('SESSION_TIMEOUT_MINUTES')
                 },
                 'export_timestamp': datetime.now().isoformat(),
-                'exported_by': session.get('username')
+                'exported_by': 'system'
             }
             
             import json
