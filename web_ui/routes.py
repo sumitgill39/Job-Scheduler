@@ -195,7 +195,17 @@ def create_routes(app):
             job['retry_delay'] = config.get('retry_delay', 30)
             job['run_as'] = config.get('run_as')
             job['description'] = config.get('description', '')
-            job['metadata'] = {'created_date': job.get('created_date')}
+            
+            # Format created_date properly for template
+            created_date = job.get('created_date')
+            if created_date:
+                # Convert datetime to string if needed
+                if hasattr(created_date, 'strftime'):
+                    created_date = created_date.strftime('%Y-%m-%d %H:%M:%S')
+                elif isinstance(created_date, str):
+                    # Already a string, just ensure it's properly formatted
+                    created_date = created_date[:19]  # Take first 19 characters
+            job['metadata'] = {'created_date': created_date or 'Unknown'}
             
             # Job-specific configuration
             if job['job_type'] == 'sql':
@@ -227,9 +237,33 @@ def create_routes(app):
                 'last_result': history[0] if history else None
             }
             
+            # Format execution history datetime fields
+            formatted_history = []
+            for execution in history:
+                formatted_execution = execution.copy()
+                
+                # Format datetime fields safely
+                for time_field in ['start_time', 'end_time']:
+                    time_value = execution.get(time_field)
+                    if time_value:
+                        if hasattr(time_value, 'strftime'):
+                            formatted_execution[time_field] = time_value.strftime('%Y-%m-%d %H:%M:%S')
+                        elif isinstance(time_value, str):
+                            formatted_execution[time_field] = time_value[:19] if len(time_value) >= 19 else time_value
+                        else:
+                            formatted_execution[time_field] = str(time_value)[:19]
+                    else:
+                        formatted_execution[time_field] = None
+                
+                formatted_history.append(formatted_execution)
+            
+            # Update history with formatted version
+            history = formatted_history
+            
             # Add last run time if we have history
             if history:
                 status['last_run_time'] = history[0].get('start_time')
+                status['last_result'] = history[0]  # Update with formatted data
             
             logger.info(f"[JOB_DETAILS] Displaying details for job: {job['name']}")
             

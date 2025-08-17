@@ -135,7 +135,7 @@
                             </tr>
                             <tr>
                                 <td class="fw-bold">Created:</td>
-                                <td>{{ job.metadata.get('created_date', 'Unknown')[:19] if job.metadata.get('created_date') else 'Unknown' }}</td>
+                                <td>{{ job.metadata.get('created_date', 'Unknown') }}</td>
                             </tr>
                         </table>
                     </div>
@@ -234,8 +234,8 @@
                         <strong>Return Code:</strong> {{ result.return_code or 'N/A' }}
                     </div>
                     <div class="col-md-6">
-                        <strong>Start Time:</strong> {{ result.start_time[:19] if result.start_time else 'N/A' }}<br>
-                        <strong>End Time:</strong> {{ result.end_time[:19] if result.end_time else 'N/A' }}
+                        <strong>Start Time:</strong> {{ result.start_time if result.start_time else 'N/A' }}<br>
+                        <strong>End Time:</strong> {{ result.end_time if result.end_time else 'N/A' }}
                     </div>
                 </div>
                 
@@ -324,7 +324,7 @@
                                 <span class="status-badge status-{{ execution.status.lower() }}">
                                     {{ execution.status.upper() }}
                                 </span>
-                                <small class="text-muted">{{ execution.start_time[:16] if execution.start_time else 'N/A' }}</small>
+                                <small class="text-muted">{{ (execution.start_time[:16] if execution.start_time|length >= 16 else execution.start_time) if execution.start_time else 'N/A' }}</small>
                             </div>
                             {% if execution.duration_seconds %}
                             <small class="text-muted">

@@ -346,17 +346,24 @@
             .then(data => {
                 hideLoading();
                 if (data.success) {
-                    showSuccess(`Job ${action}d successfully`);
+                    // Use the actual enabled state from the server response
+                    const actualEnabled = data.enabled;
+                    const actualAction = actualEnabled ? 'enabled' : 'disabled';
+                    showSuccess(`Job ${actualAction} successfully`);
                     
-                    // Update the button appearance immediately
+                    // Update the button appearance based on actual server state
                     const toggleBtn = document.getElementById(`toggle-btn-${jobId}`);
+                    const jobRow = document.querySelector(`[data-job-id="${jobId}"]`);
+                    
                     if (toggleBtn) {
-                        if (enableStatus === 'true') {
+                        if (actualEnabled) {
+                            // Job is now enabled - show disable button
                             toggleBtn.className = 'btn btn-sm btn-outline-warning btn-action';
                             toggleBtn.title = 'Disable';
                             toggleBtn.innerHTML = '<i class="fas fa-pause"></i>';
                             toggleBtn.onclick = () => toggleJobStatus(jobId, 'false');
                         } else {
+                            // Job is now disabled - show enable button
                             toggleBtn.className = 'btn btn-sm btn-outline-success btn-action';
                             toggleBtn.title = 'Enable';
                             toggleBtn.innerHTML = '<i class="fas fa-play"></i>';
@@ -364,7 +371,24 @@
                         }
                     }
                     
-                    setTimeout(() => refreshJobs(), 1000);
+                    // Update the enabled/disabled badge in the table
+                    if (jobRow) {
+                        const enabledCell = jobRow.querySelector('td:nth-child(4) .badge');
+                        if (enabledCell) {
+                            if (actualEnabled) {
+                                enabledCell.className = 'badge bg-success';
+                                enabledCell.textContent = 'Enabled';
+                            } else {
+                                enabledCell.className = 'badge bg-secondary';
+                                enabledCell.textContent = 'Disabled';
+                            }
+                        }
+                        
+                        // Update data attributes for filtering
+                        jobRow.setAttribute('data-filter-enabled', actualEnabled.toString());
+                    }
+                    
+                    // Don't auto-refresh, the UI is already updated
                 } else {
                     showError(data.error || `Failed to ${action} job`);
                 }
