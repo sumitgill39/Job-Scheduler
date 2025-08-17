@@ -293,16 +293,48 @@
         }
     });
     
-    // Load connections from database (optimized for speed)
+    // Prevent multiple simultaneous requests
+    let loadingConnections = false;
+    let validatingConnections = false;
+    
+    // Load connections from database (optimized to prevent race conditions)
     function loadConnections() {
+        // Prevent multiple simultaneous load requests
+        if (loadingConnections) {
+            console.log('[CONNECTIONS] Load already in progress, skipping...');
+            return;
+        }
+        
+        loadingConnections = true;
         showElement('loading-connections');
         hideElement('connections-container');
         hideElement('empty-state');
         
-        // Use faster endpoint that doesn't test connections immediately
+        // Add fast loading indicator
+        const loadingDiv = document.getElementById('loading-connections');
+        loadingDiv.innerHTML = `
+            <div class="fast-loading-indicator">
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm text-primary me-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <strong>Fast Loading:</strong>
+                    <span class="ms-2">Loading connections without testing (validation will happen automatically)</span>
+                </div>
+            </div>
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading connections...</span>
+                </div>
+                <div class="mt-2">Loading connections from database...</div>
+            </div>
+        `;
+        
+        // Use optimized endpoint with cache to prevent race conditions
         fetch('/api/connections?fast=true')
             .then(response => response.json())
             .then(data => {
+                loadingConnections = false;
                 hideElement('loading-connections');
                 
                 if (data.success && data.connections && data.connections.length > 0) {
@@ -310,15 +342,19 @@
                     showElement('connections-container');
                     
                     // Auto-validate all connections after loading (Issue 2 fix)
-                    setTimeout(() => {
-                        validateAllConnectionsWithLogs();
-                    }, 500); // Small delay to let UI render
+                    // Only start validation if not already running
+                    if (!validatingConnections) {
+                        setTimeout(() => {
+                            validateAllConnectionsWithLogs();
+                        }, 100); // Minimal delay to let UI render
+                    }
                 } else {
                     showElement('empty-state');
                 }
             })
             .catch(error => {
                 console.error('Error loading connections:', error);
+                loadingConnections = false;
                 hideElement('loading-connections');
                 showError('Failed to load connections from database');
                 showElement('empty-state');
@@ -389,6 +425,15 @@
     
     // Validate all connections with detailed logging
     function validateAllConnectionsWithLogs() {
+        // Prevent multiple simultaneous validation requests
+        if (validatingConnections) {
+            console.log('[VALIDATION] Validation already in progress, skipping...');
+            addValidationLog('warning', 'BULK_VALIDATION_SKIP', 'Validation already in progress, skipping duplicate request');
+            return;
+        }
+        
+        validatingConnections = true;
+        
         // Add log entry for validation start
         addValidationLog('info', 'BULK_VALIDATION_START', 'Starting bulk validation of all connections...');
         
@@ -400,6 +445,7 @@
         })
         .then(response => response.json())
         .then(data => {
+            validatingConnections = false;
             hideValidationProgress();
             
             if (data.success) {
@@ -432,6 +478,7 @@
             }
         })
         .catch(error => {
+            validatingConnections = false;
             hideValidationProgress();
             addValidationLog('error', 'BULK_VALIDATION_ERROR', `Bulk validation error: ${error.message}`);
             showError('Error validating connections: ' + error.message);

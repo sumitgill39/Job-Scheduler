@@ -675,12 +675,26 @@ def create_routes(app):
             logger.error(f"API delete job error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    # Connection cache to avoid race conditions
+    _connection_cache = {'data': None, 'timestamp': 0, 'cache_duration': 30}  # Cache for 30 seconds
+    
     @app.route('/api/connections', methods=['GET'])
     def api_get_connections():
-        """API endpoint to get available database connections (optimized for fast loading)"""
+        """API endpoint to get available database connections (optimized to prevent race conditions)"""
+        import time
+        
         try:
             # Check if fast loading is requested
             fast_mode = request.args.get('fast', 'false').lower() == 'true'
+            
+            logger.info(f"[API_CONNECTIONS] Request received (fast_mode: {fast_mode})")
+            
+            # Check cache first to avoid database race conditions
+            current_time = time.time()
+            if (_connection_cache['data'] is not None and 
+                current_time - _connection_cache['timestamp'] < _connection_cache['cache_duration']):
+                logger.info(f"[API_CONNECTIONS] Returning cached data ({len(_connection_cache['data'])} connections)")
+                return jsonify({'success': True, 'connections': _connection_cache['data']})
             
             # Use global connection pool instance
             pool = getattr(app, 'connection_pool', None)
@@ -689,36 +703,146 @@ def create_routes(app):
             
             db_manager = pool.db_manager
             
+            logger.info(f"[API_CONNECTIONS] Loading connections from database (cache miss)")
+            load_start = time.time()
+            
+            # Use batch loading to minimize database calls and avoid race conditions
             connections = []
-            connection_names = db_manager.list_connections()
+            try:
+                # Single database call to get all connection data at once
+                connections = _load_all_connections_batch(db_manager)
+                load_time = time.time() - load_start
+                
+                logger.info(f"[API_CONNECTIONS] Loaded {len(connections)} connections in {load_time:.3f}s")
+                
+                # Cache the results to prevent future race conditions
+                _connection_cache['data'] = connections
+                _connection_cache['timestamp'] = current_time
+                
+            except Exception as e:
+                logger.error(f"[API_CONNECTIONS] Batch loading failed: {e}")
+                # Fallback to individual loading (slower but more resilient)
+                connections = _load_connections_individually(db_manager)
             
-            logger.info(f"[API_CONNECTIONS] Loading {len(connection_names)} connections (fast_mode: {fast_mode})")
-            
-            for conn_name in connection_names:
-                conn_info = db_manager.get_connection_info(conn_name)
-                if conn_info:
-                    connection_data = {
-                        'name': conn_name,
-                        'server': conn_info.get('server'),
-                        'database': conn_info.get('database'),
-                        'description': conn_info.get('description', ''),
-                        'auth_type': 'windows' if conn_info.get('trusted_connection') else 'sql',
-                        'port': conn_info.get('port', 1433)
-                    }
-                    
-                    # In fast mode, don't test connections - just return the data
-                    if fast_mode:
-                        connection_data['status'] = 'pending'
-                        connection_data['response_time'] = None
-                    
-                    connections.append(connection_data)
-            
-            logger.info(f"[API_CONNECTIONS] Returning {len(connections)} connections")
             return jsonify({'success': True, 'connections': connections})
             
         except Exception as e:
-            logger.error(f"API get connections error: {e}")
+            logger.error(f"[API_CONNECTIONS] Error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    def _load_all_connections_batch(db_manager):
+        """Load all connections in a single optimized database operation"""
+        import time
+        
+        connections = []
+        batch_start = time.time()
+        
+        try:
+            # Get system connection once and reuse it
+            system_connection = db_manager._create_new_connection("system")
+            if not system_connection:
+                logger.warning("[BATCH_LOAD] No system connection available, using fallback")
+                return _load_connections_individually(db_manager)
+            
+            cursor = system_connection.cursor()
+            
+            # Single query to get all connection data
+            cursor.execute("""
+                SELECT 
+                    connection_name,
+                    server,
+                    database_name,
+                    port,
+                    auth_type,
+                    description,
+                    trusted_connection,
+                    created_date,
+                    modified_date
+                FROM user_connections 
+                WHERE active = 1
+                ORDER BY connection_name
+            """)
+            
+            rows = cursor.fetchall()
+            cursor.close()
+            system_connection.close()
+            
+            # Process all rows at once
+            for row in rows:
+                connections.append({
+                    'name': row[0],
+                    'server': row[1],
+                    'database': row[2],
+                    'port': row[3] or 1433,
+                    'auth_type': 'windows' if row[6] else 'sql',
+                    'description': row[5] or '',
+                    'status': 'pending',
+                    'response_time': None,
+                    'created_date': str(row[7]) if row[7] else None,
+                    'modified_date': str(row[8]) if row[8] else None
+                })
+            
+            batch_time = time.time() - batch_start
+            logger.info(f"[BATCH_LOAD] Batch loaded {len(connections)} connections in {batch_time:.3f}s")
+            
+        except Exception as e:
+            logger.error(f"[BATCH_LOAD] Batch loading failed: {e}")
+            # Re-raise to trigger fallback
+            raise
+        
+        return connections
+    
+    def _load_connections_individually(db_manager):
+        """Fallback: Load connections individually (slower but more resilient)"""
+        import time
+        
+        connections = []
+        individual_start = time.time()
+        
+        try:
+            # Get connection names (this should be fast from config)
+            connection_names = []
+            
+            # Try to get from config first (faster, no database call)
+            databases = db_manager.config.get('databases', {})
+            for conn_name, conn_config in databases.items():
+                if not conn_config.get('is_system_connection', False):
+                    connection_names.append(conn_name)
+            
+            logger.info(f"[INDIVIDUAL_LOAD] Loading {len(connection_names)} connections individually")
+            
+            # Process each connection
+            for conn_name in connection_names:
+                try:
+                    conn_info = db_manager.get_connection_info(conn_name)
+                    if conn_info:
+                        connections.append({
+                            'name': conn_name,
+                            'server': conn_info.get('server'),
+                            'database': conn_info.get('database'),
+                            'description': conn_info.get('description', ''),
+                            'auth_type': 'windows' if conn_info.get('trusted_connection') else 'sql',
+                            'port': conn_info.get('port', 1433),
+                            'status': 'pending',
+                            'response_time': None
+                        })
+                except Exception as e:
+                    logger.warning(f"[INDIVIDUAL_LOAD] Failed to load connection '{conn_name}': {e}")
+                    continue
+            
+            individual_time = time.time() - individual_start
+            logger.info(f"[INDIVIDUAL_LOAD] Individual loaded {len(connections)} connections in {individual_time:.3f}s")
+            
+        except Exception as e:
+            logger.error(f"[INDIVIDUAL_LOAD] Individual loading failed: {e}")
+        
+        return connections
+    
+    def _invalidate_connection_cache():
+        """Invalidate the connection cache when connections are modified"""
+        _connection_cache['data'] = None
+        _connection_cache['timestamp'] = 0
+        logger.debug("[CACHE] Connection cache invalidated")
     
     @app.route('/api/connections', methods=['POST'])
     def api_create_connection():
@@ -747,6 +871,8 @@ def create_routes(app):
             )
             
             if result['success']:
+                # Invalidate cache since we added a new connection
+                _invalidate_connection_cache()
                 return jsonify({
                     'success': True, 
                     'message': result['message'],
@@ -777,6 +903,8 @@ def create_routes(app):
             success = db_manager.remove_connection(connection_name)
             
             if success:
+                # Invalidate cache since we deleted a connection
+                _invalidate_connection_cache()
                 return jsonify({'success': True, 'message': f'Connection "{connection_name}" deleted successfully'})
             else:
                 return jsonify({'success': False, 'error': f'Connection "{connection_name}" not found'}), 404
