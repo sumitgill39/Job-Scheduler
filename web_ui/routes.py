@@ -1371,6 +1371,16 @@ def create_routes(app):
         """Admin control panel - now publicly accessible"""
         return render_template('admin.html')
     
+    @app.route('/api-docs')
+    def api_documentation():
+        """API Documentation with Swagger UI"""
+        return render_template('api_docs.html')
+    
+    @app.route('/api/openapi-spec')
+    def openapi_specification():
+        """Serve OpenAPI 3.0 specification for Swagger UI"""
+        return jsonify(generate_openapi_spec())
+    
     @app.route('/api/admin/system-stats')
     def api_admin_system_stats():
         """Get system statistics for admin panel"""
@@ -1672,4 +1682,271 @@ def create_routes(app):
         except Exception as e:
             logger.error(f"[ADMIN] Export config error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
-        
+
+
+def generate_openapi_spec():
+    """Generate OpenAPI 3.0 specification for all API endpoints"""
+    
+    spec = {
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Windows Job Scheduler API",
+            "version": "1.0.0",
+            "description": """
+Complete API documentation for Windows Job Scheduler application.
+
+**Features:**
+- Job management (SQL and PowerShell jobs)
+- Database connection management  
+- Job scheduling and execution
+- System administration and monitoring
+
+**Windows Integration:**
+- SQL Server connectivity
+- PowerShell script execution
+- Windows authentication support
+- Event logging integration
+            """,
+            "contact": {
+                "name": "Job Scheduler Support",
+                "email": "support@jobscheduler.local"
+            }
+        },
+        "servers": [
+            {
+                "url": "http://localhost:5000",
+                "description": "Windows Job Scheduler Server"
+            }
+        ],
+        "tags": [
+            {"name": "Jobs", "description": "Job management operations"},
+            {"name": "Connections", "description": "Database connection management"},
+            {"name": "Admin", "description": "Administrative operations"},
+            {"name": "System", "description": "System status and monitoring"},
+            {"name": "Executions", "description": "Job execution history and logs"}
+        ],
+        "paths": {
+            "/api/jobs": {
+                "get": {
+                    "tags": ["Jobs"],
+                    "summary": "List all jobs",
+                    "description": "Retrieve list of all jobs with optional filtering",
+                    "parameters": [
+                        {
+                            "name": "type",
+                            "in": "query",
+                            "schema": {"type": "string", "enum": ["sql", "powershell"]},
+                            "description": "Filter by job type"
+                        },
+                        {
+                            "name": "enabled_only",
+                            "in": "query",
+                            "schema": {"type": "boolean"},
+                            "description": "Only return enabled jobs"
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "List of jobs retrieved successfully",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "success": {"type": "boolean"},
+                                            "jobs": {
+                                                "type": "array",
+                                                "items": {"$ref": "#/components/schemas/Job"}
+                                            },
+                                            "total_count": {"type": "integer"}
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "500": {"description": "Database not available"}
+                    }
+                },
+                "post": {
+                    "tags": ["Jobs"],
+                    "summary": "Create new job",
+                    "description": "Create a new job with optional scheduling",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/JobCreate"},
+                                "examples": {
+                                    "sql_job": {
+                                        "summary": "SQL Job Example",
+                                        "value": {
+                                            "name": "Daily Sales Report",
+                                            "type": "sql",
+                                            "sql_query": "SELECT COUNT(*) as orders, SUM(amount) as revenue FROM orders WHERE DATE(created_date) = GETDATE()",
+                                            "connection_name": "production",
+                                            "schedule": {
+                                                "type": "cron",
+                                                "cron": "0 0 8 * * 1-5"
+                                            }
+                                        }
+                                    },
+                                    "powershell_job": {
+                                        "summary": "PowerShell Job Example",
+                                        "value": {
+                                            "name": "System Cleanup",
+                                            "type": "powershell",
+                                            "script_content": "Get-ChildItem C:\\Temp -Recurse | Remove-Item -Force",
+                                            "schedule": {
+                                                "type": "interval",
+                                                "interval": {"hours": 24}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "201": {"description": "Job created successfully"},
+                        "400": {"description": "Invalid job data"}
+                    }
+                }
+            },
+            "/api/jobs/{job_id}": {
+                "get": {
+                    "tags": ["Jobs"],
+                    "summary": "Get job details",
+                    "parameters": [
+                        {
+                            "name": "job_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string"}
+                        }
+                    ],
+                    "responses": {
+                        "200": {"description": "Job details retrieved"},
+                        "404": {"description": "Job not found"}
+                    }
+                },
+                "put": {
+                    "tags": ["Jobs"],
+                    "summary": "Update job",
+                    "parameters": [
+                        {
+                            "name": "job_id",
+                            "in": "path", 
+                            "required": True,
+                            "schema": {"type": "string"}
+                        }
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/JobUpdate"}
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {"description": "Job updated successfully"}
+                    }
+                },
+                "delete": {
+                    "tags": ["Jobs"],
+                    "summary": "Delete job",
+                    "parameters": [
+                        {
+                            "name": "job_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string"}
+                        }
+                    ],
+                    "responses": {
+                        "200": {"description": "Job deleted successfully"}
+                    }
+                }
+            },
+            "/api/jobs/{job_id}/run": {
+                "post": {
+                    "tags": ["Jobs"],
+                    "summary": "Execute job immediately",
+                    "parameters": [
+                        {
+                            "name": "job_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string"}
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Job execution completed",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "success": {"type": "boolean"},
+                                            "execution_id": {"type": "integer"},
+                                            "status": {"type": "string"},
+                                            "output": {"type": "string"},
+                                            "duration_seconds": {"type": "number"}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "Job": {
+                    "type": "object",
+                    "properties": {
+                        "job_id": {"type": "string", "description": "Unique job identifier"},
+                        "name": {"type": "string", "description": "Job name"},
+                        "job_type": {"type": "string", "enum": ["sql", "powershell"]},
+                        "enabled": {"type": "boolean"},
+                        "configuration": {"type": "object"},
+                        "created_date": {"type": "string", "format": "date-time"},
+                        "modified_date": {"type": "string", "format": "date-time"}
+                    }
+                },
+                "JobCreate": {
+                    "type": "object",
+                    "required": ["name", "type"],
+                    "properties": {
+                        "name": {"type": "string"},
+                        "type": {"type": "string", "enum": ["sql", "powershell"]},
+                        "description": {"type": "string"},
+                        "sql_query": {"type": "string", "description": "Required for SQL jobs"},
+                        "connection_name": {"type": "string"},
+                        "script_content": {"type": "string", "description": "Required for PowerShell jobs"},
+                        "schedule": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "enum": ["cron", "interval", "once"]},
+                                "cron": {"type": "string"},
+                                "interval": {"type": "object"},
+                                "run_date": {"type": "string", "format": "date-time"}
+                            }
+                        }
+                    }
+                },
+                "JobUpdate": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "description": {"type": "string"},
+                        "enabled": {"type": "boolean"}
+                    }
+                }
+            }
+        }
+    }
+    
+    return spec

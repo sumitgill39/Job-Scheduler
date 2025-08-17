@@ -227,6 +227,9 @@ class JobSchedulerApp:
         self.logger.info(f"🔧 Debug mode: {debug}")
         
         try:
+            # Auto-open browser to API documentation as requested
+            self._auto_open_browser(host, port)
+            
             # Start web server
             self.logger.info("🚀 Starting Flask web server...")
             self.web_app.run(
@@ -241,6 +244,32 @@ class JobSchedulerApp:
             import traceback
             self.logger.error(f"🔍 Stack trace: {traceback.format_exc()}")
             raise
+    
+    def _auto_open_browser(self, host, port):
+        """Auto-open browser to API documentation in a new tab"""
+        try:
+            import webbrowser
+            import threading
+            import time
+            
+            url = f"http://{host}:{port}/api-docs"
+            self.logger.info(f"🌐 Auto-opening browser to API documentation: {url}")
+            
+            def open_browser():
+                # Wait a moment for the server to start
+                time.sleep(2)
+                try:
+                    webbrowser.open_new_tab(url)
+                    self.logger.info("✅ Browser opened successfully")
+                except Exception as e:
+                    self.logger.warning(f"⚠️  Could not auto-open browser: {e}")
+            
+            # Open browser in background thread to avoid blocking server startup
+            browser_thread = threading.Thread(target=open_browser, daemon=True)
+            browser_thread.start()
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️  Auto-open browser failed: {e}")
     
     def _run_both_modes(self):
         """Run both CLI and web modes"""

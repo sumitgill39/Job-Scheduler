@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Documentation - Windows Job Scheduler</title>
+    
+    <!-- Swagger UI CSS (CDN) -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@4.15.5/swagger-ui.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+        
+        .api-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 30px 0;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .api-header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .api-header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .info-bar {
+            background: white;
+            padding: 20px 0;
+            border-bottom: 1px solid #e9ecef;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .status-online {
+            color: #28a745;
+            font-weight: 600;
+        }
+        
+        .status-offline {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        
+        .swagger-container {
+            background: white;
+            margin: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        #swagger-ui {
+            padding: 20px;
+        }
+        
+        /* Custom Swagger UI styling */
+        .swagger-ui .topbar {
+            display: none;
+        }
+        
+        .swagger-ui .info {
+            margin: 20px 0;
+        }
+        
+        .swagger-ui .scheme-container {
+            box-shadow: none;
+            padding: 0;
+        }
+        
+        .swagger-ui .opblock.opblock-post {
+            border-color: #28a745;
+            background: rgba(40, 167, 69, 0.1);
+        }
+        
+        .swagger-ui .opblock.opblock-get {
+            border-color: #007bff;
+            background: rgba(0, 123, 255, 0.1);
+        }
+        
+        .swagger-ui .opblock.opblock-put {
+            border-color: #ffc107;
+            background: rgba(255, 193, 7, 0.1);
+        }
+        
+        .swagger-ui .opblock.opblock-delete {
+            border-color: #dc3545;
+            background: rgba(220, 53, 69, 0.1);
+        }
+        
+        .windows-note {
+            background: linear-gradient(135deg, #e7f3ff, #f0f8ff);
+            border: 1px solid #b3d9ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px;
+            font-size: 14px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .windows-note strong {
+            color: #0066cc;
+        }
+        
+        .back-to-dashboard {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+        
+        .btn-dashboard {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #dee2e6;
+            color: #2c3e50;
+            padding: 8px 16px;
+            border-radius: 20px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        
+        .btn-dashboard:hover {
+            background: white;
+            color: #2c3e50;
+            text-decoration: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="back-to-dashboard">
+        <a href="/" class="btn-dashboard">
+            ← Back to Dashboard
+        </a>
+    </div>
+
+    <div class="api-header">
+        <div class="container">
+            <h1>🔌 API Documentation</h1>
+            <p>Complete REST API Reference for Windows Job Scheduler</p>
+        </div>
+    </div>
+    
+    <div class="info-bar">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <span>🌐 Server:</span>
+                        <span id="server-status" class="status-online">http://localhost:5000</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <span>📋 Endpoints:</span>
+                        <span id="endpoint-count">Loading...</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <span>🔧 Platform:</span>
+                        <span>Windows Server</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <span>📊 Status:</span>
+                        <span id="api-status" class="status-online">Active</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="windows-note">
+        <div class="container">
+            <strong>🚀 Getting Started with the API:</strong><br>
+            <div class="row mt-2">
+                <div class="col-md-6">
+                    <strong>Testing Endpoints:</strong><br>
+                    • Click any endpoint to expand details<br>
+                    • Use "Try it out" button to test directly<br>
+                    • View request/response examples<br>
+                    • Copy curl commands for external testing
+                </div>
+                <div class="col-md-6">
+                    <strong>API Categories:</strong><br>
+                    • <strong>Jobs:</strong> Create, manage, and execute jobs<br>
+                    • <strong>Connections:</strong> Database connection management<br>
+                    • <strong>Admin:</strong> System statistics and control<br>
+                    • <strong>System:</strong> Health checks and monitoring
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="swagger-container">
+        <div id="swagger-ui"></div>
+    </div>
+    
+    <!-- Swagger UI JS (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@4.15.5/swagger-ui-bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@4.15.5/swagger-ui-standalone-preset.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Initialize Swagger UI
+        window.onload = function() {
+            const ui = SwaggerUIBundle({
+                url: '/api/openapi-spec',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                defaultModelsExpandDepth: 1,
+                defaultModelExpandDepth: 1,
+                docExpansion: "list",
+                supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch'],
+                tryItOutEnabled: true,
+                filter: true,
+                validatorUrl: null,
+                onComplete: function() {
+                    console.log("Swagger UI loaded successfully");
+                    updateEndpointCount();
+                    checkServerStatus();
+                },
+                onFailure: function(error) {
+                    console.error("Swagger UI failed to load:", error);
+                    document.getElementById('api-status').textContent = 'Failed to Load';
+                    document.getElementById('api-status').className = 'status-offline';
+                }
+            });
+            
+            // Custom request interceptor
+            ui.getSystem().fn.fetch = function(req) {
+                req.headers = req.headers || {};
+                req.headers['User-Agent'] = 'Windows-Job-Scheduler-Web-Client';
+                req.headers['X-Requested-With'] = 'XMLHttpRequest';
+                
+                return fetch(req);
+            };
+        };
+        
+        function updateEndpointCount() {
+            try {
+                setTimeout(() => {
+                    const operations = document.querySelectorAll('.opblock');
+                    const count = operations.length;
+                    document.getElementById('endpoint-count').textContent = count > 0 ? count : '25+';
+                }, 1000);
+            } catch (e) {
+                document.getElementById('endpoint-count').textContent = '25+';
+            }
+        }
+        
+        function checkServerStatus() {
+            fetch('/api/system/status')
+                .then(response => {
+                    const statusElement = document.getElementById('server-status');
+                    const apiStatusElement = document.getElementById('api-status');
+                    
+                    if (response.ok) {
+                        statusElement.className = 'status-online';
+                        statusElement.textContent = 'http://localhost:5000 ✓ Online';
+                        apiStatusElement.className = 'status-online';
+                        apiStatusElement.textContent = 'Active';
+                    } else {
+                        statusElement.className = 'status-offline';
+                        statusElement.textContent = 'http://localhost:5000 ✗ Error';
+                        apiStatusElement.className = 'status-offline';
+                        apiStatusElement.textContent = 'Error';
+                    }
+                })
+                .catch(error => {
+                    const statusElement = document.getElementById('server-status');
+                    const apiStatusElement = document.getElementById('api-status');
+                    statusElement.className = 'status-offline';
+                    statusElement.textContent = 'http://localhost:5000 ✗ Offline';
+                    apiStatusElement.className = 'status-offline';
+                    apiStatusElement.textContent = 'Offline';
+                });
+        }
+        
+        // Check server status every 60 seconds
+        setInterval(checkServerStatus, 60000);
+    </script>
+</body>
+</html>
