@@ -103,7 +103,12 @@ class SqlJob(JobBase):
             try:
                 # Execute query
                 cursor = connection.cursor()
-                cursor.settimeout(self.query_timeout)
+                
+                # Set query timeout (pyodbc doesn't support per-query timeout easily)
+                # The timeout is typically handled at connection level via connection string
+                # or by using SQL Server's query timeout mechanisms
+                self.job_logger.debug(f"Executing with timeout configuration: {self.query_timeout} seconds")
+                self.job_logger.debug(f"Note: Timeout enforcement depends on connection string configuration")
                 
                 self.job_logger.debug(f"Executing query: {self.sql_query}")
                 start_exec = datetime.now()
@@ -212,11 +217,14 @@ class SqlJob(JobBase):
         """Get database connection"""
         try:
             if self.connection_string:
-                # Use direct connection string
+                # Use direct connection string (add command timeout if not present)
                 self.job_logger.debug("Using direct connection string")
-                return pyodbc.connect(self.connection_string, timeout=30)
+                connection_str = self.connection_string
+                if "Command Timeout" not in connection_str:
+                    connection_str += f";Command Timeout={self.query_timeout}"
+                return pyodbc.connect(connection_str, timeout=30)
             else:
-                # Use named connection from config
+                # Use named connection from config (already includes proper timeouts)
                 self.job_logger.debug(f"Using named connection: {self.connection_name}")
                 return self.db_manager.get_connection(self.connection_name)
         
