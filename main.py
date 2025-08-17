@@ -246,14 +246,14 @@ class JobSchedulerApp:
             raise
     
     def _auto_open_browser(self, host, port):
-        """Auto-open browser to API documentation in a new tab"""
+        """Auto-open browser to main dashboard in a new tab"""
         try:
             import webbrowser
             import threading
             import time
             
-            url = f"http://{host}:{port}/api-docs"
-            self.logger.info(f"🌐 Auto-opening browser to API documentation: {url}")
+            url = f"http://{host}:{port}/"
+            self.logger.info(f"🌐 Auto-opening browser to main dashboard: {url}")
             
             def open_browser():
                 # Wait a moment for the server to start
