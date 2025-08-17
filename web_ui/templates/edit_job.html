@@ -82,6 +82,21 @@
                             <textarea class="form-control" id="sqlQuery" name="sql_query" rows="8" 
                                       placeholder="Enter your SQL query here..."></textarea>
                         </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="queryTimeout" class="form-label">Query Timeout (seconds)</label>
+                                    <input type="number" class="form-control" id="queryTimeout" name="query_timeout" value="300" min="1">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="maxRows" class="form-label">Max Rows</label>
+                                    <input type="number" class="form-control" id="maxRows" name="max_rows" value="1000" min="1">
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- PowerShell Job Configuration -->
@@ -293,14 +308,27 @@
 {% block scripts %}
 <script>
     let currentJobData = {};
+    let connectionsLoaded = false;
+    let jobDataLoaded = false;
     
     // Initialize page
     document.addEventListener('DOMContentLoaded', function() {
         const jobId = getJobIdFromURL();
         if (jobId) {
-            loadJobData(jobId);
-            loadConnections();
-            setupEventListeners();
+            // Load both connections and job data in parallel
+            Promise.all([
+                loadConnections(),
+                loadJobData(jobId)
+            ]).then(() => {
+                // Both are loaded, now populate the form properly
+                if (currentJobData && currentJobData.job_type === 'sql') {
+                    populateConnectionSelection();
+                }
+                setupEventListeners();
+            }).catch(error => {
+                console.error('Error loading data:', error);
+                showError('Failed to load job data');
+            });
         } else {
             showError('No job ID provided');
             setTimeout(() => window.location.href = '/jobs', 2000);
@@ -315,7 +343,7 @@
     function loadJobData(jobId) {
         showLoading(true);
         
-        fetch(`/api/jobs/${jobId}`)
+        return fetch(`/api/jobs/${jobId}`)
             .then(response => response.json())
             .then(data => {
                 console.log('API Response:', data); // Debug log
@@ -323,12 +351,15 @@
                     currentJobData = data.job;
                     console.log('Job Data:', data.job); // Debug log
                     populateForm(data.job);
+                    jobDataLoaded = true;
+                    return data.job;
                 } else {
-                    showError(data.error || 'Failed to load job data');
+                    throw new Error(data.error || 'Failed to load job data');
                 }
             })
             .catch(error => {
                 showError('Error loading job: ' + error.message);
+                throw error;
             })
             .finally(() => {
                 showLoading(false);
@@ -365,8 +396,16 @@
             showSQLConfig();
             const sqlConfig = config.sql || {};
             console.log('SQL config:', sqlConfig); // Debug log
-            document.getElementById('connectionName').value = sqlConfig.connection_name || '';
+            
+            // Store the connection name for later setting when connections are loaded
+            if (sqlConfig.connection_name) {
+                currentJobData.selectedConnectionName = sqlConfig.connection_name;
+                console.log('Stored selected connection name:', sqlConfig.connection_name);
+            }
+            
             document.getElementById('sqlQuery').value = sqlConfig.query || '';
+            document.getElementById('queryTimeout').value = sqlConfig.query_timeout || 300;
+            document.getElementById('maxRows').value = sqlConfig.max_rows || 1000;
         } else if (job.job_type === 'powershell') {
             console.log('Loading PowerShell job configuration'); // Debug log
             showPowerShellConfig();
@@ -394,16 +433,22 @@
         }
 
         // Schedule configuration
+        console.log('Processing schedule configuration:', config.schedule); // Debug log
         if (config.schedule) {
+            console.log('Schedule found, enabling schedule section'); // Debug log
             document.getElementById('enableSchedule').checked = true;
             showScheduleSection();
             
             const schedule = config.schedule;
+            console.log('Schedule type:', schedule.type); // Debug log
+            
             if (schedule.type === 'cron') {
+                console.log('Setting up cron schedule:', schedule.cron); // Debug log
                 document.getElementById('scheduleTypeCron').checked = true;
                 document.getElementById('cronExpression').value = schedule.cron || '';
                 showCronSection();
             } else if (schedule.type === 'interval') {
+                console.log('Setting up interval schedule:', schedule.interval); // Debug log
                 document.getElementById('scheduleTypeInterval').checked = true;
                 const interval = schedule.interval || {};
                 document.getElementById('intervalDays').value = interval.days || 0;
@@ -412,20 +457,27 @@
                 document.getElementById('intervalSeconds').value = interval.seconds || 0;
                 showIntervalSection();
             } else if (schedule.type === 'date') {
+                console.log('Setting up date schedule:', schedule.run_date); // Debug log
                 document.getElementById('scheduleTypeOnce').checked = true;
                 if (schedule.run_date) {
-                    const runDate = new Date(schedule.run_date);
-                    document.getElementById('runDate').value = runDate.toISOString().split('T')[0];
-                    document.getElementById('runTime').value = runDate.toISOString().split('T')[1].substr(0, 5);
+                    try {
+                        const runDate = new Date(schedule.run_date);
+                        document.getElementById('runDate').value = runDate.toISOString().split('T')[0];
+                        document.getElementById('runTime').value = runDate.toISOString().split('T')[1].substr(0, 5);
+                    } catch (e) {
+                        console.error('Error parsing run date:', e);
+                    }
                 }
                 showOnceSection();
             }
+        } else {
+            console.log('No schedule configuration found'); // Debug log
         }
     }
 
     function loadConnections() {
         console.log('Loading database connections...'); // Debug log
-        fetch('/api/connections')
+        return fetch('/api/connections')
             .then(response => response.json())
             .then(data => {
                 console.log('Connections API response:', data); // Debug log
@@ -440,13 +492,32 @@
                         select.appendChild(option);
                     });
                     console.log('Loaded connections:', Object.keys(data.connections)); // Debug log
+                    connectionsLoaded = true;
+                    return data.connections;
                 } else {
                     console.error('Failed to load connections:', data); // Debug log
+                    throw new Error('Failed to load connections');
                 }
             })
             .catch(error => {
                 console.error('Error loading connections:', error);
+                throw error;
             });
+    }
+    
+    function populateConnectionSelection() {
+        if (currentJobData && currentJobData.selectedConnectionName && connectionsLoaded) {
+            console.log('Setting connection selection to:', currentJobData.selectedConnectionName);
+            const select = document.getElementById('connectionName');
+            select.value = currentJobData.selectedConnectionName;
+            
+            // Verify the selection worked
+            if (select.value === currentJobData.selectedConnectionName) {
+                console.log('Connection selection successful');
+            } else {
+                console.warn('Connection selection failed - connection may not exist:', currentJobData.selectedConnectionName);
+            }
+        }
     }
 
     function setupEventListeners() {
@@ -574,6 +645,8 @@
         if (jobData.job_type === 'sql') {
             jobData.sql_query = formData.get('sql_query');
             jobData.connection_name = formData.get('connection_name');
+            jobData.query_timeout = parseInt(formData.get('query_timeout')) || 300;
+            jobData.max_rows = parseInt(formData.get('max_rows')) || 1000;
         } else if (jobData.job_type === 'powershell') {
             const scriptType = document.querySelector('input[name="scriptType"]:checked').value;
             if (scriptType === 'inline') {
@@ -670,6 +743,16 @@
 
     function showLoading(show) {
         document.getElementById('loading').style.display = show ? 'block' : 'none';
+    }
+    
+    function showSuccess(message) {
+        // Create a simple alert for now - can be enhanced with toast notifications
+        alert('✅ ' + message);
+    }
+    
+    function showError(message) {
+        // Create a simple alert for now - can be enhanced with toast notifications  
+        alert('❌ ' + message);
     }
 </script>
 {% endblock %}
