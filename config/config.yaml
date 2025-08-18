@@ -54,9 +54,14 @@ security:
 environment:
   zone: "development"  # development, staging, production
   data_masking:
-    enabled: true
-    mask_sensitive_data: true
-    production_masking: false  # Set to true for production environments
+    enabled: false  # Enable for staging/production
+    mask_sensitive_data: false  # Show all data in development
+    production_masking: false  # Full masking for production only
+    audit_logging: false  # Enable for compliance in staging/production
+    restrict_debug_info: false  # Show full debug info in development
+    show_connection_details: true  # Hide in production
+    enable_verbose_logging: true  # Disable in production
+  
   
 # Default job settings
 defaults:
