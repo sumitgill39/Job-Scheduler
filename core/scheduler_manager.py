@@ -180,38 +180,84 @@ class SchedulerManager:
             return False
     
     def _create_trigger(self, schedule_config: Dict[str, Any]):
-        """Create APScheduler trigger from configuration"""
+        """Create APScheduler trigger from configuration with timezone support"""
         trigger_type = schedule_config.get('type', 'cron').lower()
+        timezone = schedule_config.get('timezone', 'UTC')
         
         try:
+            # Import timezone handling
+            from pytz import timezone as pytz_timezone
+            tz = pytz_timezone(timezone) if timezone != 'UTC' else None
+            
             if trigger_type == 'cron':
                 cron_expr = schedule_config.get('cron')
                 if cron_expr:
                     parts = cron_expr.split()
                     if len(parts) == 6:
-                        return CronTrigger(
-                            second=parts[0], minute=parts[1], hour=parts[2],
-                            day=parts[3], month=parts[4], day_of_week=parts[5]
-                        )
+                        trigger_kwargs = {
+                            'second': parts[0], 
+                            'minute': parts[1], 
+                            'hour': parts[2],
+                            'day': parts[3], 
+                            'month': parts[4], 
+                            'day_of_week': parts[5]
+                        }
+                        if tz:
+                            trigger_kwargs['timezone'] = tz
+                        return CronTrigger(**trigger_kwargs)
             
             elif trigger_type == 'interval':
                 interval_config = schedule_config.get('interval', {})
-                return IntervalTrigger(
-                    weeks=interval_config.get('weeks', 0),
-                    days=interval_config.get('days', 0),
-                    hours=interval_config.get('hours', 0),
-                    minutes=interval_config.get('minutes', 0),
-                    seconds=interval_config.get('seconds', 0)
-                )
+                trigger_kwargs = {
+                    'weeks': interval_config.get('weeks', 0),
+                    'days': interval_config.get('days', 0),
+                    'hours': interval_config.get('hours', 0),
+                    'minutes': interval_config.get('minutes', 0),
+                    'seconds': interval_config.get('seconds', 0)
+                }
+                if tz:
+                    trigger_kwargs['timezone'] = tz
+                return IntervalTrigger(**trigger_kwargs)
             
             elif trigger_type == 'date':
                 run_date = schedule_config.get('run_date')
                 if isinstance(run_date, str):
-                    run_date = datetime.fromisoformat(run_date)
-                return DateTrigger(run_date=run_date)
+                    # Parse as UTC datetime since frontend converts to UTC
+                    run_date = datetime.fromisoformat(run_date.replace('Z', '+00:00'))
+                trigger_kwargs = {'run_date': run_date}
+                if tz:
+                    trigger_kwargs['timezone'] = tz
+                return DateTrigger(**trigger_kwargs)
             
         except Exception as e:
-            self.logger.error(f"Failed to create trigger: {e}")
+            self.logger.error(f"Failed to create trigger with timezone {timezone}: {e}")
+            # Fallback to UTC if timezone handling fails
+            try:
+                if trigger_type == 'cron':
+                    cron_expr = schedule_config.get('cron')
+                    if cron_expr:
+                        parts = cron_expr.split()
+                        if len(parts) == 6:
+                            return CronTrigger(
+                                second=parts[0], minute=parts[1], hour=parts[2],
+                                day=parts[3], month=parts[4], day_of_week=parts[5]
+                            )
+                elif trigger_type == 'interval':
+                    interval_config = schedule_config.get('interval', {})
+                    return IntervalTrigger(
+                        weeks=interval_config.get('weeks', 0),
+                        days=interval_config.get('days', 0),
+                        hours=interval_config.get('hours', 0),
+                        minutes=interval_config.get('minutes', 0),
+                        seconds=interval_config.get('seconds', 0)
+                    )
+                elif trigger_type == 'date':
+                    run_date = schedule_config.get('run_date')
+                    if isinstance(run_date, str):
+                        run_date = datetime.fromisoformat(run_date.replace('Z', '+00:00'))
+                    return DateTrigger(run_date=run_date)
+            except Exception as fallback_error:
+                self.logger.error(f"Fallback trigger creation also failed: {fallback_error}")
         
         return None
     

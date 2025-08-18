@@ -205,11 +205,26 @@
                             {{ interval.days }}d {{ interval.hours }}h {{ interval.minutes }}m {{ interval.seconds }}s<br>
                         {% elif status.schedule.type == 'date' %}
                             <strong>Run Date:</strong> {{ status.schedule.run_date }}<br>
+                            {% if status.schedule.local_time %}
+                                <strong>Local Time:</strong> {{ status.schedule.local_time }}<br>
+                            {% endif %}
+                        {% endif %}
+                        {% if status.schedule.timezone %}
+                            <strong>Timezone:</strong> 
+                            <span class="badge bg-info">{{ status.schedule.timezone }}</span><br>
                         {% endif %}
                     </div>
                     <div class="col-md-6">
-                        <strong>Next Run:</strong> {{ status.next_run_time or 'Not scheduled' }}<br>
-                        <strong>Last Run:</strong> {{ status.last_run_time or 'Never' }}
+                        <strong>Next Run:</strong> 
+                        <span id="nextRunTime">{{ status.next_run_time or 'Not scheduled' }}</span><br>
+                        <strong>Last Run:</strong> 
+                        <span id="lastRunTime">{{ status.last_run_time or 'Never' }}</span>
+                        {% if status.schedule and status.schedule.timezone and status.schedule.timezone != 'UTC' %}
+                            <br><small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Times shown in UTC (stored timezone: {{ status.schedule.timezone }})
+                            </small>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -323,7 +338,13 @@
                                 <thead class="table-dark">
                                     <tr>
                                         <th>Status</th>
-                                        <th>Start Time</th>
+                                        <th>Start Time 
+                                            {% if status.schedule and status.schedule.timezone %}
+                                                <small class="text-muted">({{ status.schedule.timezone }})</small>
+                                            {% else %}
+                                                <small class="text-muted">(UTC)</small>
+                                            {% endif %}
+                                        </th>
                                         <th>Duration</th>
                                         <th>Actions</th>
                                     </tr>
@@ -336,7 +357,19 @@
                                                 {{ execution.status.upper() }}
                                             </span>
                                         </td>
-                                        <td>{{ (execution.start_time[:16] if execution.start_time|length >= 16 else execution.start_time) if execution.start_time else 'N/A' }}</td>
+                                        <td>
+                                            {% if execution.start_time %}
+                                                {% if status.schedule and status.schedule.timezone and status.schedule.timezone != 'UTC' %}
+                                                    <span title="UTC: {{ execution.start_time }}">
+                                                        {{ execution.start_time[:16] if execution.start_time|length >= 16 else execution.start_time }}
+                                                    </span>
+                                                {% else %}
+                                                    {{ execution.start_time[:16] if execution.start_time|length >= 16 else execution.start_time }}
+                                                {% endif %}
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </td>
                                         <td>{{ "%.2f"|format(execution.duration_seconds) if execution.duration_seconds else 'N/A' }}{% if execution.duration_seconds %}s{% endif %}</td>
                                         <td>
                                             <button class="btn btn-sm btn-outline-info" onclick="viewExecutionDetails('{{ execution.execution_id }}')" title="View Details">
@@ -583,13 +616,14 @@
         // Check if table exists, create if not
         let table = document.getElementById('executionHistoryTable');
         if (!table) {
+            const jobTimezone = '{% if status.schedule and status.schedule.timezone %}{{ status.schedule.timezone }}{% else %}UTC{% endif %}';
             container.innerHTML = `
                 <div class="table-responsive">
                     <table class="table table-sm table-striped" id="executionHistoryTable">
                         <thead class="table-dark">
                             <tr>
                                 <th>Status</th>
-                                <th>Start Time</th>
+                                <th>Start Time <small class="text-muted">(${jobTimezone})</small></th>
                                 <th>Duration</th>
                                 <th>Actions</th>
                             </tr>
@@ -649,13 +683,14 @@
         // Create table if it doesn't exist
         let table = document.getElementById('executionHistoryTable');
         if (!table) {
+            const jobTimezone = '{% if status.schedule and status.schedule.timezone %}{{ status.schedule.timezone }}{% else %}UTC{% endif %}';
             container.innerHTML = `
                 <div class="table-responsive">
                     <table class="table table-sm table-striped" id="executionHistoryTable">
                         <thead class="table-dark">
                             <tr>
                                 <th>Status</th>
-                                <th>Start Time</th>
+                                <th>Start Time <small class="text-muted">(${jobTimezone})</small></th>
                                 <th>Duration</th>
                                 <th>Actions</th>
                             </tr>
@@ -713,7 +748,38 @@
         row.setAttribute('data-execution-id', execution.execution_id);
         
         const statusClass = getStatusClass(execution.status);
-        const startTime = execution.start_time ? (execution.start_time.length >= 16 ? execution.start_time.substring(0, 16) : execution.start_time) : 'N/A';
+        
+        // Format execution time with timezone awareness
+        let startTime = 'N/A';
+        if (execution.start_time) {
+            try {
+                // Get job timezone from the schedule
+                const jobTimezone = '{% if status.schedule and status.schedule.timezone %}{{ status.schedule.timezone }}{% else %}UTC{% endif %}';
+                
+                if (jobTimezone !== 'UTC') {
+                    // Convert UTC time to job timezone
+                    const utcDate = new Date(execution.start_time);
+                    const localTime = utcDate.toLocaleString('en-US', { 
+                        timeZone: jobTimezone,
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    });
+                    startTime = localTime;
+                } else {
+                    // Show UTC time
+                    const utcDate = new Date(execution.start_time);
+                    startTime = utcDate.toISOString().substring(0, 16).replace('T', ' ');
+                }
+            } catch (error) {
+                // Fallback to original format
+                startTime = execution.start_time.length >= 16 ? execution.start_time.substring(0, 16) : execution.start_time;
+            }
+        }
+        
         const duration = execution.duration_seconds ? `${parseFloat(execution.duration_seconds).toFixed(2)}s` : 'N/A';
         
         row.innerHTML = `
