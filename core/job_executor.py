@@ -426,6 +426,69 @@ class JobExecutor:
         except Exception as e:
             self.logger.error(f"[JOB_EXECUTOR] Error getting execution history: {e}")
             return []
+
+    def get_execution_history_incremental(self, job_id: str, since_timestamp: str = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get job execution history from database since a specific timestamp"""
+        try:
+            system_connection = self.connection_pool.get_connection("system")
+            if not system_connection:
+                return []
+            
+            cursor = system_connection.cursor()
+            
+            if since_timestamp:
+                query = """
+                    SELECT TOP (?) execution_id, job_id, job_name, status, start_time, end_time, 
+                           duration_seconds, output, error_message, return_code, retry_count, max_retries, metadata
+                    FROM job_execution_history 
+                    WHERE job_id = ? AND start_time > ?
+                    ORDER BY start_time DESC
+                """
+                cursor.execute(query, (limit, job_id, since_timestamp))
+            else:
+                # Fall back to regular query if no timestamp provided
+                query = """
+                    SELECT TOP (?) execution_id, job_id, job_name, status, start_time, end_time, 
+                           duration_seconds, output, error_message, return_code, retry_count, max_retries, metadata
+                    FROM job_execution_history 
+                    WHERE job_id = ?
+                    ORDER BY start_time DESC
+                """
+                cursor.execute(query, (limit, job_id))
+            
+            rows = cursor.fetchall()
+            cursor.close()
+            
+            history = []
+            for row in rows:
+                # Parse metadata JSON
+                try:
+                    metadata = json.loads(row[12]) if row[12] else {}
+                except:
+                    metadata = {}
+                
+                history.append({
+                    'execution_id': row[0],
+                    'job_id': row[1],
+                    'job_name': row[2],
+                    'status': row[3],
+                    'start_time': row[4].isoformat() if row[4] else None,
+                    'end_time': row[5].isoformat() if row[5] else None,
+                    'duration_seconds': row[6],
+                    'output': row[7],
+                    'error_message': row[8],
+                    'return_code': row[9],
+                    'retry_count': row[10],
+                    'max_retries': row[11],
+                    'metadata': metadata
+                })
+            
+            self.logger.debug(f"[JOB_EXECUTOR] Retrieved {len(history)} incremental execution records since {since_timestamp}")
+            return history
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_EXECUTOR] Error getting incremental execution history: {e}")
+            return []
     
     def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Get current status of a job including last execution"""

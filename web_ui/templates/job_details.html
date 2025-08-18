@@ -380,6 +380,10 @@
     let uiUpdateInterval = null; // Update UI every 10s
     let isDataFetching = false;
     
+    // Incremental polling variables
+    let lastFetchedTimestamp = null; // Track latest timestamp for incremental updates
+    let maxTableRows = 20; // Maximum rows to keep in UI table
+    
     function refreshJobData() {
         if (isRefreshing) return; // Prevent multiple simultaneous refreshes
         
@@ -395,6 +399,8 @@
             .then(data => {
                 if (data.success) {
                     updateJobStatus(data);
+                    // For manual refresh, reset timestamp to get fresh data
+                    lastFetchedTimestamp = null;
                     // For history, just trigger an immediate buffer update and UI sync
                     fetchDataToBuffer().then(() => {
                         applyBufferToUI();
@@ -414,30 +420,42 @@
             });
     }
     
-    // Background data fetching (every 5 seconds)
+    // Background data fetching (every 5 seconds) - now with incremental polling
     function fetchDataToBuffer() {
         if (isDataFetching) return Promise.resolve(); // Prevent concurrent fetches
         
         isDataFetching = true;
-        console.log('🔄 Fetching fresh data to buffer...');
         
-        return fetch(`/api/jobs/{{ job.job_id }}/history?limit=5`)
+        // Use incremental API if we have a timestamp, otherwise fetch initial data
+        const apiUrl = lastFetchedTimestamp 
+            ? `/api/jobs/{{ job.job_id }}/history/incremental?since=${encodeURIComponent(lastFetchedTimestamp)}&limit=${maxTableRows}`
+            : `/api/jobs/{{ job.job_id }}/history/incremental?limit=${maxTableRows}`;
+        
+        console.log(`🔄 Fetching ${lastFetchedTimestamp ? 'incremental' : 'initial'} data to buffer...`);
+        
+        return fetch(apiUrl)
             .then(response => response.json())
             .then(data => {
-                console.log('🔍 History API Response:', data); // Always log the response
+                console.log('🔍 Incremental History API Response:', data); // Always log the response
                 
                 if (data.success && data.execution_history) {
+                    // Update our timestamp tracker
+                    if (data.latest_timestamp) {
+                        lastFetchedTimestamp = data.latest_timestamp;
+                    }
+                    
                     // Store fresh data in buffer
                     dataBuffer = {
                         history: data.execution_history,
                         timestamp: Date.now(),
+                        isIncremental: !!data.since_timestamp, // Flag if this is incremental data
                         hash: JSON.stringify(data.execution_history.map(h => ({
                             id: h.execution_id,
                             status: h.status,
                             start_time: h.start_time
                         })))
                     };
-                    console.log(`📊 Buffer updated with ${data.execution_history.length} records`);
+                    console.log(`📊 Buffer updated with ${data.execution_history.length} ${data.since_timestamp ? 'new' : 'initial'} records`);
                 } else {
                     console.warn('❌ Failed to fetch history data:', data.error || 'No execution_history in response');
                     
@@ -477,7 +495,16 @@
         // Check if data has actually changed before updating UI
         if (dataBuffer.hash !== lastHistoryHash) {
             console.log('🎨 Applying buffer data to UI...');
-            updateHistoryTable(dataBuffer.history);
+            
+            // Handle incremental vs full updates
+            if (dataBuffer.isIncremental && dataBuffer.history.length > 0) {
+                console.log(`📈 Applying ${dataBuffer.history.length} incremental records`);
+                prependNewRecords(dataBuffer.history);
+            } else if (!dataBuffer.isIncremental) {
+                console.log(`🔄 Applying ${dataBuffer.history.length} initial records`);
+                updateHistoryTable(dataBuffer.history);
+            }
+            
             lastHistoryHash = dataBuffer.hash;
             
             // Clear the buffer after applying to UI
@@ -607,6 +634,72 @@
                 }
             }
         });
+    }
+
+    function prependNewRecords(newHistory) {
+        const container = document.getElementById('executionHistoryContainer');
+        if (!container) return;
+        
+        // Create table if it doesn't exist
+        let table = document.getElementById('executionHistoryTable');
+        if (!table) {
+            container.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped" id="executionHistoryTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Status</th>
+                                <th>Start Time</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            `;
+            table = document.getElementById('executionHistoryTable');
+        }
+        
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        
+        // Remove "no history" message if it exists
+        const noHistoryMessage = container.querySelector('#noHistoryMessage');
+        if (noHistoryMessage) {
+            noHistoryMessage.remove();
+        }
+        
+        // Prepend new records to the top of the table
+        // Records come in DESC order (newest first), so we insert them in order
+        newHistory.forEach((execution, index) => {
+            // Check if this record already exists
+            const existingRow = tbody.querySelector(`tr[data-execution-id="${execution.execution_id}"]`);
+            if (!existingRow) {
+                const newRow = createHistoryRow(execution);
+                
+                // Add subtle animation for new rows
+                newRow.style.backgroundColor = '#d1ecf1';
+                newRow.style.transition = 'background-color 3s ease';
+                
+                // Insert at the beginning
+                tbody.insertBefore(newRow, tbody.firstChild);
+                
+                // Remove highlight after animation
+                setTimeout(() => {
+                    newRow.style.backgroundColor = '';
+                }, 3000);
+            }
+        });
+        
+        // Maintain table size limit - remove excess rows from bottom
+        const allRows = tbody.querySelectorAll('tr[data-execution-id]');
+        if (allRows.length > maxTableRows) {
+            for (let i = maxTableRows; i < allRows.length; i++) {
+                allRows[i].remove();
+            }
+            console.log(`🗑️ Removed ${allRows.length - maxTableRows} old rows to maintain ${maxTableRows} row limit`);
+        }
     }
     
     function createHistoryRow(execution) {

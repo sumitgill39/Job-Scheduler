@@ -1691,6 +1691,47 @@ def create_routes(app):
                 'success': False,
                 'error': str(e)
             }), 500
+
+    @app.route('/api/jobs/<job_id>/history/incremental')
+    def api_job_history_incremental(job_id):
+        """API endpoint for incremental job execution history"""
+        try:
+            try:
+                from core.job_executor import JobExecutor
+                job_executor = JobExecutor()
+            except ImportError as e:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job execution history not available: Missing database dependencies.'
+                }), 500
+            
+            limit = request.args.get('limit', 20, type=int)
+            since_timestamp = request.args.get('since')
+            
+            history = job_executor.get_execution_history_incremental(job_id, since_timestamp, limit)
+            
+            logger.info(f"[API_JOB_HISTORY_INCREMENTAL] Retrieved {len(history)} new execution records for job {job_id} since {since_timestamp}")
+            
+            # Return latest timestamp for client to use in next request
+            latest_timestamp = None
+            if history and len(history) > 0:
+                latest_timestamp = history[0]['start_time']  # Records are ordered DESC by start_time
+            
+            return jsonify({
+                'success': True,
+                'job_id': job_id,
+                'execution_history': history,
+                'total_count': len(history),
+                'latest_timestamp': latest_timestamp,
+                'since_timestamp': since_timestamp
+            })
+        
+        except Exception as e:
+            logger.error(f"[API_JOB_HISTORY_INCREMENTAL] API incremental job history error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
     
     @app.route('/api/jobs/<job_id>/status')
     def api_job_status(job_id):
