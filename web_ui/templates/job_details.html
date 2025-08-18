@@ -316,36 +316,45 @@
                 </button>
             </div>
             <div class="card-body">
-                {% if history %}
-                    <div class="timeline">
-                        {% for execution in history[:10] %}
-                        <div class="timeline-item">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <span class="status-badge status-{{ execution.status.lower() }}">
-                                    {{ execution.status.upper() }}
-                                </span>
-                                <small class="text-muted">{{ (execution.start_time[:16] if execution.start_time|length >= 16 else execution.start_time) if execution.start_time else 'N/A' }}</small>
-                            </div>
-                            {% if execution.duration_seconds %}
-                            <small class="text-muted">
-                                Duration: {{ "%.2f"|format(execution.duration_seconds) }}s
-                            </small>
-                            {% endif %}
-                            {% if execution.error_message %}
-                            <div class="small text-danger mt-1">
-                                {{ execution.error_message[:100] }}{% if execution.error_message|length > 100 %}...{% endif %}
-                            </div>
-                            {% endif %}
-                            {% if not loop.last %}<hr class="my-2">{% endif %}
+                <div id="executionHistoryContainer">
+                    {% if history %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped" id="executionHistoryTable">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Start Time</th>
+                                        <th>Duration</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for execution in history[:5] %}
+                                    <tr data-execution-id="{{ execution.execution_id }}">
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if execution.status == 'success' else 'danger' if execution.status == 'failed' else 'primary' if execution.status == 'running' else 'secondary' }}">
+                                                {{ execution.status.upper() }}
+                                            </span>
+                                        </td>
+                                        <td>{{ (execution.start_time[:16] if execution.start_time|length >= 16 else execution.start_time) if execution.start_time else 'N/A' }}</td>
+                                        <td>{{ "%.2f"|format(execution.duration_seconds) if execution.duration_seconds else 'N/A' }}{% if execution.duration_seconds %}s{% endif %}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info" onclick="viewExecutionDetails('{{ execution.execution_id }}')" title="View Details">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="text-center text-muted py-3">
-                        <i class="fas fa-clock fa-2x mb-2"></i>
-                        <p>No execution history</p>
-                    </div>
-                {% endif %}
+                    {% else %}
+                        <div class="text-center text-muted py-3" id="noHistoryMessage">
+                            <i class="fas fa-clock fa-2x mb-2"></i>
+                            <p>No execution history</p>
+                        </div>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
@@ -360,10 +369,16 @@
         refreshJobData();
     }
     
-    // Auto-refresh for running jobs
+    // Auto-refresh for running jobs with double-buffer system
     let autoRefreshInterval = null;
     let isRefreshing = false;
     let lastHistoryHash = null; // Track history changes
+    
+    // Double-buffer system variables
+    let dataBuffer = null; // Fresh data from database
+    let dataFetchInterval = null; // Fetch data every 5s
+    let uiUpdateInterval = null; // Update UI every 10s
+    let isDataFetching = false;
     
     function refreshJobData() {
         if (isRefreshing) return; // Prevent multiple simultaneous refreshes
@@ -374,12 +389,16 @@
             refreshButton.classList.add('fa-spin');
         }
         
+        // Fetch job status and immediately apply to UI (status is lightweight)
         fetch(`/api/jobs/{{ job.job_id }}/status`)
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     updateJobStatus(data);
-                    updateExecutionHistory();
+                    // For history, just trigger an immediate buffer update and UI sync
+                    fetchDataToBuffer().then(() => {
+                        applyBufferToUI();
+                    });
                 } else {
                     console.error('Failed to refresh job data:', data.error);
                 }
@@ -393,6 +412,63 @@
                     refreshButton.classList.remove('fa-spin');
                 }
             });
+    }
+    
+    // Background data fetching (every 5 seconds)
+    function fetchDataToBuffer() {
+        if (isDataFetching) return Promise.resolve(); // Prevent concurrent fetches
+        
+        isDataFetching = true;
+        console.log('🔄 Fetching fresh data to buffer...');
+        
+        return fetch(`/api/jobs/{{ job.job_id }}/history?limit=5`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.history) {
+                    // Store fresh data in buffer
+                    dataBuffer = {
+                        history: data.history,
+                        timestamp: Date.now(),
+                        hash: JSON.stringify(data.history.map(h => ({
+                            id: h.execution_id,
+                            status: h.status,
+                            start_time: h.start_time
+                        })))
+                    };
+                    console.log(`📊 Buffer updated with ${data.history.length} records`);
+                } else {
+                    console.warn('Failed to fetch history data:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching data to buffer:', error);
+            })
+            .finally(() => {
+                isDataFetching = false;
+            });
+    }
+    
+    // Apply buffered data to UI (every 10 seconds)
+    function applyBufferToUI() {
+        if (!dataBuffer) {
+            console.log('📭 No buffer data to apply');
+            return;
+        }
+        
+        // Check if data has actually changed before updating UI
+        if (dataBuffer.hash !== lastHistoryHash) {
+            console.log('🎨 Applying buffer data to UI...');
+            updateHistoryTable(dataBuffer.history);
+            lastHistoryHash = dataBuffer.hash;
+            
+            // Clear the buffer after applying to UI
+            dataBuffer = null;
+            console.log('🧹 Buffer cleared after UI update');
+        } else {
+            console.log('📋 Buffer data unchanged, skipping UI update');
+            // Still clear the buffer to get fresh data next time
+            dataBuffer = null;
+        }
     }
     
     function updateJobStatus(statusData) {
@@ -430,52 +506,55 @@
         }
         
         // Start/stop auto-refresh based on running status
-        if (statusData.is_running && !autoRefreshInterval) {
-            startAutoRefresh();
-        } else if (!statusData.is_running && autoRefreshInterval) {
-            stopAutoRefresh();
+        if (statusData.is_running && !dataFetchInterval) {
+            startDoubleBufferSystem();
+        } else if (!statusData.is_running && dataFetchInterval) {
+            stopDoubleBufferSystem();
         }
     }
     
-    function updateExecutionHistory() {
-        fetch(`/api/jobs/{{ job.job_id }}/history?limit=5`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.history) {
-                    // Create a hash of the history to detect changes
-                    const historyHash = JSON.stringify(data.history.map(h => ({
-                        id: h.execution_id,
-                        status: h.status,
-                        start_time: h.start_time
-                    })));
-                    
-                    // Only update if history has actually changed
-                    if (historyHash !== lastHistoryHash) {
-                        console.log('History changed, updating table');
-                        updateHistoryTable(data.history);
-                        lastHistoryHash = historyHash;
-                    } else {
-                        console.log('History unchanged, skipping update');
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error updating execution history:', error);
-            });
-    }
-    
     function updateHistoryTable(history) {
-        const tbody = document.querySelector('#executionHistoryTable tbody');
+        const container = document.getElementById('executionHistoryContainer');
+        if (!container) return;
+        
+        if (!history || !history.length) {
+            // Show no history message
+            container.innerHTML = `
+                <div class="text-center text-muted py-3" id="noHistoryMessage">
+                    <i class="fas fa-clock fa-2x mb-2"></i>
+                    <p>No execution history</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Check if table exists, create if not
+        let table = document.getElementById('executionHistoryTable');
+        if (!table) {
+            container.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped" id="executionHistoryTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Status</th>
+                                <th>Start Time</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            `;
+            table = document.getElementById('executionHistoryTable');
+        }
+        
+        const tbody = table.querySelector('tbody');
         if (!tbody) return;
         
         // Show loading indicator
         const loadingRow = tbody.querySelector('.loading-row');
         if (loadingRow) loadingRow.remove();
-        
-        if (!history.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No execution history</td></tr>';
-            return;
-        }
         
         // Smoothly update rows to avoid flickering
         const existingRows = Array.from(tbody.querySelectorAll('tr[data-execution-id]'));
@@ -516,11 +595,11 @@
         row.setAttribute('data-execution-id', execution.execution_id);
         
         const statusClass = getStatusClass(execution.status);
-        const startTime = execution.start_time ? new Date(execution.start_time).toLocaleString() : 'N/A';
-        const duration = execution.duration_seconds ? `${execution.duration_seconds}s` : 'N/A';
+        const startTime = execution.start_time ? (execution.start_time.length >= 16 ? execution.start_time.substring(0, 16) : execution.start_time) : 'N/A';
+        const duration = execution.duration_seconds ? `${parseFloat(execution.duration_seconds).toFixed(2)}s` : 'N/A';
         
         row.innerHTML = `
-            <td><span class="badge ${statusClass}">${execution.status}</span></td>
+            <td><span class="badge ${statusClass}">${execution.status.toUpperCase()}</span></td>
             <td>${startTime}</td>
             <td>${duration}</td>
             <td>
@@ -557,28 +636,65 @@
         return classMap[status.toLowerCase()] || 'bg-secondary';
     }
     
-    function startAutoRefresh() {
-        if (autoRefreshInterval) return;
+    function startDoubleBufferSystem() {
+        if (dataFetchInterval || uiUpdateInterval) return;
         
-        console.log('Starting auto-refresh for running job');
+        console.log('🚀 Starting double-buffer system for running job');
+        
+        // Start data fetching every 5 seconds
+        dataFetchInterval = setInterval(() => {
+            fetchDataToBuffer();
+        }, 5000);
+        
+        // Start UI updates every 10 seconds  
+        uiUpdateInterval = setInterval(() => {
+            applyBufferToUI();
+        }, 10000);
+        
+        // Also start job status refresh (lightweight)
         autoRefreshInterval = setInterval(() => {
-            refreshJobData();
-        }, 10000); // Refresh every 10 seconds for running jobs (reduced frequency)
+            fetch(`/api/jobs/{{ job.job_id }}/status`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateJobStatus(data);
+                    }
+                })
+                .catch(error => console.error('Status update error:', error));
+        }, 10000);
+        
+        // Initial fetch to buffer
+        fetchDataToBuffer();
         
         // Add visual indicator
         const refreshButton = document.querySelector('button[onclick="refreshPage()"]');
         if (refreshButton) {
-            refreshButton.innerHTML = '<i class="fas fa-sync-alt me-1 fa-spin"></i>Auto-Refresh';
-            refreshButton.title = 'Auto-refreshing every 10 seconds';
+            refreshButton.innerHTML = '<i class="fas fa-sync-alt me-1 fa-spin"></i>Auto-Sync';
+            refreshButton.title = 'Fetching data every 5s, updating UI every 10s';
         }
     }
     
-    function stopAutoRefresh() {
-        if (!autoRefreshInterval) return;
+    function stopDoubleBufferSystem() {
+        console.log('🛑 Stopping double-buffer system');
         
-        console.log('Stopping auto-refresh');
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
+        // Stop all intervals
+        if (dataFetchInterval) {
+            clearInterval(dataFetchInterval);
+            dataFetchInterval = null;
+        }
+        
+        if (uiUpdateInterval) {
+            clearInterval(uiUpdateInterval);
+            uiUpdateInterval = null;
+        }
+        
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+        
+        // Clear any pending buffer data
+        dataBuffer = null;
         
         // Remove visual indicator
         const refreshButton = document.querySelector('button[onclick="refreshPage()"]');
@@ -586,6 +702,15 @@
             refreshButton.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Refresh';
             refreshButton.title = 'Refresh job data';
         }
+    }
+    
+    // Legacy functions for compatibility
+    function startAutoRefresh() {
+        startDoubleBufferSystem();
+    }
+    
+    function stopAutoRefresh() {
+        stopDoubleBufferSystem();
     }
     
     // Initialize auto-refresh if job is running
@@ -695,6 +820,12 @@
     function viewHistory() {
         // This could open a modal or navigate to a dedicated history page
         showError('Full history view not yet implemented');
+    }
+    
+    // View execution details
+    function viewExecutionDetails(executionId) {
+        // This would show detailed execution information
+        showError('Execution details view not yet implemented');
     }
     
     // Export job configuration
