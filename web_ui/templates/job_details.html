@@ -355,9 +355,200 @@
 {% block scripts %}
 <script>
     // Refresh page
+    // Smart refresh without full page reload
     function refreshPage() {
-        window.location.reload();
+        refreshJobData();
     }
+    
+    // Auto-refresh for running jobs
+    let autoRefreshInterval = null;
+    let isRefreshing = false;
+    
+    function refreshJobData() {
+        if (isRefreshing) return; // Prevent multiple simultaneous refreshes
+        
+        isRefreshing = true;
+        const refreshButton = document.querySelector('button[onclick="refreshPage()"] i');
+        if (refreshButton) {
+            refreshButton.classList.add('fa-spin');
+        }
+        
+        fetch(`/api/jobs/{{ job.job_id }}/status`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateJobStatus(data);
+                    updateExecutionHistory();
+                } else {
+                    console.error('Failed to refresh job data:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error refreshing job data:', error);
+            })
+            .finally(() => {
+                isRefreshing = false;
+                if (refreshButton) {
+                    refreshButton.classList.remove('fa-spin');
+                }
+            });
+    }
+    
+    function updateJobStatus(statusData) {
+        // Update status indicators
+        const statusBadge = document.querySelector('.status-badge');
+        if (statusBadge && statusData.current_status) {
+            statusBadge.textContent = statusData.current_status.toUpperCase();
+            statusBadge.className = `badge bg-${getStatusColor(statusData.current_status)}`;
+        }
+        
+        // Update last run time
+        const lastRunElement = document.querySelector('.last-run-time');
+        if (lastRunElement && statusData.last_run_time) {
+            lastRunElement.textContent = new Date(statusData.last_run_time).toLocaleString();
+        }
+        
+        // Update running status and button states
+        const runButton = document.querySelector('button[onclick*="runJob"]');
+        if (runButton) {
+            if (statusData.is_running) {
+                runButton.disabled = true;
+                runButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Running...';
+            } else {
+                runButton.disabled = false;
+                runButton.innerHTML = '<i class="fas fa-play me-1"></i>Run Now';
+            }
+        }
+        
+        // Update toggle button
+        const toggleButton = document.querySelector('button[onclick*="toggleJob"]');
+        if (toggleButton && statusData.enabled !== undefined) {
+            const isEnabled = statusData.enabled;
+            toggleButton.className = `btn btn-outline-${isEnabled ? 'warning' : 'success'}`;
+            toggleButton.innerHTML = `<i class="fas fa-${isEnabled ? 'pause' : 'play'} me-1"></i>${isEnabled ? 'Disable' : 'Enable'}`;
+        }
+        
+        // Start/stop auto-refresh based on running status
+        if (statusData.is_running && !autoRefreshInterval) {
+            startAutoRefresh();
+        } else if (!statusData.is_running && autoRefreshInterval) {
+            stopAutoRefresh();
+        }
+    }
+    
+    function updateExecutionHistory() {
+        fetch(`/api/jobs/{{ job.job_id }}/history?limit=5`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.history) {
+                    updateHistoryTable(data.history);
+                }
+            })
+            .catch(error => {
+                console.error('Error updating execution history:', error);
+            });
+    }
+    
+    function updateHistoryTable(history) {
+        const tbody = document.querySelector('#executionHistoryTable tbody');
+        if (!tbody || !history.length) return;
+        
+        // Clear existing rows
+        tbody.innerHTML = '';
+        
+        // Add new rows
+        history.forEach(execution => {
+            const row = createHistoryRow(execution);
+            tbody.appendChild(row);
+        });
+    }
+    
+    function createHistoryRow(execution) {
+        const row = document.createElement('tr');
+        const statusClass = getStatusClass(execution.status);
+        const startTime = execution.start_time ? new Date(execution.start_time).toLocaleString() : 'N/A';
+        const duration = execution.duration_seconds ? `${execution.duration_seconds}s` : 'N/A';
+        
+        row.innerHTML = `
+            <td><span class="badge ${statusClass}">${execution.status}</span></td>
+            <td>${startTime}</td>
+            <td>${duration}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-info" onclick="viewExecutionDetails('${execution.execution_id}')" title="View Details">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </td>
+        `;
+        
+        return row;
+    }
+    
+    function getStatusColor(status) {
+        const colorMap = {
+            'running': 'primary',
+            'success': 'success', 
+            'failed': 'danger',
+            'timeout': 'warning',
+            'cancelled': 'secondary',
+            'enabled': 'success',
+            'disabled': 'secondary'
+        };
+        return colorMap[status.toLowerCase()] || 'secondary';
+    }
+    
+    function getStatusClass(status) {
+        const classMap = {
+            'running': 'bg-primary',
+            'success': 'bg-success',
+            'failed': 'bg-danger', 
+            'timeout': 'bg-warning',
+            'cancelled': 'bg-secondary'
+        };
+        return classMap[status.toLowerCase()] || 'bg-secondary';
+    }
+    
+    function startAutoRefresh() {
+        if (autoRefreshInterval) return;
+        
+        console.log('Starting auto-refresh for running job');
+        autoRefreshInterval = setInterval(() => {
+            refreshJobData();
+        }, 5000); // Refresh every 5 seconds for running jobs
+        
+        // Add visual indicator
+        const refreshButton = document.querySelector('button[onclick="refreshPage()"]');
+        if (refreshButton) {
+            refreshButton.innerHTML = '<i class="fas fa-sync-alt me-1 fa-spin"></i>Auto-Refresh';
+            refreshButton.title = 'Auto-refreshing every 5 seconds';
+        }
+    }
+    
+    function stopAutoRefresh() {
+        if (!autoRefreshInterval) return;
+        
+        console.log('Stopping auto-refresh');
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        
+        // Remove visual indicator
+        const refreshButton = document.querySelector('button[onclick="refreshPage()"]');
+        if (refreshButton) {
+            refreshButton.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Refresh';
+            refreshButton.title = 'Refresh job data';
+        }
+    }
+    
+    // Initialize auto-refresh if job is running
+    document.addEventListener('DOMContentLoaded', function() {
+        {% if status.is_running %}
+            startAutoRefresh();
+        {% endif %}
+    });
+    
+    // Cleanup when page unloads
+    window.addEventListener('beforeunload', function() {
+        stopAutoRefresh();
+    });
     
     // Run job
     function runJob(jobId) {
@@ -375,7 +566,13 @@
                 hideLoading();
                 if (data.message) {
                     showSuccess(`Job executed: ${data.status}`);
-                    setTimeout(() => refreshPage(), 2000);
+                    // Start monitoring the job execution
+                    setTimeout(() => {
+                        refreshJobData();
+                        if (data.status === 'running') {
+                            startAutoRefresh();
+                        }
+                    }, 1000);
                 } else {
                     showError(data.error || 'Failed to run job');
                 }
@@ -402,7 +599,8 @@
             hideLoading();
             if (data.message) {
                 showSuccess(data.message);
-                setTimeout(() => refreshPage(), 1000);
+                // Refresh job status to reflect the toggle change
+                setTimeout(() => refreshJobData(), 1000);
             } else {
                 showError(data.error || 'Failed to toggle job');
             }
@@ -480,13 +678,5 @@
         }
     }
     
-    // Auto-refresh every 30 seconds if job is running
-    {% if status.is_running %}
-    setInterval(() => {
-        if (!document.hidden) {
-            refreshPage();
-        }
-    }, 30000);
-    {% endif %}
 </script>
 {% endblock %}
