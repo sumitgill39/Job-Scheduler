@@ -363,6 +363,7 @@
     // Auto-refresh for running jobs
     let autoRefreshInterval = null;
     let isRefreshing = false;
+    let lastHistoryHash = null; // Track history changes
     
     function refreshJobData() {
         if (isRefreshing) return; // Prevent multiple simultaneous refreshes
@@ -441,7 +442,21 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success && data.history) {
-                    updateHistoryTable(data.history);
+                    // Create a hash of the history to detect changes
+                    const historyHash = JSON.stringify(data.history.map(h => ({
+                        id: h.execution_id,
+                        status: h.status,
+                        start_time: h.start_time
+                    })));
+                    
+                    // Only update if history has actually changed
+                    if (historyHash !== lastHistoryHash) {
+                        console.log('History changed, updating table');
+                        updateHistoryTable(data.history);
+                        lastHistoryHash = historyHash;
+                    } else {
+                        console.log('History unchanged, skipping update');
+                    }
                 }
             })
             .catch(error => {
@@ -451,20 +466,55 @@
     
     function updateHistoryTable(history) {
         const tbody = document.querySelector('#executionHistoryTable tbody');
-        if (!tbody || !history.length) return;
+        if (!tbody) return;
         
-        // Clear existing rows
-        tbody.innerHTML = '';
+        // Show loading indicator
+        const loadingRow = tbody.querySelector('.loading-row');
+        if (loadingRow) loadingRow.remove();
         
-        // Add new rows
-        history.forEach(execution => {
-            const row = createHistoryRow(execution);
-            tbody.appendChild(row);
+        if (!history.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No execution history</td></tr>';
+            return;
+        }
+        
+        // Smoothly update rows to avoid flickering
+        const existingRows = Array.from(tbody.querySelectorAll('tr[data-execution-id]'));
+        const newExecutionIds = new Set(history.map(h => h.execution_id));
+        
+        // Remove rows that no longer exist
+        existingRows.forEach(row => {
+            const executionId = row.getAttribute('data-execution-id');
+            if (!newExecutionIds.has(executionId)) {
+                row.remove();
+            }
+        });
+        
+        // Add or update rows
+        history.forEach((execution, index) => {
+            let existingRow = tbody.querySelector(`tr[data-execution-id="${execution.execution_id}"]`);
+            const newRow = createHistoryRow(execution);
+            
+            if (existingRow) {
+                // Update existing row if content changed
+                if (existingRow.outerHTML !== newRow.outerHTML) {
+                    existingRow.replaceWith(newRow);
+                }
+            } else {
+                // Insert new row at correct position
+                const nextRow = tbody.children[index];
+                if (nextRow) {
+                    tbody.insertBefore(newRow, nextRow);
+                } else {
+                    tbody.appendChild(newRow);
+                }
+            }
         });
     }
     
     function createHistoryRow(execution) {
         const row = document.createElement('tr');
+        row.setAttribute('data-execution-id', execution.execution_id);
+        
         const statusClass = getStatusClass(execution.status);
         const startTime = execution.start_time ? new Date(execution.start_time).toLocaleString() : 'N/A';
         const duration = execution.duration_seconds ? `${execution.duration_seconds}s` : 'N/A';
@@ -513,13 +563,13 @@
         console.log('Starting auto-refresh for running job');
         autoRefreshInterval = setInterval(() => {
             refreshJobData();
-        }, 5000); // Refresh every 5 seconds for running jobs
+        }, 10000); // Refresh every 10 seconds for running jobs (reduced frequency)
         
         // Add visual indicator
         const refreshButton = document.querySelector('button[onclick="refreshPage()"]');
         if (refreshButton) {
             refreshButton.innerHTML = '<i class="fas fa-sync-alt me-1 fa-spin"></i>Auto-Refresh';
-            refreshButton.title = 'Auto-refreshing every 5 seconds';
+            refreshButton.title = 'Auto-refreshing every 10 seconds';
         }
     }
     

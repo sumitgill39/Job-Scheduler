@@ -405,12 +405,50 @@
             refreshStatus();
             
             // Database status is now handled by ConnectionMonitor
-            // Set initial "checking" state and let the monitor handle updates
+            // Initialize and start the connection monitor
             const statusElement = document.getElementById('database-status');
             if (statusElement) {
                 statusElement.className = 'badge bg-secondary';
                 statusElement.textContent = 'Checking...';
                 statusElement.title = 'Database connectivity - handled by background monitor';
+                
+                // Start the connection monitor
+                if (typeof ConnectionMonitor !== 'undefined') {
+                    window.connectionMonitor = new ConnectionMonitor();
+                    window.connectionMonitor.start();
+                } else {
+                    // Fallback to simple status check if ConnectionMonitor not available
+                    checkDatabaseStatus();
+                }
+            }
+            
+            // Fallback database status check
+            function checkDatabaseStatus() {
+                fetch('/api/system/database-status')
+                    .then(response => response.json())
+                    .then(data => {
+                        const statusElement = document.getElementById('database-status');
+                        if (statusElement && data) {
+                            if (data.success && data.connected) {
+                                statusElement.className = 'badge bg-success';
+                                statusElement.textContent = 'Connected';
+                                statusElement.title = `Connected (${data.response_time ? data.response_time.toFixed(2) + 'ms' : 'OK'})`;
+                            } else {
+                                statusElement.className = 'badge bg-danger';
+                                statusElement.textContent = 'Disconnected';
+                                statusElement.title = data.error || 'Database connection failed';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Database status check failed:', error);
+                        const statusElement = document.getElementById('database-status');
+                        if (statusElement) {
+                            statusElement.className = 'badge bg-warning';
+                            statusElement.textContent = 'Error';
+                            statusElement.title = 'Status check failed: ' + error.message;
+                        }
+                    });
             }
         });
         
