@@ -181,7 +181,18 @@ def create_routes(app):
             
             # Get job execution history
             try:
-                history = job_manager.get_job_execution_history(job_id, limit=20)
+                # Try to use JobExecutor first
+                try:
+                    from core.job_executor import JobExecutor
+                    job_executor = JobExecutor()
+                    history = job_executor.get_execution_history(job_id, limit=20)
+                    logger.debug(f"[JOB_DETAILS] Loaded {len(history)} execution records from JobExecutor")
+                except ImportError as ie:
+                    logger.warning(f"[JOB_DETAILS] JobExecutor not available: {ie}")
+                    # Fallback to job manager for all execution history, then filter
+                    all_history = job_manager.get_all_execution_history(limit=100)
+                    history = [h for h in all_history if h.get('job_id') == job_id][:20]
+                    logger.debug(f"[JOB_DETAILS] Filtered {len(history)} execution records for job {job_id}")
             except Exception as e:
                 logger.warning(f"[JOB_DETAILS] Could not load execution history: {e}")
                 history = []
@@ -265,7 +276,9 @@ def create_routes(app):
                 status['last_run_time'] = history[0].get('start_time')
                 status['last_result'] = history[0]  # Update with formatted data
             
-            logger.info(f"[JOB_DETAILS] Displaying details for job: {job['name']}")
+            logger.info(f"[JOB_DETAILS] Successfully loaded job details: {job['name']} (ID: {job_id})")
+            logger.debug(f"[JOB_DETAILS] Job type: {job.get('job_type')}, Enabled: {job.get('enabled')}")
+            logger.debug(f"[JOB_DETAILS] History count: {len(history)}")
             
             return render_template('job_details.html', job=job, status=status, history=history)
         

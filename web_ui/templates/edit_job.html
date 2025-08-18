@@ -245,7 +245,7 @@
                                     </div>
                                     <div class="col-md-3">
                                         <label for="intervalHours" class="form-label">Hours</label>
-                                        <input type="number" class="form-control" id="intervalHours" name="interval_hours" value="1" min="0" max="23">
+                                        <input type="number" class="form-control" id="intervalHours" name="interval_hours" value="0" min="0" max="23">
                                     </div>
                                     <div class="col-md-3">
                                         <label for="intervalMinutes" class="form-label">Minutes</label>
@@ -443,10 +443,20 @@
                 console.log('Setting up interval schedule:', schedule.interval); // Debug log
                 document.getElementById('scheduleTypeInterval').checked = true;
                 const interval = schedule.interval || {};
-                document.getElementById('intervalDays').value = interval.days || 0;
-                document.getElementById('intervalHours').value = interval.hours || 1;
-                document.getElementById('intervalMinutes').value = interval.minutes || 0;
-                document.getElementById('intervalSeconds').value = interval.seconds || 0;
+                
+                // Use proper default handling for interval values (0 is a valid value)
+                document.getElementById('intervalDays').value = interval.days !== undefined ? interval.days : 0;
+                document.getElementById('intervalHours').value = interval.hours !== undefined ? interval.hours : 0;
+                document.getElementById('intervalMinutes').value = interval.minutes !== undefined ? interval.minutes : 0;
+                document.getElementById('intervalSeconds').value = interval.seconds !== undefined ? interval.seconds : 0;
+                
+                console.log('Populated interval values:', {
+                    days: interval.days,
+                    hours: interval.hours, 
+                    minutes: interval.minutes,
+                    seconds: interval.seconds
+                });
+                
                 showIntervalSection();
             } else if (schedule.type === 'date') {
                 console.log('Setting up date schedule:', schedule.run_date); // Debug log
