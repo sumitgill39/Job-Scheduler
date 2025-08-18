@@ -424,20 +424,39 @@
         return fetch(`/api/jobs/{{ job.job_id }}/history?limit=5`)
             .then(response => response.json())
             .then(data => {
-                if (data.success && data.history) {
+                console.log('🔍 History API Response:', data); // Always log the response
+                
+                if (data.success && data.execution_history) {
                     // Store fresh data in buffer
                     dataBuffer = {
-                        history: data.history,
+                        history: data.execution_history,
                         timestamp: Date.now(),
-                        hash: JSON.stringify(data.history.map(h => ({
+                        hash: JSON.stringify(data.execution_history.map(h => ({
                             id: h.execution_id,
                             status: h.status,
                             start_time: h.start_time
                         })))
                     };
-                    console.log(`📊 Buffer updated with ${data.history.length} records`);
+                    console.log(`📊 Buffer updated with ${data.execution_history.length} records`);
                 } else {
-                    console.warn('Failed to fetch history data:', data.error);
+                    console.warn('❌ Failed to fetch history data:', data.error || 'No execution_history in response');
+                    
+                    // Check if it's a database connectivity issue
+                    if (data.error && data.error.includes('database')) {
+                        console.error('🔴 Database connectivity issue detected. Check database status in top-right corner.');
+                        // Update the history container with a helpful message
+                        const container = document.getElementById('executionHistoryContainer');
+                        if (container) {
+                            container.innerHTML = `
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-database me-2"></i>
+                                    <strong>Database Connection Issue</strong><br>
+                                    Unable to retrieve execution history. Please check the database status in the top-right corner.
+                                    <br><small>${data.error}</small>
+                                </div>
+                            `;
+                        }
+                    }
                 }
             })
             .catch(error => {
@@ -858,6 +877,47 @@
             showError('Job duplication not yet implemented');
         }
     }
+    
+    // Debug function to test database connectivity and execution history API
+    window.debugDatabaseConnection = function() {
+        console.log('🔍 Running database connectivity diagnostics...');
+        
+        // Test database status first
+        fetch('/api/system/database-status')
+            .then(response => response.json())
+            .then(data => {
+                console.log('📊 Database Status API Response:', data);
+                
+                if (data.success && data.connected) {
+                    console.log('✅ Database is connected successfully');
+                    console.log(`   Database: ${data.database}`);
+                    console.log(`   Server: ${data.server}`);
+                    console.log(`   Response Time: ${data.response_time}s`);
+                    
+                    // Now test execution history API
+                    return fetch('/api/jobs/{{ job.job_id }}/history?limit=5');
+                } else {
+                    console.error('❌ Database connection failed:', data.error);
+                    throw new Error('Database not connected: ' + data.error);
+                }
+            })
+            .then(response => response.json())
+            .then(historyData => {
+                console.log('📋 Execution History API Response:', historyData);
+                
+                if (historyData.success) {
+                    console.log(`✅ Execution history API working: ${historyData.execution_history?.length || 0} records`);
+                } else {
+                    console.error('❌ Execution history API failed:', historyData.error);
+                }
+            })
+            .catch(error => {
+                console.error('🔴 Diagnostic failed:', error);
+            });
+    };
+    
+    // Add debug info to console on page load
+    console.log('🔧 Debug helper available: Run debugDatabaseConnection() in console to test connectivity');
     
 </script>
 {% endblock %}
