@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Windows Job Scheduler - Complete Architecture Guide</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .section {
+            background: white;
+            margin: 2rem 0;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        h2 {
+            color: #667eea;
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+        
+        h3 {
+            color: #5a67d8;
+            font-size: 1.4rem;
+            margin: 1.5rem 0 1rem 0;
+        }
+        
+        .workflow-diagram {
+            background: #f8f9ff;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            overflow-x: auto;
+        }
+        
+        .flow-step {
+            display: inline-block;
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+            color: white;
+            padding: 0.8rem 1.2rem;
+            margin: 0.5rem;
+            border-radius: 6px;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .arrow {
+            display: inline-block;
+            margin: 0 0.5rem;
+            font-size: 1.5rem;
+            color: #667eea;
+        }
+        
+        .database-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .database-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: bold;
+        }
+        
+        .database-table td {
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .database-table tr:hover {
+            background: #f8f9ff;
+        }
+        
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin: 1rem 0;
+            border-left: 4px solid #667eea;
+        }
+        
+        .highlight {
+            background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: bold;
+        }
+        
+        .info-box {
+            background: linear-gradient(135deg, #e6fffa 0%, #b2f5ea 100%);
+            border-left: 4px solid #38b2ac;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .warning-box {
+            background: linear-gradient(135deg, #fffaf0 0%, #fed7aa 100%);
+            border-left: 4px solid #ed8936;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .success-box {
+            background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%);
+            border-left: 4px solid #48bb78;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .architecture-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+        
+        .component-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        
+        .component-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .component-title {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+        
+        .tech-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+        
+        ul, ol {
+            margin: 1rem 0;
+            padding-left: 2rem;
+        }
+        
+        li {
+            margin: 0.5rem 0;
+        }
+        
+        .toc {
+            background: #f8f9ff;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .toc h3 {
+            color: #667eea;
+            margin-bottom: 1rem;
+        }
+        
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        
+        .toc li {
+            margin: 0.5rem 0;
+        }
+        
+        .toc a {
+            color: #5a67d8;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .toc a:hover {
+            color: #667eea;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Windows Job Scheduler</h1>
+            <p class="subtitle">Complete End-to-End Architecture & Workflow Guide</p>
+        </header>
+
+        <div class="toc">
+            <h3>📋 Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">1. System Overview</a></li>
+                <li><a href="#architecture">2. Architecture Components</a></li>
+                <li><a href="#database">3. Database Schema</a></li>
+                <li><a href="#job-lifecycle">4. Job Lifecycle</a></li>
+                <li><a href="#apscheduler">5. APScheduler Workflow</a></li>
+                <li><a href="#execution">6. Job Execution Process</a></li>
+                <li><a href="#output-capture">7. Output Capture Mechanism</a></li>
+                <li><a href="#timezone">8. Timezone Support</a></li>
+                <li><a href="#tech-stack">9. Technology Stack</a></li>
+                <li><a href="#deployment">10. Deployment Guide</a></li>
+            </ul>
+        </div>
+
+        <section id="overview" class="section">
+            <h2>🌟 System Overview</h2>
+            <p>The Windows Job Scheduler is a comprehensive enterprise-grade solution for managing and executing scheduled tasks across Windows environments. It provides a web-based interface for creating, managing, and monitoring SQL queries and PowerShell scripts with advanced scheduling capabilities.</p>
+            
+            <div class="info-box">
+                <strong>Key Features:</strong>
+                <ul>
+                    <li>Web-based job creation and management</li>
+                    <li>SQL Server and PowerShell job execution</li>
+                    <li>Advanced scheduling with timezone support</li>
+                    <li>Real-time execution monitoring</li>
+                    <li>Comprehensive logging and history tracking</li>
+                    <li>Database connection management</li>
+                    <li>Retry mechanisms and error handling</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="architecture" class="section">
+            <h2>🏗️ Architecture Components</h2>
+            
+            <div class="architecture-grid">
+                <div class="component-card">
+                    <div class="component-title">🌐 Web Frontend</div>
+                    <p>Flask-based web interface with Bootstrap UI for job management and monitoring</p>
+                </div>
+                <div class="component-card">
+                    <div class="component-title">⚙️ Scheduler Engine</div>
+                    <p>APScheduler-powered job scheduling with timezone support and retry logic</p>
+                </div>
+                <div class="component-card">
+                    <div class="component-title">💾 Database Layer</div>
+                    <p>SQL Server database for job configurations, connections, and execution history</p>
+                </div>
+                <div class="component-card">
+                    <div class="component-title">🔧 Job Executors</div>
+                    <p>Specialized executors for SQL queries and PowerShell scripts</p>
+                </div>
+            </div>
+
+            <div class="workflow-diagram">
+                <h3>🔄 System Architecture Flow</h3>
+                <div style="text-align: center;">
+                    <div class="flow-step">User Interface</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Flask Routes</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Scheduler Manager</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">APScheduler</div>
+                    <br><br>
+                    <div class="flow-step">Job Storage</div>
+                    <span class="arrow">↕</span>
+                    <div class="flow-step">SQL Server DB</div>
+                    <span class="arrow">↕</span>
+                    <div class="flow-step">Execution History</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="database" class="section">
+            <h2>🗄️ Database Schema</h2>
+            
+            <h3>📊 Core Tables</h3>
+            
+            <h4>1. job_configurations</h4>
+            <div class="code-block">
+CREATE TABLE [dbo].[job_configurations] (
+    [job_id] NVARCHAR(50) PRIMARY KEY,
+    [name] NVARCHAR(255) NOT NULL,
+    [job_type] NVARCHAR(50) NOT NULL,
+    [configuration] NTEXT NOT NULL,  -- JSON configuration
+    [enabled] BIT DEFAULT 1,
+    [created_date] DATETIME DEFAULT GETDATE(),
+    [modified_date] DATETIME DEFAULT GETDATE(),
+    [created_by] NVARCHAR(255) DEFAULT SYSTEM_USER
+)
+            </div>
+
+            <h4>2. job_execution_history</h4>
+            <div class="code-block">
+CREATE TABLE [dbo].[job_execution_history] (
+    [execution_id] BIGINT IDENTITY(1,1) PRIMARY KEY,
+    [job_id] NVARCHAR(50) NOT NULL,
+    [job_name] NVARCHAR(255) NOT NULL,
+    [status] NVARCHAR(50) NOT NULL,
+    [start_time] DATETIME NOT NULL,
+    [end_time] DATETIME NULL,
+    [duration_seconds] FLOAT NULL,
+    [output] NTEXT NULL,           -- stdout capture
+    [error_message] NTEXT NULL,    -- stderr capture
+    [return_code] INT NULL,
+    [retry_count] INT DEFAULT 0,
+    [max_retries] INT DEFAULT 0,
+    [metadata] NTEXT NULL          -- Additional execution context
+)
+            </div>
+
+            <h4>3. user_connections</h4>
+            <div class="code-block">
+CREATE TABLE [dbo].[user_connections] (
+    [connection_id] NVARCHAR(100) PRIMARY KEY,
+    [name] NVARCHAR(255) NOT NULL,
+    [server_name] NVARCHAR(255) NOT NULL,
+    [database_name] NVARCHAR(255) NOT NULL,
+    [username] NVARCHAR(255) NULL,
+    [password] NVARCHAR(500) NULL,  -- Encrypted
+    [description] NVARCHAR(1000) NULL,
+    [is_active] BIT DEFAULT 1
+)
+            </div>
+
+            <div class="warning-box">
+                <strong>⚠️ Configuration Column Format:</strong><br>
+                The <code>configuration</code> column stores job definitions as JSON with the following structure:
+            </div>
+
+            <div class="code-block">
+{
+    "job_id": "unique-job-identifier",
+    "name": "Job Display Name",
+    "job_type": "sql" | "powershell",
+    "description": "Job description",
+    "timeout": 300,
+    "retries": 3,
+    "retry_delay": 60,
+    "enabled": true,
+    
+    // SQL Job specific fields
+    "sql_query": "SELECT * FROM table",
+    "connection_name": "connection-id",
+    
+    // PowerShell Job specific fields
+    "script_content": "PowerShell script",
+    "script_path": "/path/to/script.ps1",
+    "execution_policy": "RemoteSigned",
+    "parameters": ["param1", "param2"],
+    
+    // Schedule configuration
+    "schedule": {
+        "type": "cron" | "interval" | "date",
+        "cron": "0 0 12 * * ?",
+        "timezone": "America/New_York",
+        "interval": {"hours": 1, "minutes": 30},
+        "run_date": "2024-01-15T14:30:00"
+    }
+}
+            </div>
+        </section>
+
+        <section id="job-lifecycle" class="section">
+            <h2>🔄 Job Lifecycle</h2>
+            
+            <div class="workflow-diagram">
+                <h3>📝 Job Creation Process</h3>
+                <div style="text-align: center;">
+                    <div class="flow-step">User Creates Job</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Form Validation</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">JSON Serialization</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Database Storage</div>
+                    <br><br>
+                    <div class="flow-step">Scheduler Registration</div>
+                    <span class="arrow">←</span>
+                    <div class="flow-step">APScheduler Trigger</div>
+                    <span class="arrow">←</span>
+                    <div class="flow-step">Job Instance Creation</div>
+                </div>
+            </div>
+
+            <div class="workflow-diagram">
+                <h3>⚡ Job Execution Flow</h3>
+                <div style="text-align: center;">
+                    <div class="flow-step">Trigger Fired</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Job Wrapper</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Pre-execution Setup</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Execute Job</div>
+                    <br><br>
+                    <div class="flow-step">Capture Output</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Log Results</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Handle Retries</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Update History</div>
+                </div>
+            </div>
+
+            <h3>📋 Job States</h3>
+            <table class="database-table">
+                <thead>
+                    <tr>
+                        <th>State</th>
+                        <th>Description</th>
+                        <th>Next Possible States</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>PENDING</strong></td>
+                        <td>Job is scheduled but not yet running</td>
+                        <td>RUNNING, CANCELLED</td>
+                    </tr>
+                    <tr>
+                        <td><strong>RUNNING</strong></td>
+                        <td>Job is currently executing</td>
+                        <td>SUCCESS, FAILED, TIMEOUT</td>
+                    </tr>
+                    <tr>
+                        <td><strong>SUCCESS</strong></td>
+                        <td>Job completed successfully</td>
+                        <td>PENDING (next schedule)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>FAILED</strong></td>
+                        <td>Job failed with errors</td>
+                        <td>RETRY, PENDING</td>
+                    </tr>
+                    <tr>
+                        <td><strong>TIMEOUT</strong></td>
+                        <td>Job exceeded timeout limit</td>
+                        <td>RETRY, PENDING</td>
+                    </tr>
+                    <tr>
+                        <td><strong>RETRY</strong></td>
+                        <td>Job is scheduled for retry</td>
+                        <td>RUNNING, FAILED</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="apscheduler" class="section">
+            <h2>⏰ APScheduler Workflow</h2>
+            
+            <div class="info-box">
+                <strong>APScheduler (Advanced Python Scheduler)</strong> is the core scheduling engine that manages job execution timing and triggers.
+            </div>
+
+            <h3>🔧 Scheduler Configuration</h3>
+            <div class="code-block">
+# Scheduler Manager Initialization
+jobstores = {'default': MemoryJobStore()}
+executors = {'default': ThreadPoolExecutor(max_workers=20)}
+job_defaults = {'coalesce': False, 'max_instances': 3}
+
+self.scheduler = BackgroundScheduler(
+    jobstores=jobstores,
+    executors=executors,
+    job_defaults=job_defaults,
+    timezone='UTC'  # All jobs stored in UTC
+)
+            </div>
+
+            <h3>📅 Trigger Types</h3>
+            
+            <h4>1. Cron Trigger</h4>
+            <div class="code-block">
+# Cron expression: "second minute hour day month day_of_week"
+# Example: "0 30 14 * * ?" = Daily at 2:30 PM
+CronTrigger(
+    second=0, minute=30, hour=14,
+    day='*', month='*', day_of_week='?',
+    timezone=pytz_timezone('America/New_York')
+)
+            </div>
+
+            <h4>2. Interval Trigger</h4>
+            <div class="code-block">
+# Run every X time units
+IntervalTrigger(
+    weeks=0, days=1, hours=2, minutes=30, seconds=0,
+    timezone=pytz_timezone('Europe/London')
+)
+            </div>
+
+            <h4>3. Date Trigger</h4>
+            <div class="code-block">
+# Run once at specific datetime
+DateTrigger(
+    run_date=datetime(2024, 1, 15, 14, 30, 0),
+    timezone=pytz_timezone('Asia/Tokyo')
+)
+            </div>
+
+            <div class="workflow-diagram">
+                <h3>🎯 APScheduler Job Registration Process</h3>
+                <div style="text-align: center;">
+                    <div class="flow-step">Load Job Config</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Parse Schedule</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Create Trigger</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Register with APScheduler</div>
+                    <br><br>
+                    <div class="flow-step">Timezone Conversion</div>
+                    <span class="arrow">↕</span>
+                    <div class="flow-step">UTC Storage</div>
+                    <span class="arrow">↕</span>
+                    <div class="flow-step">DST Handling</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="execution" class="section">
+            <h2>🚀 Job Execution Process</h2>
+            
+            <div class="workflow-diagram">
+                <h3>🔄 Detailed Execution Flow</h3>
+                <div style="text-align: center;">
+                    <div class="flow-step">APScheduler Trigger</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">_execute_job_wrapper()</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Retrieve Job Object</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Initialize Execution Logger</div>
+                    <br><br>
+                    <div class="flow-step">Pre-execution Validation</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Timeout Setup</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Execute Job Logic</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Capture Results</div>
+                    <br><br>
+                    <div class="flow-step">Save to Database</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Handle Retries</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Schedule Next Run</div>
+                </div>
+            </div>
+
+            <h3>🔍 Job Types Execution</h3>
+            
+            <h4>SQL Job Execution</h4>
+            <div class="code-block">
+1. Retrieve database connection configuration
+2. Establish connection using pyodbc/sqlalchemy
+3. Execute SQL query with timeout
+4. Capture query results and row count
+5. Handle connection errors and timeouts
+6. Format output for storage
+            </div>
+
+            <h4>PowerShell Job Execution</h4>
+            <div class="code-block">
+1. Detect PowerShell executable (pwsh/powershell.exe)
+2. Prepare execution environment and policy
+3. Create temporary script file (if inline content)
+4. Execute via subprocess with timeout
+5. Capture stdout, stderr, and return code
+6. Clean up temporary files
+7. Format output for storage
+            </div>
+
+            <div class="success-box">
+                <strong>✅ Execution Safety Features:</strong>
+                <ul>
+                    <li>Thread-based timeout handling (works in APScheduler background threads)</li>
+                    <li>Comprehensive error catching and logging</li>
+                    <li>Resource cleanup on success/failure</li>
+                    <li>Automatic retry scheduling for failed jobs</li>
+                    <li>Connection pooling for database efficiency</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="output-capture" class="section">
+            <h2>📊 Output Capture Mechanism</h2>
+            
+            <h3>🎯 Capture Strategy</h3>
+            
+            <div class="workflow-diagram">
+                <h3>📝 Output Collection Process</h3>
+                <div style="text-align: center;">
+                    <div class="flow-step">Job Execution</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Stream Capture</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Format & Parse</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Database Storage</div>
+                    <br><br>
+                    <div class="flow-step">stdout</div>
+                    <span class="arrow">↘</span>
+                    <div class="flow-step">output column</div>
+                    <span class="arrow">↙</span>
+                    <div class="flow-step">stderr</div>
+                    <br><br>
+                    <div class="flow-step">exception</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">error_message column</div>
+                </div>
+            </div>
+
+            <h3>📋 Output Types</h3>
+            <table class="database-table">
+                <thead>
+                    <tr>
+                        <th>Output Type</th>
+                        <th>Source</th>
+                        <th>Database Column</th>
+                        <th>Content</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Standard Output</strong></td>
+                        <td>stdout stream</td>
+                        <td>output</td>
+                        <td>Query results, script output, success messages</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Standard Error</strong></td>
+                        <td>stderr stream</td>
+                        <td>error_message</td>
+                        <td>Error messages, warnings, diagnostic info</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Exception Details</strong></td>
+                        <td>Python exceptions</td>
+                        <td>error_message</td>
+                        <td>Stack traces, connection errors, timeouts</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Return Code</strong></td>
+                        <td>Process exit code</td>
+                        <td>return_code</td>
+                        <td>0 = success, >0 = error code</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Execution Metadata</strong></td>
+                        <td>Job context</td>
+                        <td>metadata</td>
+                        <td>Execution environment, parameters, diagnostics</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>🔧 SQL Job Output Capture</h3>
+            <div class="code-block">
+# SQL Query Execution with Output Capture
+try:
+    cursor = connection.cursor()
+    cursor.execute(sql_query)
+    
+    if cursor.description:  # SELECT query
+        columns = [desc[0] for desc in cursor.description]
+        rows = cursor.fetchall()
+        
+        # Format as structured output
+        output = {
+            'columns': columns,
+            'rows': [list(row) for row in rows],
+            'row_count': len(rows)
+        }
+    else:  # INSERT/UPDATE/DELETE
+        output = {
+            'affected_rows': cursor.rowcount,
+            'message': 'Query executed successfully'
+        }
+        
+    return JobResult(
+        status=JobStatus.SUCCESS,
+        output=json.dumps(output, default=str),
+        return_code=0
+    )
+    
+except Exception as e:
+    return JobResult(
+        status=JobStatus.FAILED,
+        error_message=str(e),
+        return_code=1
+    )
+            </div>
+
+            <h3>🔧 PowerShell Job Output Capture</h3>
+            <div class="code-block">
+# PowerShell Execution with Stream Capture
+result = subprocess.run(
+    [powershell_path, "-Command", script_content],
+    capture_output=True,
+    text=True,
+    timeout=timeout,
+    encoding='utf-8',
+    errors='replace'
+)
+
+return JobResult(
+    status=JobStatus.SUCCESS if result.returncode == 0 else JobStatus.FAILED,
+    output=result.stdout,
+    error_message=result.stderr if result.stderr else None,
+    return_code=result.returncode
+)
+            </div>
+        </section>
+
+        <section id="timezone" class="section">
+            <h2>🌍 Timezone Support</h2>
+            
+            <div class="info-box">
+                <strong>Advanced Timezone Handling:</strong> The scheduler supports global timezone scheduling with automatic DST transitions using pytz library.
+            </div>
+
+            <div class="workflow-diagram">
+                <h3>🕐 Timezone Conversion Flow</h3>
+                <div style="text-align: center;">
+                    <div class="flow-step">User Input (Local TZ)</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Frontend Conversion</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">UTC Storage</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">APScheduler (UTC)</div>
+                    <br><br>
+                    <div class="flow-step">Execution (UTC)</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">Display Conversion</div>
+                    <span class="arrow">→</span>
+                    <div class="flow-step">User View (Local TZ)</div>
+                </div>
+            </div>
+
+            <h3>🗺️ Supported Timezones</h3>
+            <div class="tech-stack">
+                <span class="tech-badge">UTC</span>
+                <span class="tech-badge">America/New_York</span>
+                <span class="tech-badge">America/Chicago</span>
+                <span class="tech-badge">America/Los_Angeles</span>
+                <span class="tech-badge">Europe/London</span>
+                <span class="tech-badge">Europe/Paris</span>
+                <span class="tech-badge">Asia/Tokyo</span>
+                <span class="tech-badge">Asia/Shanghai</span>
+                <span class="tech-badge">Australia/Sydney</span>
+                <span class="tech-badge">+ 20 more...</span>
+            </div>
+
+            <h3>🔄 DST Handling</h3>
+            <div class="code-block">
+# APScheduler automatically handles DST transitions
+from pytz import timezone as pytz_timezone
+
+# Example: Schedule job for 2:30 PM Eastern Time
+trigger = CronTrigger(
+    hour=14, minute=30,
+    timezone=pytz_timezone('America/New_York')
+)
+
+# APScheduler will automatically:
+# - Run at 2:30 PM EST during winter
+# - Run at 2:30 PM EDT during summer
+# - Handle spring forward and fall back transitions
+            </div>
+        </section>
+
+        <section id="tech-stack" class="section">
+            <h2>🛠️ Technology Stack</h2>
+            
+            <h3>🎨 Frontend Technologies</h3>
+            <div class="tech-stack">
+                <span class="tech-badge">HTML5</span>
+                <span class="tech-badge">CSS3</span>
+                <span class="tech-badge">JavaScript ES6</span>
+                <span class="tech-badge">Bootstrap 5</span>
+                <span class="tech-badge">Font Awesome</span>
+                <span class="tech-badge">Jinja2 Templates</span>
+            </div>
+
+            <h3>⚙️ Backend Technologies</h3>
+            <div class="tech-stack">
+                <span class="tech-badge">Python 3.8+</span>
+                <span class="tech-badge">Flask 3.0</span>
+                <span class="tech-badge">APScheduler 3.10</span>
+                <span class="tech-badge">pytz 2024.1</span>
+                <span class="tech-badge">pyodbc</span>
+                <span class="tech-badge">SQLAlchemy</span>
+            </div>
+
+            <h3>🗄️ Database & Storage</h3>
+            <div class="tech-stack">
+                <span class="tech-badge">SQL Server</span>
+                <span class="tech-badge">YAML Files</span>
+                <span class="tech-badge">JSON Configuration</span>
+                <span class="tech-badge">Connection Pooling</span>
+            </div>
+
+            <h3>🔧 Job Execution</h3>
+            <div class="tech-stack">
+                <span class="tech-badge">PowerShell Core</span>
+                <span class="tech-badge">Windows PowerShell</span>
+                <span class="tech-badge">SQL Server T-SQL</span>
+                <span class="tech-badge">Threading</span>
+                <span class="tech-badge">Subprocess</span>
+            </div>
+
+            <h3>📊 Monitoring & Logging</h3>
+            <div class="tech-stack">
+                <span class="tech-badge">Python Logging</span>
+                <span class="tech-badge">Execution History</span>
+                <span class="tech-badge">Real-time Status</span>
+                <span class="tech-badge">Error Tracking</span>
+            </div>
+        </section>
+
+        <section id="deployment" class="section">
+            <h2>🚀 Deployment Guide</h2>
+            
+            <h3>📋 Prerequisites</h3>
+            <div class="code-block">
+# System Requirements
+- Windows Server 2016+ or Windows 10+
+- Python 3.8 or higher
+- SQL Server 2016+ (for database storage)
+- PowerShell 5.1+ or PowerShell Core 7+
+- IIS (optional, for production deployment)
+
+# Python Dependencies
+pip install -r requirements.txt
+            </div>
+
+            <h3>⚙️ Configuration Steps</h3>
+            <ol>
+                <li><strong>Database Setup:</strong> Run <code>database_setup.sql</code> on your SQL Server instance</li>
+                <li><strong>Environment Variables:</strong> Configure database connection strings</li>
+                <li><strong>Scheduler Configuration:</strong> Set timezone and worker thread limits</li>
+                <li><strong>Security Setup:</strong> Configure PowerShell execution policies</li>
+                <li><strong>Web Server:</strong> Deploy Flask application with WSGI</li>
+            </ol>
+
+            <div class="success-box">
+                <strong>🎉 Ready to Deploy!</strong><br>
+                Your Windows Job Scheduler is now ready for production use with comprehensive job management, advanced scheduling, and robust execution monitoring.
+            </div>
+        </section>
+
+        <footer style="text-align: center; margin-top: 3rem; padding: 2rem; background: #f8f9ff; border-radius: 10px;">
+            <p style="color: #667eea; font-weight: bold;">🚀 Windows Job Scheduler - Enterprise Task Automation</p>
+            <p style="color: #666;">Built with ❤️ for scalable job management and execution</p>
+        </footer>
+    </div>
+</body>
+</html>
