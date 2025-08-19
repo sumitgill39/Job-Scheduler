@@ -262,23 +262,28 @@ class JobBase(ABC):
                     max_retries=self.max_retries
                 )
         else:
-            # Unix-like systems can use signals
-            def timeout_handler(signum, frame):
-                raise TimeoutError(f"Job execution timed out after {self.timeout} seconds")
+            # Use threading-based timeout for Unix systems (safer for background threads)
+            # Signal handling doesn't work in APScheduler background threads
+            thread = threading.Thread(target=execute_job, daemon=True)
+            thread.start()
+            thread.join(timeout=self.timeout)
             
-            try:
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(self.timeout)
-                execute_job()
-                signal.alarm(0)  # Cancel the alarm
-            except TimeoutError as e:
+            if thread.is_alive():
+                # Thread is still running, job timed out
+                if execution_logger:
+                    execution_logger.error(f"Job execution timed out after {self.timeout} seconds", "TIMEOUT_HANDLER")
+                self.job_logger.error(f"Job execution timed out after {self.timeout} seconds")
+                
+                timeout_logs = execution_logger.get_formatted_logs() if execution_logger else "No detailed logs available"
+                
                 return JobResult(
                     job_id=self.job_id,
                     job_name=self.name,
                     status=JobStatus.TIMEOUT,
                     start_time=start_time,
                     end_time=datetime.now(),
-                    error_message=str(e),
+                    output=timeout_logs,
+                    error_message=f"Job execution timed out after {self.timeout} seconds",
                     retry_count=self.retry_count,
                     max_retries=self.max_retries
                 )

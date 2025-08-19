@@ -71,9 +71,13 @@ class SchedulerManager:
             if not self.scheduler.running:
                 self.scheduler.start()
                 self.logger.info("Scheduler started successfully")
+            else:
+                self.logger.warning("Scheduler is already running")
         except Exception as e:
-            self.logger.error(f"Failed to start scheduler: {e}")
-            raise
+            self.logger.exception(f"Failed to start scheduler: {e}")
+            # Don't re-raise to prevent application crash
+            return False
+        return True
     
     def stop(self, wait: bool = True):
         """Stop the scheduler"""
@@ -81,9 +85,13 @@ class SchedulerManager:
             if self.scheduler.running:
                 self.scheduler.shutdown(wait=wait)
                 self.logger.info("Scheduler stopped successfully")
+            else:
+                self.logger.warning("Scheduler is not running")
             self._shutdown_event.set()
         except Exception as e:
-            self.logger.error(f"Error stopping scheduler: {e}")
+            self.logger.exception(f"Error stopping scheduler: {e}")
+            # Set shutdown event even if stop failed
+            self._shutdown_event.set()
     
     def get_all_jobs(self) -> Dict[str, JobBase]:
         """Get all jobs"""
@@ -286,14 +294,40 @@ class SchedulerManager:
                 self.logger.error(f"Job not found during execution: {job_id}")
                 return
             
-            result = job.run()
-            self.storage.save_execution_result(result)
-            
-            if result.status == JobStatus.RETRY:
-                self._schedule_retry(job_id, job.retry_delay)
+            # Execute job with comprehensive error handling
+            try:
+                result = job.run()
+                if result:
+                    self.storage.save_execution_result(result)
+                    
+                    if result.status == JobStatus.RETRY:
+                        self._schedule_retry(job_id, job.retry_delay)
+                else:
+                    self.logger.error(f"Job {job_id} returned no result")
+                    
+            except Exception as job_error:
+                self.logger.error(f"Job execution failed for {job_id}: {job_error}")
+                # Create a failure result for storage
+                try:
+                    from .job_base import JobResult, JobStatus
+                    from datetime import datetime
+                    
+                    failure_result = JobResult(
+                        job_id=job_id,
+                        job_name=job.name if hasattr(job, 'name') else job_id,
+                        status=JobStatus.FAILED,
+                        start_time=datetime.now(),
+                        end_time=datetime.now(),
+                        error_message=f"Job execution crashed: {str(job_error)}",
+                        duration_seconds=0
+                    )
+                    self.storage.save_execution_result(failure_result)
+                except Exception as save_error:
+                    self.logger.error(f"Failed to save crash result for {job_id}: {save_error}")
             
         except Exception as e:
-            self.logger.error(f"Error in job execution wrapper for {job_id}: {e}")
+            self.logger.exception(f"Critical error in job execution wrapper for {job_id}: {e}")
+            # This should prevent the entire application from crashing
     
     def _schedule_retry(self, job_id: str, delay_seconds: int):
         """Schedule job retry"""
@@ -315,15 +349,27 @@ class SchedulerManager:
     
     def _on_job_executed(self, event):
         """Handle job execution completion"""
-        self.logger.debug(f"Job executed: {event.job_id}")
+        try:
+            self.logger.debug(f"Job executed: {event.job_id}")
+        except Exception as e:
+            self.logger.error(f"Error in job executed handler: {e}")
     
     def _on_job_error(self, event):
         """Handle job execution error"""
-        self.logger.error(f"Job error {event.job_id}: {event.exception}")
+        try:
+            self.logger.error(f"Job error {event.job_id}: {event.exception}")
+            # Log full traceback for debugging
+            if hasattr(event, 'traceback') and event.traceback:
+                self.logger.error(f"Job error traceback: {event.traceback}")
+        except Exception as e:
+            self.logger.error(f"Error in job error handler: {e}")
     
     def _on_job_missed(self, event):
         """Handle missed job execution"""
-        self.logger.warning(f"Job missed: {event.job_id}")
+        try:
+            self.logger.warning(f"Job missed: {event.job_id}")
+        except Exception as e:
+            self.logger.error(f"Error in job missed handler: {e}")
     
     def _load_jobs_from_storage(self):
         """Load jobs from storage on startup"""

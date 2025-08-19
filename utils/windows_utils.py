@@ -127,6 +127,24 @@ class WindowsUtils:
     
     def get_powershell_path(self) -> str:
         """Get PowerShell executable path"""
+        # If not on Windows, check for pwsh (cross-platform PowerShell)
+        if not self.is_windows():
+            try:
+                # Try pwsh first (PowerShell Core - cross-platform)
+                result = subprocess.run(['which', 'pwsh'], 
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    pwsh_path = result.stdout.strip()
+                    self.logger.info(f"PowerShell detected: pwsh")
+                    return pwsh_path
+            except Exception:
+                pass
+            
+            # Return None if no PowerShell found on non-Windows
+            self.logger.warning("PowerShell not found on non-Windows system")
+            return None
+        
+        # Windows-specific PowerShell detection
         # Try PowerShell 7+ first
         ps7_paths = [
             r"C:\Program Files\PowerShell\7\pwsh.exe",
@@ -135,15 +153,24 @@ class WindowsUtils:
         
         for path in ps7_paths:
             if os.path.exists(path):
+                self.logger.info(f"PowerShell detected: {path}")
                 return path
         
         # Fall back to Windows PowerShell 5.1
         ps5_path = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
         if os.path.exists(ps5_path):
+            self.logger.info(f"PowerShell detected: {ps5_path}")
             return ps5_path
         
         # Last resort - try to find in PATH
         try:
+            # Try pwsh first
+            result = subprocess.run(['where', 'pwsh'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                return result.stdout.strip().split('\n')[0]
+                
+            # Then try powershell
             result = subprocess.run(['where', 'powershell'], 
                                   capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
@@ -151,7 +178,8 @@ class WindowsUtils:
         except Exception:
             pass
         
-        # Default fallback
+        # Default fallback for Windows
+        self.logger.warning("PowerShell not found, using default path")
         return "powershell.exe"
     
     def execute_powershell_script(self, script_path: str, 
@@ -162,6 +190,9 @@ class WindowsUtils:
         """Execute PowerShell script on Windows"""
         try:
             ps_path = self.get_powershell_path()
+            if ps_path is None:
+                raise FileNotFoundError("PowerShell not found on this system")
+            
             parameters = parameters or []
             
             # Build command
@@ -223,6 +254,8 @@ class WindowsUtils:
         """Execute inline PowerShell command"""
         try:
             ps_path = self.get_powershell_path()
+            if ps_path is None:
+                raise FileNotFoundError("PowerShell not found on this system")
             
             cmd = [
                 ps_path,
