@@ -220,6 +220,7 @@ class JobBase(ABC):
         """Execute job with timeout handling"""
         import threading
         import signal
+        import sys
         
         start_time = datetime.now()
         result_container = [None]

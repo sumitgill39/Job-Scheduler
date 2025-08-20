@@ -167,6 +167,11 @@ def create_routes(app):
     def timezone_simulator():
         """Timezone simulation page"""
         return render_template('timezone_simulator.html')
+    
+    @app.route('/cloud-infrastructure')
+    def cloud_infrastructure_simulator():
+        """Cloud infrastructure scheduler page"""
+        return render_template('cloud_infrastructure_simulator.html')
 
     @app.route('/jobs/<job_id>')
     def job_details(job_id):

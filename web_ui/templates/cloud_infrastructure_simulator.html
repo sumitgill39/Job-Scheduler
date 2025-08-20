@@ -1,0 +1,886 @@
+{% extends "base.html" %}
+
+{% block title %}Cloud Infrastructure Scheduler - Timezone Simulator{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-cloud me-2"></i>Cloud Infrastructure Scheduler</h1>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/">Home</a></li>
+                        <li class="breadcrumb-item"><a href="/timezone-simulator">Timezone Simulator</a></li>
+                        <li class="breadcrumb-item active">Cloud Infrastructure</li>
+                    </ol>
+                </nav>
+            </div>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-lightbulb me-2"></i>
+                <strong>Use Case:</strong> Schedule AWS/Azure VMs to turn ON/OFF based on developer working hours across different timezones for cost optimization.
+            </div>
+        </div>
+    </div>
+
+    <!-- Cloud Infrastructure Configuration -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-server me-2"></i>Infrastructure Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Cloud Provider & Region -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Cloud Provider</label>
+                            <select class="form-select" id="cloudProvider">
+                                <option value="aws">Amazon Web Services (AWS)</option>
+                                <option value="azure">Microsoft Azure</option>
+                                <option value="gcp">Google Cloud Platform</option>
+                                <option value="multi">Multi-Cloud Setup</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Server Region/Datacenter</label>
+                            <select class="form-select" id="serverRegion">
+                                <optgroup label="AWS Regions">
+                                    <option value="us-east-1">US East (N. Virginia)</option>
+                                    <option value="us-west-2">US West (Oregon)</option>
+                                    <option value="eu-west-1">Europe (Ireland)</option>
+                                    <option value="eu-central-1">Europe (Frankfurt)</option>
+                                    <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
+                                    <option value="ap-northeast-1">Asia Pacific (Tokyo)</option>
+                                </optgroup>
+                                <optgroup label="Azure Regions">
+                                    <option value="eastus">East US</option>
+                                    <option value="westus2">West US 2</option>
+                                    <option value="uksouth">UK South</option>
+                                    <option value="westeurope">West Europe</option>
+                                    <option value="southeastasia">Southeast Asia</option>
+                                    <option value="japaneast">Japan East</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Server Details -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Server/Instance Name</label>
+                            <input type="text" class="form-control" id="serverName" placeholder="UK-DEV-SERVER-01">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Instance Type</label>
+                            <select class="form-select" id="instanceType">
+                                <option value="t3.medium">t3.medium (2 vCPU, 4GB RAM)</option>
+                                <option value="t3.large">t3.large (2 vCPU, 8GB RAM)</option>
+                                <option value="m5.large">m5.large (2 vCPU, 8GB RAM)</option>
+                                <option value="m5.xlarge">m5.xlarge (4 vCPU, 16GB RAM)</option>
+                                <option value="c5.large">c5.large (2 vCPU, 4GB RAM)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Estimated Hourly Cost</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" id="hourlyCost" value="0.0464" step="0.0001">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Team Configuration -->
+                    <div class="mb-3">
+                        <label class="form-label">Development Team Configuration</label>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Team Location</label>
+                                        <select class="form-select" id="teamTimezone">
+                                            <option value="America/New_York">🇺🇸 US Eastern (New York)</option>
+                                            <option value="America/Chicago">🇺🇸 US Central (Chicago)</option>
+                                            <option value="America/Denver">🇺🇸 US Mountain (Denver)</option>
+                                            <option value="America/Los_Angeles">🇺🇸 US Pacific (Los Angeles)</option>
+                                            <option value="Europe/London">🇬🇧 UK (London)</option>
+                                            <option value="Europe/Paris">🇫🇷 France (Paris)</option>
+                                            <option value="Europe/Berlin">🇩🇪 Germany (Berlin)</option>
+                                            <option value="Asia/Kolkata">🇮🇳 India (Mumbai/Delhi)</option>
+                                            <option value="Asia/Shanghai">🇨🇳 China (Shanghai)</option>
+                                            <option value="Asia/Tokyo">🇯🇵 Japan (Tokyo)</option>
+                                            <option value="Australia/Sydney">🇦🇺 Australia (Sydney)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Project/Target Region</label>
+                                        <select class="form-select" id="projectRegion">
+                                            <option value="Europe/London">🇬🇧 UK Project</option>
+                                            <option value="America/New_York">🇺🇸 US East Project</option>
+                                            <option value="America/Los_Angeles">🇺🇸 US West Project</option>
+                                            <option value="Europe/Paris">🇫🇷 EU West Project</option>
+                                            <option value="Asia/Tokyo">🇯🇵 APAC Project</option>
+                                            <option value="Asia/Singapore">🇸🇬 SEA Project</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Working Hours Configuration -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Work Start Time</label>
+                            <input type="time" class="form-control" id="workStartTime" value="09:00">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Work End Time</label>
+                            <input type="time" class="form-control" id="workEndTime" value="18:00">
+                        </div>
+                    </div>
+
+                    <!-- Working Days -->
+                    <div class="mb-3">
+                        <label class="form-label">Working Days</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="monday" checked>
+                                <label class="form-check-label" for="monday">Monday</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="tuesday" checked>
+                                <label class="form-check-label" for="tuesday">Tuesday</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="wednesday" checked>
+                                <label class="form-check-label" for="wednesday">Wednesday</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="thursday" checked>
+                                <label class="form-check-label" for="thursday">Thursday</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="friday" checked>
+                                <label class="form-check-label" for="friday">Friday</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="saturday">
+                                <label class="form-check-label" for="saturday">Saturday</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="sunday">
+                                <label class="form-check-label" for="sunday">Sunday</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Buffer Time -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Startup Buffer (minutes before work)</label>
+                            <input type="number" class="form-control" id="startupBuffer" value="15" min="0" max="60">
+                            <div class="form-text">Time to start servers before developers arrive</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Shutdown Buffer (minutes after work)</label>
+                            <input type="number" class="form-control" id="shutdownBuffer" value="30" min="0" max="120">
+                            <div class="form-text">Grace period before shutting down servers</div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-primary" onclick="generateInfraSchedule()">
+                            <i class="fas fa-magic me-2"></i>Generate Schedule
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="loadPreset('us-uk')">
+                            <i class="fas fa-download me-1"></i>US → UK Preset
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="loadPreset('india-us')">
+                            <i class="fas fa-download me-1"></i>India → US Preset
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Time Comparison</h5>
+                </div>
+                <div class="card-body">
+                    <div id="timeComparison">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-dollar-sign me-2"></i>Cost Analysis</h5>
+                </div>
+                <div class="card-body">
+                    <div id="costAnalysis">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-calculator fa-2x mb-2"></i>
+                            <p>Generate schedule to see cost savings</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generated Schedule Results -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Infrastructure Schedule</h5>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="exportScheduleAsJobs()">
+                            <i class="fas fa-plus me-1"></i>Create Jobs
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="exportInfraSchedule()">
+                            <i class="fas fa-download me-1"></i>Export Schedule
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="infrastructureSchedule">
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-server fa-3x mb-3"></i>
+                            <h5>Cloud Infrastructure Scheduler</h5>
+                            <p>Configure your team's working hours and generate server ON/OFF schedules</p>
+                            <div class="mt-4">
+                                <span class="badge bg-success me-2">💡 Cost Optimization</span>
+                                <span class="badge bg-info me-2">🌍 Multi-Timezone</span>
+                                <span class="badge bg-warning">⚡ Auto Scaling</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let scheduleData = {};
+
+    document.addEventListener('DOMContentLoaded', function() {
+        updateTimeComparison();
+        setInterval(updateTimeComparison, 30000); // Update every 30 seconds
+        
+        // Add event listeners
+        document.getElementById('teamTimezone').addEventListener('change', updateTimeComparison);
+        document.getElementById('projectRegion').addEventListener('change', updateTimeComparison);
+        document.getElementById('instanceType').addEventListener('change', updateHourlyCost);
+    });
+
+    function updateTimeComparison() {
+        const teamTz = document.getElementById('teamTimezone').value;
+        const projectTz = document.getElementById('projectRegion').value;
+        const now = new Date();
+
+        try {
+            const teamTime = now.toLocaleString('en-US', { 
+                timeZone: teamTz,
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            const projectTime = now.toLocaleString('en-US', { 
+                timeZone: projectTz,
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            const teamOffset = getTimezoneOffset(teamTz);
+            const projectOffset = getTimezoneOffset(projectTz);
+            const timeDiff = Math.abs(teamOffset - projectOffset);
+
+            document.getElementById('timeComparison').innerHTML = `
+                <div class="mb-3">
+                    <strong>Development Team:</strong><br>
+                    <span class="fs-5 text-primary">${teamTime}</span><br>
+                    <small class="text-muted">${teamTz.split('/')[1]}</small>
+                </div>
+                <div class="mb-3">
+                    <strong>Project/Server Region:</strong><br>
+                    <span class="fs-5 text-success">${projectTime}</span><br>
+                    <small class="text-muted">${projectTz.split('/')[1]}</small>
+                </div>
+                <div class="alert alert-info py-2">
+                    <small><strong>Time Difference:</strong> ${timeDiff} hour(s)</small>
+                </div>
+            `;
+        } catch (error) {
+            document.getElementById('timeComparison').innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Unable to calculate time comparison
+                </div>
+            `;
+        }
+    }
+
+    function getTimezoneOffset(timezone) {
+        const now = new Date();
+        const utc = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+        const local = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+        return (local.getTime() - utc.getTime()) / (1000 * 60 * 60);
+    }
+
+    function updateHourlyCost() {
+        const instanceType = document.getElementById('instanceType').value;
+        const costs = {
+            't3.medium': 0.0416,
+            't3.large': 0.0832,
+            'm5.large': 0.096,
+            'm5.xlarge': 0.192,
+            'c5.large': 0.085
+        };
+        
+        document.getElementById('hourlyCost').value = costs[instanceType] || 0.0416;
+    }
+
+    function loadPreset(preset) {
+        if (preset === 'us-uk') {
+            document.getElementById('teamTimezone').value = 'America/New_York';
+            document.getElementById('projectRegion').value = 'Europe/London';
+            document.getElementById('serverName').value = 'UK-DEV-SERVERS';
+            document.getElementById('workStartTime').value = '09:00';
+            document.getElementById('workEndTime').value = '18:00';
+        } else if (preset === 'india-us') {
+            document.getElementById('teamTimezone').value = 'Asia/Kolkata';
+            document.getElementById('projectRegion').value = 'America/New_York';
+            document.getElementById('serverName').value = 'US-DEV-SERVERS';
+            document.getElementById('workStartTime').value = '10:00';
+            document.getElementById('workEndTime').value = '19:00';
+        }
+        updateTimeComparison();
+    }
+
+    function generateInfraSchedule() {
+        const config = {
+            cloudProvider: document.getElementById('cloudProvider').value,
+            serverRegion: document.getElementById('serverRegion').value,
+            serverName: document.getElementById('serverName').value,
+            instanceType: document.getElementById('instanceType').value,
+            hourlyCost: parseFloat(document.getElementById('hourlyCost').value),
+            teamTimezone: document.getElementById('teamTimezone').value,
+            projectRegion: document.getElementById('projectRegion').value,
+            workStartTime: document.getElementById('workStartTime').value,
+            workEndTime: document.getElementById('workEndTime').value,
+            startupBuffer: parseInt(document.getElementById('startupBuffer').value),
+            shutdownBuffer: parseInt(document.getElementById('shutdownBuffer').value),
+            workingDays: getSelectedWorkingDays()
+        };
+
+        if (!config.serverName.trim()) {
+            alert('Please enter a server name');
+            return;
+        }
+
+        // Show loading
+        document.getElementById('infrastructureSchedule').innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-3">Generating infrastructure schedule...</p>
+            </div>
+        `;
+
+        // Generate the schedule
+        generateScheduleDisplay(config);
+    }
+
+    function getSelectedWorkingDays() {
+        const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        const dayNumbers = [1, 2, 3, 4, 5, 6, 0]; // Monday = 1, Sunday = 0
+        
+        return days.map((day, index) => {
+            return document.getElementById(day).checked ? dayNumbers[index] : null;
+        }).filter(day => day !== null);
+    }
+
+    function generateScheduleDisplay(config) {
+        try {
+            // Calculate work hours in team timezone
+            const workStart = config.workStartTime.split(':');
+            const workEnd = config.workEndTime.split(':');
+            
+            // Adjust for buffers
+            const serverStartTime = new Date();
+            serverStartTime.setHours(parseInt(workStart[0]), parseInt(workStart[1]) - config.startupBuffer, 0, 0);
+            
+            const serverEndTime = new Date();
+            serverEndTime.setHours(parseInt(workEnd[0]), parseInt(workEnd[1]) + config.shutdownBuffer, 0, 0);
+
+            // Generate cron expressions for start and stop
+            const startCron = generateCronExpression(serverStartTime, config.workingDays);
+            const stopCron = generateCronExpression(serverEndTime, config.workingDays);
+
+            // Calculate cost savings
+            const dailyWorkHours = (serverEndTime.getHours() - serverStartTime.getHours()) + 
+                                 (serverEndTime.getMinutes() - serverStartTime.getMinutes()) / 60;
+            const dailyCost = dailyWorkHours * config.hourlyCost;
+            const weeklyCost = dailyCost * config.workingDays.length;
+            const monthlyCost = weeklyCost * 4.33; // Average weeks per month
+            
+            const fullTimeCost = 24 * 7 * config.hourlyCost * 4.33; // 24/7 monthly cost
+            const savings = fullTimeCost - monthlyCost;
+            const savingsPercent = (savings / fullTimeCost * 100).toFixed(1);
+
+            scheduleData = {
+                config: config,
+                startCron: startCron,
+                stopCron: stopCron,
+                costs: {
+                    dailyWorkHours: dailyWorkHours.toFixed(1),
+                    dailyCost: dailyCost.toFixed(2),
+                    monthlyCost: monthlyCost.toFixed(2),
+                    fullTimeCost: fullTimeCost.toFixed(2),
+                    savings: savings.toFixed(2),
+                    savingsPercent: savingsPercent
+                }
+            };
+
+            displayInfrastructureSchedule(scheduleData);
+            displayCostAnalysis(scheduleData.costs);
+
+        } catch (error) {
+            console.error('Error generating schedule:', error);
+            document.getElementById('infrastructureSchedule').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Error generating schedule: ${error.message}
+                </div>
+            `;
+        }
+    }
+
+    function generateCronExpression(time, workingDays) {
+        const dayOfWeekStr = workingDays.join(',');
+        return `0 ${time.getMinutes()} ${time.getHours()} * * ${dayOfWeekStr}`;
+    }
+
+    function displayInfrastructureSchedule(data) {
+        const { config, startCron, stopCron } = data;
+        
+        const scheduleHTML = `
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card border-success">
+                        <div class="card-header bg-success text-white">
+                            <h6 class="mb-0"><i class="fas fa-power-off me-2"></i>Server Startup Schedule</h6>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm mb-0">
+                                <tr>
+                                    <td><strong>Action:</strong></td>
+                                    <td><span class="badge bg-success">START SERVERS</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Cron Expression:</strong></td>
+                                    <td><code>${startCron}</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Team Timezone:</strong></td>
+                                    <td>${config.teamTimezone}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Description:</strong></td>
+                                    <td>Start servers ${config.startupBuffer} min before work</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card border-danger">
+                        <div class="card-header bg-danger text-white">
+                            <h6 class="mb-0"><i class="fas fa-power-off me-2"></i>Server Shutdown Schedule</h6>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm mb-0">
+                                <tr>
+                                    <td><strong>Action:</strong></td>
+                                    <td><span class="badge bg-danger">STOP SERVERS</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Cron Expression:</strong></td>
+                                    <td><code>${stopCron}</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Team Timezone:</strong></td>
+                                    <td>${config.teamTimezone}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Description:</strong></td>
+                                    <td>Stop servers ${config.shutdownBuffer} min after work</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Infrastructure Details</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Server Name:</strong></td>
+                                    <td>${config.serverName}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Cloud Provider:</strong></td>
+                                    <td>${config.cloudProvider.toUpperCase()}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Region:</strong></td>
+                                    <td>${config.serverRegion}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Instance Type:</strong></td>
+                                    <td>${config.instanceType}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Development Team:</strong></td>
+                                    <td>${config.teamTimezone.split('/')[1]}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Project Region:</strong></td>
+                                    <td>${config.projectRegion.split('/')[1]}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Working Hours:</strong></td>
+                                    <td>${config.workStartTime} - ${config.workEndTime}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Working Days:</strong></td>
+                                    <td>${config.workingDays.length} days/week</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('infrastructureSchedule').innerHTML = scheduleHTML;
+    }
+
+    function displayCostAnalysis(costs) {
+        const analysisHTML = `
+            <div class="text-center">
+                <h6 class="text-success mb-3">
+                    <i class="fas fa-piggy-bank me-2"></i>Monthly Savings
+                </h6>
+                <div class="display-6 text-success mb-2">$${costs.savings}</div>
+                <div class="text-muted mb-3">${costs.savingsPercent}% cost reduction</div>
+            </div>
+            
+            <hr>
+            
+            <div class="row text-center">
+                <div class="col-6">
+                    <div class="text-muted">Optimized Cost</div>
+                    <div class="h5 text-success">$${costs.monthlyCost}</div>
+                </div>
+                <div class="col-6">
+                    <div class="text-muted">24/7 Cost</div>
+                    <div class="h5 text-danger">$${costs.fullTimeCost}</div>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <small class="text-muted">
+                <strong>Daily:</strong> ${costs.dailyWorkHours}h @ $${costs.dailyCost}<br>
+                <strong>Instance:</strong> $${(parseFloat(costs.dailyCost) / parseFloat(costs.dailyWorkHours)).toFixed(4)}/hour
+            </small>
+        `;
+
+        document.getElementById('costAnalysis').innerHTML = analysisHTML;
+    }
+
+    function exportScheduleAsJobs() {
+        if (!scheduleData.config) {
+            alert('Please generate a schedule first');
+            return;
+        }
+
+        const { config, startCron, stopCron } = scheduleData;
+        
+        // Create job configuration objects
+        const startJob = {
+            name: `${config.serverName} - Daily Startup`,
+            job_type: 'powershell',
+            description: `Automatically start ${config.serverName} servers for ${config.teamTimezone.split('/')[1]} team`,
+            timeout: 300,
+            retries: 2,
+            retry_delay: 60,
+            enabled: true,
+            script_content: generatePowerShellScript('start', config),
+            execution_policy: 'RemoteSigned',
+            schedule: {
+                type: 'cron',
+                cron: startCron,
+                timezone: config.teamTimezone
+            }
+        };
+
+        const stopJob = {
+            name: `${config.serverName} - Daily Shutdown`,
+            job_type: 'powershell',
+            description: `Automatically stop ${config.serverName} servers after ${config.teamTimezone.split('/')[1]} team work hours`,
+            timeout: 300,
+            retries: 2,
+            retry_delay: 60,
+            enabled: true,
+            script_content: generatePowerShellScript('stop', config),
+            execution_policy: 'RemoteSigned',
+            schedule: {
+                type: 'cron',
+                cron: stopCron,
+                timezone: config.teamTimezone
+            }
+        };
+
+        // Show modal with job configurations
+        showJobCreationModal([startJob, stopJob]);
+    }
+
+    function generatePowerShellScript(action, config) {
+        if (config.cloudProvider === 'aws') {
+            return generateAWSScript(action, config);
+        } else if (config.cloudProvider === 'azure') {
+            return generateAzureScript(action, config);
+        }
+        return generateGenericScript(action, config);
+    }
+
+    function generateAWSScript(action, config) {
+        const verb = action === 'start' ? 'Start' : 'Stop';
+        const actionDesc = action === 'start' ? 'starting' : 'stopping';
+        
+        return `# AWS ${verb} Instance Script for ${config.serverName}
+# Generated by Job Scheduler - Cloud Infrastructure Manager
+
+Write-Host "===========================================" -ForegroundColor Cyan
+Write-Host "AWS Instance ${verb} Script" -ForegroundColor Cyan
+Write-Host "Server: ${config.serverName}" -ForegroundColor Yellow
+Write-Host "Region: ${config.serverRegion}" -ForegroundColor Yellow
+Write-Host "Action: ${actionDesc.toUpperCase()}" -ForegroundColor Yellow
+Write-Host "===========================================" -ForegroundColor Cyan
+
+try {
+    # Set AWS Region
+    $env:AWS_DEFAULT_REGION = "${config.serverRegion}"
+    
+    # Get instance ID by name tag
+    Write-Host "Finding instance with name '${config.serverName}'..." -ForegroundColor Green
+    $instanceId = aws ec2 describe-instances --filters "Name=tag:Name,Values=${config.serverName}" "Name=instance-state-name,Values=running,stopped" --query "Reservations[0].Instances[0].InstanceId" --output text
+    
+    if ($instanceId -eq "None" -or $instanceId -eq $null) {
+        Write-Host "ERROR: Instance '${config.serverName}' not found!" -ForegroundColor Red
+        exit 1
+    }
+    
+    Write-Host "Found instance: $instanceId" -ForegroundColor Green
+    
+    # ${verb} the instance
+    Write-Host "${actionDesc} instance $instanceId..." -ForegroundColor Yellow
+    aws ec2 ${action}-instances --instance-ids $instanceId
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "SUCCESS: Instance ${actionDesc} command sent successfully!" -ForegroundColor Green
+        Write-Host "Instance $instanceId is now ${actionDesc}..." -ForegroundColor Green
+    } else {
+        Write-Host "ERROR: Failed to ${action} instance!" -ForegroundColor Red
+        exit 1
+    }
+    
+} catch {
+    Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "===========================================" -ForegroundColor Cyan
+Write-Host "Script completed successfully!" -ForegroundColor Green
+Write-Host "===========================================" -ForegroundColor Cyan`;
+    }
+
+    function generateAzureScript(action, config) {
+        const verb = action === 'start' ? 'Start' : 'Stop';
+        const actionDesc = action === 'start' ? 'starting' : 'stopping';
+        
+        return `# Azure ${verb} VM Script for ${config.serverName}
+# Generated by Job Scheduler - Cloud Infrastructure Manager
+
+Write-Host "===========================================" -ForegroundColor Cyan
+Write-Host "Azure VM ${verb} Script" -ForegroundColor Cyan
+Write-Host "Server: ${config.serverName}" -ForegroundColor Yellow
+Write-Host "Region: ${config.serverRegion}" -ForegroundColor Yellow
+Write-Host "Action: ${actionDesc.toUpperCase()}" -ForegroundColor Yellow
+Write-Host "===========================================" -ForegroundColor Cyan
+
+try {
+    # Login check (assumes Azure CLI is already authenticated)
+    Write-Host "Checking Azure authentication..." -ForegroundColor Green
+    $accountInfo = az account show --output json | ConvertFrom-Json
+    
+    if (-not $accountInfo) {
+        Write-Host "ERROR: Not logged into Azure CLI!" -ForegroundColor Red
+        Write-Host "Please run: az login" -ForegroundColor Yellow
+        exit 1
+    }
+    
+    Write-Host "Authenticated as: $($accountInfo.user.name)" -ForegroundColor Green
+    
+    # Find VM by name
+    Write-Host "Finding VM '${config.serverName}'..." -ForegroundColor Green
+    $vm = az vm list --query "[?name=='${config.serverName}']" --output json | ConvertFrom-Json
+    
+    if (-not $vm -or $vm.Count -eq 0) {
+        Write-Host "ERROR: VM '${config.serverName}' not found!" -ForegroundColor Red
+        exit 1
+    }
+    
+    $resourceGroup = $vm[0].resourceGroup
+    Write-Host "Found VM in resource group: $resourceGroup" -ForegroundColor Green
+    
+    # ${verb} the VM
+    Write-Host "${actionDesc} VM ${config.serverName}..." -ForegroundColor Yellow
+    az vm ${action} --resource-group $resourceGroup --name "${config.serverName}" --no-wait
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "SUCCESS: VM ${actionDesc} command sent successfully!" -ForegroundColor Green
+        Write-Host "VM ${config.serverName} is now ${actionDesc}..." -ForegroundColor Green
+    } else {
+        Write-Host "ERROR: Failed to ${action} VM!" -ForegroundColor Red
+        exit 1
+    }
+    
+} catch {
+    Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "===========================================" -ForegroundColor Cyan
+Write-Host "Script completed successfully!" -ForegroundColor Green
+Write-Host "===========================================" -ForegroundColor Cyan`;
+    }
+
+    function generateGenericScript(action, config) {
+        const verb = action === 'start' ? 'Start' : 'Stop';
+        
+        return `# Generic Cloud ${verb} Script for ${config.serverName}
+Write-Host "${verb}ing ${config.serverName} in ${config.cloudProvider.toUpperCase()}..." -ForegroundColor Green
+Write-Host "Please customize this script for your specific cloud provider and authentication method." -ForegroundColor Yellow`;
+    }
+
+    function showJobCreationModal(jobs) {
+        const modalHTML = `
+            <div class="modal fade" id="jobCreationModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Create Infrastructure Jobs</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>The following jobs will be created to manage your infrastructure:</p>
+                            ${jobs.map((job, index) => `
+                                <div class="card mb-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">${job.name}</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Description:</strong> ${job.description}</p>
+                                        <p><strong>Schedule:</strong> <code>${job.schedule.cron}</code> (${job.schedule.timezone})</p>
+                                        <details>
+                                            <summary class="btn btn-sm btn-outline-secondary">View PowerShell Script</summary>
+                                            <pre class="mt-2 p-2 bg-dark text-light rounded"><code>${job.script_content}</code></pre>
+                                        </details>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" onclick="createInfrastructureJobs()">Create Jobs</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+        // Store jobs for creation
+        window.pendingInfraJobs = jobs;
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('jobCreationModal'));
+        modal.show();
+        
+        // Clean up modal after hiding
+        document.getElementById('jobCreationModal').addEventListener('hidden.bs.modal', function () {
+            this.remove();
+        });
+    }
+
+    function createInfrastructureJobs() {
+        if (!window.pendingInfraJobs) {
+            alert('No jobs to create');
+            return;
+        }
+
+        // Redirect to create job page with prefilled data
+        // In a real implementation, you'd call your job creation API
+        alert(`Ready to create ${window.pendingInfraJobs.length} infrastructure management jobs!\\n\\nIn a real implementation, these jobs would be automatically created in your job scheduler.`);
+        
+        // Close modal
+        bootstrap.Modal.getInstance(document.getElementById('jobCreationModal')).hide();
+    }
+
+    function exportInfraSchedule() {
+        if (!scheduleData.config) {
+            alert('Please generate a schedule first');
+            return;
+        }
+
+        const exportData = {
+            infrastructure_schedule: scheduleData,
+            generated_at: new Date().toISOString(),
+            description: `Infrastructure schedule for ${scheduleData.config.serverName}`
+        };
+
+        const jsonContent = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `infrastructure_schedule_${scheduleData.config.serverName.replace(/[^a-z0-9]/gi, '_')}.json`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+</script>
+{% endblock %}
