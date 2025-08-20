@@ -163,6 +163,11 @@ def create_routes(app):
             flash(f'Error loading edit job page: {str(e)}', 'error')
             return redirect(url_for('job_list'))
 
+    @app.route('/timezone-simulator')
+    def timezone_simulator():
+        """Timezone simulation page"""
+        return render_template('timezone_simulator.html')
+
     @app.route('/jobs/<job_id>')
     def job_details(job_id):
         """Job details page"""
@@ -1914,6 +1919,135 @@ def create_routes(app):
         """Serve OpenAPI 3.0 specification for Swagger UI"""
         return jsonify(generate_openapi_spec())
     
+    @app.route('/api/timezone-simulation', methods=['POST'])
+    def api_timezone_simulation():
+        """API endpoint for timezone simulation"""
+        try:
+            from datetime import datetime, timedelta
+            import pytz
+            from croniter import croniter
+            
+            data = request.get_json()
+            if not data:
+                return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+            schedule = data.get('schedule', {})
+            simulation_days = data.get('simulation_days', 7)
+            
+            schedule_type = schedule.get('type')
+            timezone = schedule.get('timezone', 'UTC')
+            
+            # Validate timezone
+            try:
+                tz = pytz.timezone(timezone)
+            except pytz.exceptions.UnknownTimeZoneError:
+                return jsonify({'success': False, 'error': f'Unknown timezone: {timezone}'}), 400
+            
+            # Calculate simulation period
+            start_time = datetime.now(tz)
+            end_time = start_time + timedelta(days=simulation_days)
+            
+            executions = []
+            
+            if schedule_type == 'cron':
+                cron_expr = schedule.get('cron')
+                if not cron_expr:
+                    return jsonify({'success': False, 'error': 'Cron expression required'}), 400
+                
+                try:
+                    # Convert 6-part to 5-part for croniter (remove seconds)
+                    parts = cron_expr.split()
+                    if len(parts) == 6:
+                        # croniter expects: minute hour day month day_of_week
+                        croniter_expr = ' '.join(parts[1:])  # Skip seconds
+                    else:
+                        croniter_expr = cron_expr
+                    
+                    cron = croniter(croniter_expr, start_time)
+                    
+                    count = 0
+                    while count < 100:  # Limit to prevent infinite loops
+                        next_time = cron.get_next(datetime)
+                        if next_time > end_time:
+                            break
+                        
+                        # Convert to UTC for storage
+                        utc_time = next_time.astimezone(pytz.UTC)
+                        
+                        executions.append({
+                            'local_time': next_time.isoformat(),
+                            'utc_time': utc_time.isoformat(),
+                            'timezone': timezone
+                        })
+                        count += 1
+                        
+                except Exception as e:
+                    return jsonify({'success': False, 'error': f'Invalid cron expression: {str(e)}'}), 400
+            
+            elif schedule_type == 'interval':
+                interval = schedule.get('interval', {})
+                hours = interval.get('hours', 0)
+                minutes = interval.get('minutes', 0)
+                
+                if hours == 0 and minutes == 0:
+                    return jsonify({'success': False, 'error': 'Invalid interval'}), 400
+                
+                interval_seconds = hours * 3600 + minutes * 60
+                current_time = start_time
+                
+                count = 0
+                while current_time <= end_time and count < 100:
+                    utc_time = current_time.astimezone(pytz.UTC)
+                    
+                    executions.append({
+                        'local_time': current_time.isoformat(),
+                        'utc_time': utc_time.isoformat(),
+                        'timezone': timezone
+                    })
+                    
+                    current_time += timedelta(seconds=interval_seconds)
+                    count += 1
+            
+            elif schedule_type == 'once':
+                run_date_str = schedule.get('run_date')
+                if not run_date_str:
+                    return jsonify({'success': False, 'error': 'Run date required'}), 400
+                
+                try:
+                    # Parse the datetime in the specified timezone
+                    naive_dt = datetime.fromisoformat(run_date_str.replace('Z', ''))
+                    local_time = tz.localize(naive_dt)
+                    
+                    if start_time <= local_time <= end_time:
+                        utc_time = local_time.astimezone(pytz.UTC)
+                        
+                        executions.append({
+                            'local_time': local_time.isoformat(),
+                            'utc_time': utc_time.isoformat(),
+                            'timezone': timezone
+                        })
+                        
+                except Exception as e:
+                    return jsonify({'success': False, 'error': f'Invalid date format: {str(e)}'}), 400
+            
+            else:
+                return jsonify({'success': False, 'error': 'Invalid schedule type'}), 400
+            
+            return jsonify({
+                'success': True,
+                'executions': executions,
+                'timezone': timezone,
+                'simulation_period': {
+                    'start': start_time.isoformat(),
+                    'end': end_time.isoformat(),
+                    'days': simulation_days
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"[API_TIMEZONE_SIMULATION] Error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/admin/system-stats')
     def api_admin_system_stats():
         """Get system statistics for admin panel"""
