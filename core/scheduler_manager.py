@@ -52,11 +52,11 @@ class SchedulerManager:
         executors = {'default': ThreadPoolExecutor(max_workers=20)}
         job_defaults = {'coalesce': False, 'max_instances': 3}
         
+        # Don't set global timezone - let individual jobs use their configured timezones
         self.scheduler = BackgroundScheduler(
             jobstores=jobstores,
             executors=executors,
-            job_defaults=job_defaults,
-            timezone='UTC'
+            job_defaults=job_defaults
         )
         
         self.scheduler.add_listener(self._on_job_executed, EVENT_JOB_EXECUTED)
@@ -188,14 +188,24 @@ class SchedulerManager:
             return False
     
     def _create_trigger(self, schedule_config: Dict[str, Any]):
-        """Create APScheduler trigger from configuration with timezone support"""
+        """Create APScheduler trigger from configuration with precise timezone support"""
         trigger_type = schedule_config.get('type', 'cron').lower()
         timezone = schedule_config.get('timezone', 'UTC')
         
+        self.logger.info(f"Creating trigger for timezone: {timezone}")
+        
         try:
             # Import timezone handling
+            import pytz
             from pytz import timezone as pytz_timezone
-            tz = pytz_timezone(timezone) if timezone != 'UTC' else None
+            
+            # Always create timezone object for precise scheduling
+            if timezone == 'UTC':
+                tz = pytz.UTC
+            else:
+                tz = pytz_timezone(timezone)
+            
+            self.logger.info(f"Using timezone object: {tz}")
             
             if trigger_type == 'cron':
                 cron_expr = schedule_config.get('cron')
@@ -208,11 +218,18 @@ class SchedulerManager:
                             'hour': parts[2],
                             'day': parts[3], 
                             'month': parts[4], 
-                            'day_of_week': parts[5]
+                            'day_of_week': parts[5],
+                            'timezone': tz  # Always set timezone for precise scheduling
                         }
-                        if tz:
-                            trigger_kwargs['timezone'] = tz
-                        return CronTrigger(**trigger_kwargs)
+                        
+                        self.logger.info(f"Creating CronTrigger with args: {trigger_kwargs}")
+                        trigger = CronTrigger(**trigger_kwargs)
+                        
+                        # Log next run time for verification
+                        next_run = trigger.get_next_fire_time(None, datetime.now(tz))
+                        self.logger.info(f"Next run time in {timezone}: {next_run}")
+                        
+                        return trigger
             
             elif trigger_type == 'interval':
                 interval_config = schedule_config.get('interval', {})
@@ -221,21 +238,46 @@ class SchedulerManager:
                     'days': interval_config.get('days', 0),
                     'hours': interval_config.get('hours', 0),
                     'minutes': interval_config.get('minutes', 0),
-                    'seconds': interval_config.get('seconds', 0)
+                    'seconds': interval_config.get('seconds', 0),
+                    'timezone': tz  # Always set timezone
                 }
-                if tz:
-                    trigger_kwargs['timezone'] = tz
-                return IntervalTrigger(**trigger_kwargs)
+                
+                self.logger.info(f"Creating IntervalTrigger with args: {trigger_kwargs}")
+                trigger = IntervalTrigger(**trigger_kwargs)
+                
+                # Log next run time for verification
+                next_run = trigger.get_next_fire_time(None, datetime.now(tz))
+                self.logger.info(f"Interval next run time in {timezone}: {next_run}")
+                
+                return trigger
             
             elif trigger_type == 'date':
                 run_date = schedule_config.get('run_date')
                 if isinstance(run_date, str):
-                    # Parse as UTC datetime since frontend converts to UTC
-                    run_date = datetime.fromisoformat(run_date.replace('Z', '+00:00'))
-                trigger_kwargs = {'run_date': run_date}
-                if tz:
-                    trigger_kwargs['timezone'] = tz
-                return DateTrigger(**trigger_kwargs)
+                    # Parse datetime and convert to target timezone
+                    if run_date.endswith('Z'):
+                        # UTC format
+                        dt = datetime.fromisoformat(run_date.replace('Z', '+00:00'))
+                        # Convert to target timezone
+                        if timezone != 'UTC':
+                            dt = dt.replace(tzinfo=pytz.UTC).astimezone(tz)
+                    else:
+                        dt = datetime.fromisoformat(run_date)
+                    
+                    run_date = dt
+                
+                trigger_kwargs = {
+                    'run_date': run_date,
+                    'timezone': tz  # Always set timezone
+                }
+                
+                self.logger.info(f"Creating DateTrigger with args: {trigger_kwargs}")
+                trigger = DateTrigger(**trigger_kwargs)
+                
+                # Log scheduled time for verification
+                self.logger.info(f"One-time execution scheduled for {timezone}: {run_date}")
+                
+                return trigger
             
         except Exception as e:
             self.logger.error(f"Failed to create trigger with timezone {timezone}: {e}")
@@ -294,10 +336,42 @@ class SchedulerManager:
                 self.logger.error(f"Job not found during execution: {job_id}")
                 return
             
+            # Log timezone execution details
+            schedule_config = self.job_schedules.get(job_id, {})
+            job_timezone = schedule_config.get('timezone', 'UTC')
+            
+            import pytz
+            from datetime import datetime
+            
+            if job_timezone == 'UTC':
+                tz = pytz.UTC
+            else:
+                tz = pytz.timezone(job_timezone)
+            
+            current_time = datetime.now(tz)
+            
+            self.logger.info(f"Executing job {job.name} ({job_id}) in timezone {job_timezone}")
+            self.logger.info(f"Current time in {job_timezone}: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            
+            # Store scheduled execution timezone in job metadata
+            if hasattr(job, 'scheduled_time'):
+                job.scheduled_time = current_time
+            
             # Execute job with comprehensive error handling
             try:
                 result = job.run()
                 if result:
+                    # Add timezone information to result metadata
+                    if result.metadata is None:
+                        result.metadata = {}
+                    
+                    result.metadata.update({
+                        'execution_timezone': job_timezone,
+                        'execution_time_local': current_time.strftime('%Y-%m-%d %H:%M:%S %Z'),
+                        'execution_time_utc': datetime.now(pytz.UTC).strftime('%Y-%m-%d %H:%M:%S UTC'),
+                        'timezone_offset': current_time.strftime('%z')
+                    })
+                    
                     self.storage.save_execution_result(result)
                     
                     if result.status == JobStatus.RETRY:
