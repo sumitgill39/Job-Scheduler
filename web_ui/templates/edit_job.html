@@ -226,6 +226,60 @@
                                     </label>
                                 </div>
                             </div>
+
+                            <!-- Timezone Selection -->
+                            <div class="mb-3">
+                                <label for="scheduleTimezone" class="form-label">
+                                    <i class="fas fa-globe me-1"></i>Schedule Timezone
+                                </label>
+                                <select class="form-select" id="scheduleTimezone" name="schedule_timezone">
+                                    <option value="UTC" selected>UTC (Coordinated Universal Time)</option>
+                                    <optgroup label="America">
+                                        <option value="America/New_York">America/New_York (Eastern Time)</option>
+                                        <option value="America/Chicago">America/Chicago (Central Time)</option>
+                                        <option value="America/Denver">America/Denver (Mountain Time)</option>
+                                        <option value="America/Los_Angeles">America/Los_Angeles (Pacific Time)</option>
+                                        <option value="America/Phoenix">America/Phoenix (MST - No DST)</option>
+                                        <option value="America/Anchorage">America/Anchorage (Alaska Time)</option>
+                                        <option value="America/Toronto">America/Toronto (Eastern Canada)</option>
+                                        <option value="America/Vancouver">America/Vancouver (Pacific Canada)</option>
+                                        <option value="America/Mexico_City">America/Mexico_City (CST)</option>
+                                        <option value="America/Sao_Paulo">America/Sao_Paulo (Brazil)</option>
+                                    </optgroup>
+                                    <optgroup label="Europe">
+                                        <option value="Europe/London">Europe/London (GMT/BST)</option>
+                                        <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+                                        <option value="Europe/Berlin">Europe/Berlin (CET/CEST)</option>
+                                        <option value="Europe/Rome">Europe/Rome (CET/CEST)</option>
+                                        <option value="Europe/Madrid">Europe/Madrid (CET/CEST)</option>
+                                        <option value="Europe/Amsterdam">Europe/Amsterdam (CET/CEST)</option>
+                                        <option value="Europe/Stockholm">Europe/Stockholm (CET/CEST)</option>
+                                        <option value="Europe/Moscow">Europe/Moscow (MSK)</option>
+                                    </optgroup>
+                                    <optgroup label="Asia">
+                                        <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                                        <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
+                                        <option value="Asia/Hong_Kong">Asia/Hong_Kong (HKT)</option>
+                                        <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
+                                        <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                                        <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+                                        <option value="Asia/Seoul">Asia/Seoul (KST)</option>
+                                        <option value="Asia/Bangkok">Asia/Bangkok (ICT)</option>
+                                    </optgroup>
+                                    <optgroup label="Pacific">
+                                        <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
+                                        <option value="Australia/Melbourne">Australia/Melbourne (AEST/AEDT)</option>
+                                        <option value="Australia/Perth">Australia/Perth (AWST)</option>
+                                        <option value="Pacific/Auckland">Pacific/Auckland (NZST/NZDT)</option>
+                                        <option value="Pacific/Honolulu">Pacific/Honolulu (HST)</option>
+                                    </optgroup>
+                                </select>
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    All schedules are stored in UTC. Local times are converted automatically with DST handling.
+                                    <div id="timezoneInfo" class="mt-1 text-primary"></div>
+                                </div>
+                            </div>
                             
                             <!-- Cron Schedule -->
                             <div id="cronSection">
@@ -472,6 +526,13 @@
                 }
                 showOnceSection();
             }
+            
+            // Set timezone if available
+            if (schedule.timezone) {
+                console.log('Setting timezone:', schedule.timezone);
+                document.getElementById('scheduleTimezone').value = schedule.timezone;
+                updateTimezoneInfo();
+            }
         } else {
             console.log('❌ No schedule configuration found in config.schedule');
             // Check if schedule might be stored elsewhere
@@ -518,6 +579,12 @@
                 }
             });
         });
+
+        // Timezone change handler
+        document.getElementById('scheduleTimezone').addEventListener('change', updateTimezoneInfo);
+        
+        // Initialize timezone info
+        updateTimezoneInfo();
 
         // Form submission
         document.getElementById('editJobForm').addEventListener('submit', function(e) {
@@ -631,11 +698,13 @@
         // Add schedule if enabled
         if (document.getElementById('enableSchedule').checked) {
             const scheduleType = document.querySelector('input[name="scheduleType"]:checked').value;
+            const timezone = document.getElementById('scheduleTimezone').value;
             
             if (scheduleType === 'cron') {
                 jobData.schedule = {
                     type: 'cron',
-                    cron: formData.get('cron_expression')
+                    cron: formData.get('cron_expression'),
+                    timezone: timezone
                 };
             } else if (scheduleType === 'interval') {
                 jobData.schedule = {
@@ -645,14 +714,16 @@
                         hours: parseInt(formData.get('interval_hours')),
                         minutes: parseInt(formData.get('interval_minutes')),
                         seconds: parseInt(formData.get('interval_seconds'))
-                    }
+                    },
+                    timezone: timezone
                 };
             } else if (scheduleType === 'once') {
                 const date = formData.get('run_date');
                 const time = formData.get('run_time');
                 jobData.schedule = {
                     type: 'date',
-                    run_date: `${date}T${time}:00`
+                    run_date: `${date}T${time}:00`,
+                    timezone: timezone
                 };
             }
         }
@@ -718,6 +789,59 @@
     function showError(message) {
         // Create a simple alert for now - can be enhanced with toast notifications  
         alert('❌ ' + message);
+    }
+
+    // Timezone handling functions
+    function updateTimezoneInfo() {
+        const timezone = document.getElementById('scheduleTimezone').value;
+        const infoDiv = document.getElementById('timezoneInfo');
+        
+        try {
+            const now = new Date();
+            const localTime = now.toLocaleString('en-US', { 
+                timeZone: timezone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            
+            // Calculate UTC offset
+            const localDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+            const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+            const offsetMs = localDate.getTime() - utcDate.getTime();
+            const offsetHours = offsetMs / (1000 * 60 * 60);
+            const offsetSign = offsetHours >= 0 ? '+' : '';
+            
+            infoDiv.innerHTML = `
+                <small>
+                    Current time in ${timezone}: <strong>${localTime}</strong> (UTC${offsetSign}${offsetHours})
+                </small>
+            `;
+        } catch (error) {
+            infoDiv.innerHTML = `<small class="text-warning">Timezone information not available</small>`;
+        }
+    }
+
+    // Auto-detect user's timezone
+    function detectUserTimezone() {
+        try {
+            const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const timezoneSelect = document.getElementById('scheduleTimezone');
+            
+            // Check if user's timezone is in our list
+            const option = Array.from(timezoneSelect.options).find(opt => opt.value === userTimezone);
+            if (option && !timezoneSelect.value) {
+                timezoneSelect.value = userTimezone;
+                updateTimezoneInfo();
+                console.log('Auto-detected timezone:', userTimezone);
+            }
+        } catch (error) {
+            console.warn('Could not detect user timezone:', error);
+        }
     }
 </script>
 {% endblock %}

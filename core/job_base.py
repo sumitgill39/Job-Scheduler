@@ -164,6 +164,9 @@ class JobBase(ABC):
         execution_logger = ExecutionLogger(self.job_id, self.name)
         execution_logger.info(f"Starting job execution (attempt {self.retry_count + 1}/{self.max_retries + 1})", "JOB_BASE")
         
+        # Log UTC execution start timing
+        execution_logger.log_utc_timing("execution_start", getattr(self, 'scheduled_time', None))
+        
         self.job_logger.info(f"Starting job execution (attempt {self.retry_count + 1}/{self.max_retries + 1})")
         
         try:
@@ -174,17 +177,27 @@ class JobBase(ABC):
             })
             result = self._execute_with_timeout(execution_logger)
             
+            # Log UTC execution completion timing
+            execution_logger.log_utc_timing("execution_complete")
+            
             # Update status based on result
             if result.status == JobStatus.SUCCESS:
                 self.retry_count = 0  # Reset retry count on success
                 self.job_logger.info(f"Job completed successfully in {result.duration_seconds:.2f} seconds")
+                execution_logger.info(f"Job completed successfully", "JOB_BASE", {
+                    'status': result.status.value,
+                    'duration_seconds': result.duration_seconds,
+                    'utc_completion_time': datetime.utcnow().isoformat() + 'Z'
+                })
             elif result.status == JobStatus.FAILED and self.retry_count < self.max_retries:
                 self.retry_count += 1
                 result.status = JobStatus.RETRY
                 self.job_logger.warning(f"Job failed, will retry ({self.retry_count}/{self.max_retries})")
+                execution_logger.warning(f"Job execution failed, scheduling retry {self.retry_count}/{self.max_retries}", "JOB_BASE")
                 # Schedule retry (this would be handled by the scheduler)
             else:
                 self.job_logger.error(f"Job failed permanently after {self.retry_count} retries")
+                execution_logger.error(f"Job failed permanently after {self.retry_count} retries", "JOB_BASE")
             
             self.current_status = result.status
             result.retry_count = self.retry_count

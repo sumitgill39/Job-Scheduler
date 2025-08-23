@@ -170,6 +170,12 @@
                                         <i class="fas fa-eye"></i>
                                     </a>
                                     
+                                    <button type="button" class="btn btn-sm btn-outline-success btn-action" 
+                                            onclick="viewJobConfiguration('{{ job.id }}')" 
+                                            data-bs-toggle="tooltip" title="View Configuration">
+                                        <i class="fas fa-cog"></i>
+                                    </button>
+                                    
                                     <button type="button" class="btn btn-sm btn-outline-danger btn-action" 
                                             onclick="deleteJob('{{ job.id }}')" 
                                             data-bs-toggle="tooltip" title="Delete">
@@ -214,6 +220,36 @@
                         <i class="fas fa-trash me-1"></i>Delete Selected
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Job Configuration Modal -->
+<div class="modal fade" id="jobConfigModal" tabindex="-1" aria-labelledby="jobConfigModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="jobConfigModalLabel">
+                    <i class="fas fa-cog me-2"></i>Job Configuration
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="jobConfigContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading job configuration...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" onclick="exportJobConfiguration()">
+                    <i class="fas fa-download me-1"></i>Export Config
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -583,6 +619,215 @@
             clearInterval(refreshInterval);
             showSuccess('Auto-refresh disabled');
         }
+    }
+
+    // Job Configuration View Functions
+    let currentJobConfigData = null;
+
+    function viewJobConfiguration(jobId) {
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('jobConfigModal'));
+        modal.show();
+        
+        // Reset content
+        document.getElementById('jobConfigContent').innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading job configuration...</p>
+            </div>
+        `;
+        
+        // Fetch job configuration
+        fetch(`/api/jobs/${jobId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    currentJobConfigData = data.job;
+                    displayJobConfiguration(data.job);
+                } else {
+                    displayConfigError('Failed to load job configuration: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error loading job configuration:', error);
+                displayConfigError('Network error occurred while loading configuration');
+            });
+    }
+
+    function displayJobConfiguration(job) {
+        const config = job.configuration || {};
+        
+        let configHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Basic Information</h6>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm">
+                                <tr><th width="30%">Name:</th><td><strong>${job.name}</strong></td></tr>
+                                <tr><th>Job ID:</th><td><code>${job.job_id}</code></td></tr>
+                                <tr><th>Type:</th><td><span class="badge bg-info">${job.job_type.toUpperCase()}</span></td></tr>
+                                <tr><th>Status:</th><td><span class="badge bg-${job.enabled ? 'success' : 'secondary'}">${job.enabled ? 'Enabled' : 'Disabled'}</span></td></tr>
+                                <tr><th>Description:</th><td>${job.description || '<em>No description</em>'}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-cog me-2"></i>Advanced Settings</h6>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm">
+                                <tr><th width="30%">Timeout:</th><td>${config.basic?.timeout || 300} seconds</td></tr>
+                                <tr><th>Max Retries:</th><td>${config.basic?.max_retries || 3}</td></tr>
+                                <tr><th>Retry Delay:</th><td>${config.basic?.retry_delay || 60} seconds</td></tr>
+                                <tr><th>Run As:</th><td>${config.basic?.run_as || '<em>Current user</em>'}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+        `;
+        
+        // Job-specific configuration
+        if (job.job_type === 'sql') {
+            const sqlConfig = config.sql || {};
+            configHTML += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-database me-2"></i>SQL Configuration</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr><th width="30%">Connection:</th><td><code>${sqlConfig.connection_name || 'default'}</code></td></tr>
+                            <tr><th>Query Timeout:</th><td>${sqlConfig.query_timeout || 300} seconds</td></tr>
+                            <tr><th>Max Rows:</th><td>${sqlConfig.max_rows || 1000}</td></tr>
+                        </table>
+                        <div class="mt-2">
+                            <strong>SQL Query:</strong>
+                            <pre class="bg-light p-2 mt-1"><code>${sqlConfig.query || 'No query defined'}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (job.job_type === 'powershell') {
+            const psConfig = config.powershell || {};
+            configHTML += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fab fa-microsoft me-2"></i>PowerShell Configuration</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr><th width="30%">Execution Policy:</th><td><code>${psConfig.execution_policy || 'RemoteSigned'}</code></td></tr>
+                            <tr><th>Working Directory:</th><td>${psConfig.working_directory || '<em>Default</em>'}</td></tr>
+                            <tr><th>Parameters:</th><td>${psConfig.parameters?.join(' ') || '<em>None</em>'}</td></tr>
+                        </table>
+                        <div class="mt-2">
+                            <strong>Script Content:</strong>
+                            ${psConfig.script_content ? 
+                                `<pre class="bg-light p-2 mt-1"><code>${psConfig.script_content}</code></pre>` :
+                                psConfig.script_path ? 
+                                `<p class="mt-1">Script File: <code>${psConfig.script_path}</code></p>` :
+                                '<p class="mt-1 text-muted">No script content defined</p>'
+                            }
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Schedule configuration
+        const schedule = config.schedule || {};
+        if (schedule.type) {
+            configHTML += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Schedule Configuration</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr><th width="30%">Type:</th><td><span class="badge bg-primary">${schedule.type.toUpperCase()}</span></td></tr>
+                            <tr><th>Timezone:</th><td><code>${schedule.timezone || 'UTC'}</code></td></tr>
+            `;
+            
+            if (schedule.type === 'cron') {
+                configHTML += `<tr><th>Cron Expression:</th><td><code>${schedule.cron}</code></td></tr>`;
+            } else if (schedule.type === 'interval') {
+                const interval = schedule.interval || {};
+                configHTML += `
+                    <tr><th>Interval:</th><td>${interval.days || 0}d ${interval.hours || 0}h ${interval.minutes || 0}m ${interval.seconds || 0}s</td></tr>
+                `;
+            } else if (schedule.type === 'date') {
+                configHTML += `<tr><th>Run Date:</th><td>${schedule.run_date}</td></tr>`;
+            }
+            
+            configHTML += `
+                        </table>
+                    </div>
+                </div>
+            `;
+        } else {
+            configHTML += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Schedule Configuration</h6>
+                    </div>
+                    <div class="card-body text-muted">
+                        No schedule configured (manual execution only)
+                    </div>
+                </div>
+            `;
+        }
+        
+        configHTML += `
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('jobConfigContent').innerHTML = configHTML;
+        document.getElementById('jobConfigModalLabel').innerHTML = 
+            `<i class="fas fa-cog me-2"></i>Configuration: ${job.name}`;
+    }
+
+    function displayConfigError(message) {
+        document.getElementById('jobConfigContent').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                ${message}
+            </div>
+        `;
+    }
+
+    function exportJobConfiguration() {
+        if (!currentJobConfigData) {
+            alert('No configuration data to export');
+            return;
+        }
+        
+        const exportData = {
+            job_name: currentJobConfigData.name,
+            job_id: currentJobConfigData.job_id,
+            job_type: currentJobConfigData.job_type,
+            configuration: currentJobConfigData.configuration,
+            exported_at: new Date().toISOString(),
+            exported_by: 'Job Scheduler Web UI'
+        };
+        
+        const jsonContent = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `job_config_${currentJobConfigData.name.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+        a.click();
+        window.URL.revokeObjectURL(url);
     }
 </script>
 {% endblock %}
