@@ -9,9 +9,9 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <div>
                     <h4 class="mb-0">
-                        <i class="fas fa-history me-2"></i>Job Execution History & UTC Precision
+                        <i class="fas fa-history me-2"></i>Job Execution History
                     </h4>
-                    <small class="text-muted">Complete execution history with UTC timing and scheduling precision analysis</small>
+                    <small class="text-muted">Complete execution history with detailed timing information</small>
                 </div>
                 <div class="d-flex gap-2">
                     <button class="btn btn-outline-primary btn-sm" onclick="refreshHistory()">
@@ -96,22 +96,6 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-lg-2 col-md-4 col-sm-6">
-                        <div class="card bg-light">
-                            <div class="card-body text-center">
-                                <div class="metric-number text-success" id="utcPrecision">-</div>
-                                <div class="metric-label">UTC Precision</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-lg-2 col-md-4 col-sm-6">
-                        <div class="card bg-light">
-                            <div class="card-body text-center">
-                                <div class="metric-number text-warning" id="avgDelay">-</div>
-                                <div class="metric-label">Avg Delay</div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- History Table -->
@@ -120,7 +104,7 @@
                         <thead class="table-dark">
                             <tr>
                                 <th onclick="sortTable('start_time')" style="cursor: pointer;">
-                                    <i class="fas fa-clock me-1"></i>UTC Execution Time
+                                    <i class="fas fa-clock me-1"></i>Execution Time
                                     <i class="fas fa-sort ms-1"></i>
                                 </th>
                                 <th onclick="sortTable('job_name')" style="cursor: pointer;">
@@ -137,10 +121,6 @@
                                 </th>
                                 <th onclick="sortTable('duration_seconds')" style="cursor: pointer;">
                                     <i class="fas fa-stopwatch me-1"></i>Duration
-                                </th>
-                                <th onclick="sortTable('precision')" style="cursor: pointer;">
-                                    <i class="fas fa-target me-1"></i>UTC Precision
-                                    <i class="fas fa-sort ms-1"></i>
                                 </th>
                                 <th>
                                     <i class="fas fa-info-circle me-1"></i>Details
@@ -479,7 +459,7 @@
             return `
                 <tr class="execution-row">
                     <td>
-                        <div>${startTime.toLocaleString()} <span class="badge bg-info">UTC</span></div>
+                        <div>${startTime.toLocaleString()}</div>
                         <small class="text-muted">${getRelativeTime(startTime)}</small>
                     </td>
                     <td>
@@ -497,9 +477,6 @@
                     </td>
                     <td>
                         <span class="duration-badge">${duration}</span>
-                    </td>
-                    <td>
-                        ${getUTCPrecisionBadge(execution)}
                     </td>
                     <td>
                         <button class="btn btn-outline-info btn-sm" onclick="showExecutionDetails(${execution.execution_id})"
@@ -595,34 +572,10 @@
         const avgDuration = durations.length > 0 ? 
             durations.reduce((sum, d) => sum + d, 0) / durations.length : 0;
 
-        // Calculate UTC precision statistics
-        const precisionData = allExecutions.map(e => {
-            const metadata = JSON.parse(e.metadata || '{}');
-            if (metadata.utc_timing && metadata.utc_timing.delay_milliseconds !== undefined) {
-                return Math.abs(metadata.utc_timing.delay_milliseconds);
-            }
-            // Fallback estimation
-            if (e.start_time) {
-                const startTime = new Date(e.start_time);
-                return startTime.getMilliseconds() + (startTime.getSeconds() * 1000);
-            }
-            return null;
-        }).filter(delay => delay !== null);
-
-        const precisionsWithin5s = precisionData.filter(delay => delay <= 5000).length;
-        const utcPrecisionPercentage = precisionData.length > 0 ? 
-            (precisionsWithin5s / precisionData.length) * 100 : 0;
-        
-        const avgDelay = precisionData.length > 0 ? 
-            precisionData.reduce((sum, d) => sum + d, 0) / precisionData.length : 0;
-
         document.getElementById('totalExecutions').textContent = total.toLocaleString();
         document.getElementById('successfulExecutions').textContent = successful.toLocaleString();
         document.getElementById('failedExecutions').textContent = failed.toLocaleString();
         document.getElementById('avgDuration').textContent = formatDuration(avgDuration);
-        document.getElementById('utcPrecision').textContent = `${utcPrecisionPercentage.toFixed(1)}%`;
-        document.getElementById('avgDelay').textContent = avgDelay >= 1000 ? 
-            `${(avgDelay/1000).toFixed(1)}s` : `${Math.round(avgDelay)}ms`;
     }
 
     // Show execution details modal
@@ -932,56 +885,6 @@
         return type === 'sql' ? 'fas fa-database' : 'fab fa-microsoft';
     }
 
-    function getUTCPrecisionBadge(execution) {
-        // Extract UTC timing information from metadata or calculate from execution data
-        const metadata = execution.metadata || {};
-        
-        // Check if we have detailed UTC timing information
-        if (metadata.utc_timing) {
-            const delay = metadata.utc_timing.delay_milliseconds || 0;
-            const delayAbs = Math.abs(delay);
-            
-            if (delayAbs <= 1000) { // Within 1 second
-                return `<span class="badge bg-success" title="Excellent precision">
-                    <i class="fas fa-bullseye me-1"></i>${delayAbs}ms
-                </span>`;
-            } else if (delayAbs <= 5000) { // Within 5 seconds
-                return `<span class="badge bg-warning" title="Good precision">
-                    <i class="fas fa-target me-1"></i>${delayAbs}ms
-                </span>`;
-            } else {
-                return `<span class="badge bg-danger" title="Poor precision">
-                    <i class="fas fa-exclamation-triangle me-1"></i>${delayAbs}ms
-                </span>`;
-            }
-        }
-        
-        // Fallback: Estimate precision based on execution timing patterns
-        if (execution.start_time) {
-            const startTime = new Date(execution.start_time);
-            const seconds = startTime.getSeconds();
-            const milliseconds = startTime.getMilliseconds();
-            
-            // If execution started very close to a round minute/second, likely good precision
-            if (seconds === 0 && milliseconds < 100) {
-                return `<span class="badge bg-success" title="Estimated excellent precision">
-                    <i class="fas fa-check me-1"></i>~${milliseconds}ms
-                </span>`;
-            } else if (seconds < 5 || seconds > 55) {
-                return `<span class="badge bg-info" title="Estimated good precision">
-                    <i class="fas fa-clock me-1"></i>~${seconds}s
-                </span>`;
-            } else {
-                return `<span class="badge bg-secondary" title="Precision unknown">
-                    <i class="fas fa-question me-1"></i>N/A
-                </span>`;
-            }
-        }
-        
-        return `<span class="badge bg-secondary">
-            <i class="fas fa-question me-1"></i>N/A
-        </span>`;
-    }
 
     function showLoading(show) {
         document.getElementById('historyLoading').style.display = show ? 'block' : 'none';

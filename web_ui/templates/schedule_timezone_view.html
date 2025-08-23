@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block title %}Next Scheduled Jobs - Timezone View - Windows Job Scheduler{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-globe-americas me-3 text-primary"></i>Next Scheduled Jobs - Timezone View</h2>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary" onclick="refreshScheduleData()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                    <label class="form-check-label" for="autoRefresh">Auto-refresh (30s)</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Time Display -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-clock me-2"></i>Current Time</h5>
+                        <div class="row" id="currentTimesDisplay">
+                            <!-- Current times will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading indicator -->
+        <div id="loadingIndicator" class="text-center my-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading scheduled jobs...</p>
+        </div>
+
+        <!-- Error display -->
+        <div id="errorMessage" class="alert alert-danger" style="display: none;">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <span id="errorText"></span>
+        </div>
+
+        <!-- No jobs message -->
+        <div id="noJobsMessage" class="alert alert-info" style="display: none;">
+            <i class="fas fa-info-circle me-2"></i>
+            No scheduled jobs found. <a href="{{ url_for('create_job') }}" class="alert-link">Create your first job</a>.
+        </div>
+
+        <!-- Scheduled Jobs Table -->
+        <div id="scheduledJobsContainer" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-alt me-2"></i>Scheduled Jobs 
+                        <span class="badge bg-primary" id="jobCount">0</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="width: 15%">Job Details</th>
+                                    <th style="width: 10%">Job Timezone</th>
+                                    <th style="width: 75%">Next Run Time in Different Timezones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scheduledJobsTable">
+                                <!-- Jobs will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h6><i class="fas fa-info-circle me-2"></i>Legend</h6>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <span class="badge bg-success me-1">●</span> Job's configured timezone
+                            </div>
+                            <div class="col-md-3">
+                                <span class="badge bg-secondary me-1">●</span> Other timezones
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted"><i class="fas fa-database me-1"></i> SQL Job</small>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted"><i class="fas fa-terminal me-1"></i> PowerShell Job</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .timezone-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.5rem;
+    }
+    
+    .timezone-item {
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.85rem;
+    }
+    
+    .timezone-item.job-timezone {
+        background-color: #28a745;
+        color: white;
+        font-weight: bold;
+    }
+    
+    .timezone-item.other-timezone {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .job-type-icon {
+        width: 20px;
+        text-align: center;
+    }
+    
+    .current-time-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.5rem;
+    }
+    
+    .current-time-item {
+        background: rgba(255, 255, 255, 0.2);
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        text-align: center;
+    }
+    
+    .refresh-indicator {
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let autoRefreshInterval;
+    let isRefreshing = false;
+    
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+        refreshScheduleData();
+        setupAutoRefresh();
+        updateCurrentTimes();
+        
+        // Update current times every second
+        setInterval(updateCurrentTimes, 1000);
+    });
+    
+    // Setup auto-refresh
+    function setupAutoRefresh() {
+        const autoRefreshCheckbox = document.getElementById('autoRefresh');
+        
+        autoRefreshCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
+        });
+        
+        // Start auto-refresh by default
+        if (autoRefreshCheckbox.checked) {
+            startAutoRefresh();
+        }
+    }
+    
+    function startAutoRefresh() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+        }
+        
+        autoRefreshInterval = setInterval(function() {
+            if (!isRefreshing) {
+                refreshScheduleData();
+            }
+        }, 30000); // 30 seconds
+    }
+    
+    function stopAutoRefresh() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }
+    
+    // Update current times display
+    function updateCurrentTimes() {
+        const timezones = [
+            { tz: 'UTC', name: 'UTC' },
+            { tz: 'America/New_York', name: 'Eastern' },
+            { tz: 'America/Los_Angeles', name: 'Pacific' },
+            { tz: 'Europe/London', name: 'London' },
+            { tz: 'Europe/Paris', name: 'Paris' },
+            { tz: 'Asia/Tokyo', name: 'Tokyo' },
+            { tz: 'Asia/Shanghai', name: 'Shanghai' }
+        ];
+        
+        const container = document.getElementById('currentTimesDisplay');
+        const now = new Date();
+        
+        let html = '<div class="current-time-grid">';
+        
+        timezones.forEach(timezone => {
+            try {
+                const timeString = now.toLocaleString('en-US', {
+                    timeZone: timezone.tz,
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+                
+                html += `
+                    <div class="current-time-item">
+                        <div class="fw-bold">${timezone.name}</div>
+                        <div class="small">${timeString}</div>
+                    </div>
+                `;
+            } catch (error) {
+                html += `
+                    <div class="current-time-item">
+                        <div class="fw-bold">${timezone.name}</div>
+                        <div class="small text-warning">Error</div>
+                    </div>
+                `;
+            }
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+    }
+    
+    // Refresh schedule data
+    function refreshScheduleData() {
+        if (isRefreshing) return;
+        
+        isRefreshing = true;
+        
+        // Show loading
+        document.getElementById('loadingIndicator').style.display = 'block';
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('noJobsMessage').style.display = 'none';
+        document.getElementById('scheduledJobsContainer').style.display = 'none';
+        
+        // Add refresh animation to button
+        const refreshBtn = document.querySelector('button[onclick="refreshScheduleData()"] i');
+        if (refreshBtn) {
+            refreshBtn.classList.add('refresh-indicator');
+        }
+        
+        fetch('/api/schedule-timezone-view')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayScheduleData(data);
+                } else {
+                    showError(data.error || 'Failed to load schedule data');
+                }
+            })
+            .catch(error => {
+                showError('Network error: ' + error.message);
+            })
+            .finally(() => {
+                isRefreshing = false;
+                document.getElementById('loadingIndicator').style.display = 'none';
+                
+                // Remove refresh animation
+                if (refreshBtn) {
+                    refreshBtn.classList.remove('refresh-indicator');
+                }
+            });
+    }
+    
+    // Display schedule data
+    function displayScheduleData(data) {
+        const jobSchedules = data.job_schedules || [];
+        
+        if (jobSchedules.length === 0) {
+            document.getElementById('noJobsMessage').style.display = 'block';
+            return;
+        }
+        
+        // Update job count
+        document.getElementById('jobCount').textContent = jobSchedules.length;
+        
+        // Build table rows
+        const tableBody = document.getElementById('scheduledJobsTable');
+        let html = '';
+        
+        jobSchedules.forEach(job => {
+            const jobTypeIcon = job.job_type === 'sql' ? 'fa-database' : 'fa-terminal';
+            const jobTypeColor = job.job_type === 'sql' ? 'text-info' : 'text-primary';
+            
+            html += `
+                <tr ${!job.enabled ? 'class="table-secondary"' : ''}>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <i class="fas ${jobTypeIcon} ${jobTypeColor} job-type-icon me-2"></i>
+                            <div>
+                                <div class="fw-bold">
+                                    <a href="/jobs/${job.job_id}" class="text-decoration-none">
+                                        ${escapeHtml(job.job_name)}
+                                    </a>
+                                    ${!job.enabled ? '<span class="badge bg-warning ms-1">Disabled</span>' : ''}
+                                </div>
+                                <div class="small text-muted">${job.job_type.toUpperCase()} • ${job.job_id}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge bg-success">${job.job_timezone}</span>
+                    </td>
+                    <td>
+                        <div class="timezone-grid">
+            `;
+            
+            job.timezone_times.forEach(tz => {
+                const badgeClass = tz.is_job_timezone ? 'job-timezone' : 'other-timezone';
+                html += `
+                    <div class="timezone-item ${badgeClass}">
+                        <div class="fw-bold">${tz.timezone_display}</div>
+                        <div class="small">${tz.time}</div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        tableBody.innerHTML = html;
+        document.getElementById('scheduledJobsContainer').style.display = 'block';
+    }
+    
+    // Show error message
+    function showError(message) {
+        document.getElementById('errorText').textContent = message;
+        document.getElementById('errorMessage').style.display = 'block';
+    }
+    
+    // Utility function to escape HTML
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        stopAutoRefresh();
+    });
+</script>
+{% endblock %}

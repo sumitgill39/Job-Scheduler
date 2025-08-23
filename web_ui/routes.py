@@ -168,6 +168,11 @@ def create_routes(app):
         """Timezone simulation page"""
         return render_template('timezone_simulator.html')
     
+    @app.route('/schedule-timezone-view')
+    def schedule_timezone_view():
+        """Next scheduled jobs across different timezones"""
+        return render_template('schedule_timezone_view.html')
+    
     @app.route('/cloud-infrastructure')
     def cloud_infrastructure_simulator():
         """Cloud infrastructure scheduler page"""
@@ -2144,6 +2149,105 @@ def create_routes(app):
             
         except Exception as e:
             logger.error(f"[API_UTC_PRECISION] Error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/schedule-timezone-view', methods=['GET'])
+    def api_schedule_timezone_view():
+        """API endpoint to get next scheduled jobs across different timezones"""
+        try:
+            # Get integrated scheduler
+            integrated_scheduler = getattr(app, 'integrated_scheduler', None)
+            if not integrated_scheduler:
+                logger.warning("[API_TIMEZONE_VIEW] Integrated scheduler not available")
+                return jsonify({'success': False, 'error': 'Scheduler not available'}), 503
+            
+            # Get all scheduled jobs
+            import pytz
+            from datetime import datetime
+            
+            # Define timezones to show
+            timezones_to_show = [
+                ('UTC', 'UTC'),
+                ('America/New_York', 'Eastern Time'),
+                ('America/Chicago', 'Central Time'),
+                ('America/Los_Angeles', 'Pacific Time'),
+                ('Europe/London', 'London Time'),
+                ('Europe/Paris', 'Central European Time'),
+                ('Europe/Berlin', 'Central European Time'),
+                ('Asia/Tokyo', 'Japan Time'),
+                ('Asia/Shanghai', 'China Time'),
+                ('Asia/Kolkata', 'India Time'),
+                ('Australia/Sydney', 'Australia Eastern Time')
+            ]
+            
+            # Get scheduled jobs from APScheduler
+            scheduled_jobs = integrated_scheduler.scheduler.get_jobs()
+            
+            # Process each job
+            job_schedules = []
+            for scheduled_job in scheduled_jobs:
+                if scheduled_job.next_run_time:
+                    # Get job details from database
+                    job_manager = getattr(app, 'job_manager', None)
+                    job_details = None
+                    job_timezone = 'UTC'
+                    
+                    if job_manager:
+                        job_config = job_manager.get_job(scheduled_job.id)
+                        if job_config:
+                            job_details = job_config
+                            # Extract timezone from job configuration
+                            configuration = job_config.get('configuration', {})
+                            schedule_config = configuration.get('schedule', {})
+                            job_timezone = schedule_config.get('timezone', 'UTC')
+                    
+                    # Convert next run time to different timezones
+                    timezone_times = []
+                    next_run_utc = scheduled_job.next_run_time
+                    
+                    for tz_name, tz_display in timezones_to_show:
+                        try:
+                            tz = pytz.timezone(tz_name)
+                            local_time = next_run_utc.astimezone(tz)
+                            
+                            timezone_times.append({
+                                'timezone': tz_name,
+                                'timezone_display': tz_display,
+                                'time': local_time.strftime('%Y-%m-%d %H:%M:%S %Z'),
+                                'is_job_timezone': (tz_name == job_timezone)
+                            })
+                        except Exception as e:
+                            logger.warning(f"[API_TIMEZONE_VIEW] Error converting to timezone {tz_name}: {e}")
+                            timezone_times.append({
+                                'timezone': tz_name,
+                                'timezone_display': tz_display,
+                                'time': 'Error',
+                                'is_job_timezone': False
+                            })
+                    
+                    job_schedules.append({
+                        'job_id': scheduled_job.id,
+                        'job_name': scheduled_job.name,
+                        'job_type': job_details.get('job_type', 'unknown') if job_details else 'unknown',
+                        'job_timezone': job_timezone,
+                        'next_run_utc': next_run_utc.strftime('%Y-%m-%d %H:%M:%S UTC'),
+                        'timezone_times': timezone_times,
+                        'enabled': job_details.get('enabled', True) if job_details else True
+                    })
+            
+            # Sort by next run time
+            job_schedules.sort(key=lambda x: x['next_run_utc'])
+            
+            return jsonify({
+                'success': True,
+                'job_schedules': job_schedules,
+                'timezones': timezones_to_show,
+                'total_scheduled_jobs': len(job_schedules),
+                'current_time_utc': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+            })
+            
+        except Exception as e:
+            logger.error(f"[API_TIMEZONE_VIEW] Error getting timezone schedules: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/admin/system-stats')
