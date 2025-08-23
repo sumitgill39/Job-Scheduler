@@ -265,8 +265,25 @@
             <div class="modal-body">
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle me-2"></i>
-                    This is the raw JSON configuration that will be exported. You can copy this directly or use the export button to download as a file.
+                    <span id="jsonFormatDescription">This shows the actual job configuration as stored in the database.</span>
+                    You can copy this directly or use the export button to download as a file.
                 </div>
+                
+                <!-- Format Toggle Buttons -->
+                <div class="d-flex justify-content-center mb-3">
+                    <div class="btn-group" role="group" aria-label="JSON Format Options">
+                        <input type="radio" class="btn-check" name="jsonFormat" id="rawFormat" checked onclick="switchJSONFormat('raw')">
+                        <label class="btn btn-outline-primary" for="rawFormat">
+                            <i class="fas fa-database me-1"></i>Raw Database Data
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="jsonFormat" id="enhancedFormat" onclick="switchJSONFormat('enhanced')">
+                        <label class="btn btn-outline-secondary" for="enhancedFormat">
+                            <i class="fas fa-magic me-1"></i>Enhanced Export Format
+                        </label>
+                    </div>
+                </div>
+                
                 <div class="position-relative">
                     <button type="button" class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2" 
                             onclick="copyJSONToClipboard()" 
@@ -281,8 +298,8 @@
                 <button type="button" class="btn btn-outline-success" onclick="copyJSONToClipboard()">
                     <i class="fas fa-copy me-1"></i>Copy JSON
                 </button>
-                <button type="button" class="btn btn-outline-secondary" onclick="exportFromPreview()">
-                    <i class="fas fa-download me-1"></i>Export as File
+                <button type="button" class="btn btn-outline-secondary" onclick="exportCurrentFormat()">
+                    <i class="fas fa-download me-1"></i><span id="exportButtonText">Export Raw Data</span>
                 </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
@@ -959,13 +976,28 @@
     }
 
     function previewJobConfigurationJSON() {
-        const exportData = generateExportData();
-        if (!exportData) {
+        if (!currentJobConfigData) {
             alert('No configuration data to preview');
             return;
         }
         
-        const jsonContent = JSON.stringify(exportData, null, 2);
+        // Show the raw database configuration data with enhanced export metadata
+        const rawDatabaseData = {
+            // Raw job data as stored in database
+            database_configuration: currentJobConfigData,
+            
+            // Enhanced export metadata (only metadata, not transforming the actual data)
+            export_metadata: {
+                exported_at: new Date().toISOString(),
+                exported_by: 'Job Scheduler Web UI',
+                export_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                export_version: '1.1',
+                data_source: 'direct_database_fetch',
+                note: 'This shows the actual configuration as stored in the database'
+            }
+        };
+        
+        const jsonContent = JSON.stringify(rawDatabaseData, null, 2);
         
         // Update modal content
         const previewElement = document.getElementById('jsonPreviewContent');
@@ -974,7 +1006,7 @@
         
         // Update modal title
         document.getElementById('jsonPreviewModalLabel').innerHTML = 
-            `<i class="fas fa-code me-2"></i>JSON Preview: ${exportData.job_name}`;
+            `<i class="fas fa-code me-2"></i>Raw Database JSON: ${currentJobConfigData.name}`;
         
         // Show preview modal
         const previewModal = new bootstrap.Modal(document.getElementById('jsonPreviewModal'));
@@ -1009,22 +1041,34 @@
     }
 
     function exportFromPreview() {
-        const exportData = generateExportData();
-        if (!exportData) {
+        if (!currentJobConfigData) {
             alert('No configuration data to export');
             return;
         }
         
-        const jsonContent = JSON.stringify(exportData, null, 2);
+        // Export the same raw database data that's being previewed
+        const rawDatabaseData = {
+            database_configuration: currentJobConfigData,
+            export_metadata: {
+                exported_at: new Date().toISOString(),
+                exported_by: 'Job Scheduler Web UI',
+                export_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                export_version: '1.1',
+                data_source: 'direct_database_fetch',
+                note: 'This shows the actual configuration as stored in the database'
+            }
+        };
+        
+        const jsonContent = JSON.stringify(rawDatabaseData, null, 2);
         const blob = new Blob([jsonContent], { type: 'application/json' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `job_config_${exportData.job_name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = `job_database_config_${currentJobConfigData.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         window.URL.revokeObjectURL(url);
         
-        showSuccess('Job configuration exported from preview');
+        showSuccess('Raw database configuration exported');
         
         // Close the preview modal
         const previewModal = bootstrap.Modal.getInstance(document.getElementById('jsonPreviewModal'));
