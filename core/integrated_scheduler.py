@@ -5,6 +5,7 @@ Integrated Scheduler that bridges JobManager (database) and APScheduler
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import json
+import pytz
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -54,11 +55,11 @@ class IntegratedScheduler:
             'misfire_grace_time': 30  # Grace period for missed jobs
         }
         
+        # Don't set global timezone - let individual jobs use their configured timezones
         self.scheduler = BackgroundScheduler(
             jobstores=jobstores,
             executors=executors,
-            job_defaults=job_defaults,
-            timezone='UTC'
+            job_defaults=job_defaults
         )
         
         # Add event listeners
@@ -217,9 +218,28 @@ class IntegratedScheduler:
             }
     
     def _create_trigger(self, schedule_config: Dict[str, Any]):
-        """Create APScheduler trigger from schedule configuration"""
+        """Create APScheduler trigger from schedule configuration with precise timezone support"""
         try:
             schedule_type = schedule_config.get('type', '').lower()
+            timezone = schedule_config.get('timezone', 'UTC')
+            
+            self.logger.info(f"[INTEGRATED_SCHEDULER] Creating trigger for timezone: {timezone}")
+            
+            # Import timezone handling
+            import pytz
+            from pytz import timezone as pytz_timezone
+            
+            # Always create timezone object for precise scheduling
+            if timezone == 'UTC':
+                tz = pytz.UTC
+            else:
+                try:
+                    tz = pytz_timezone(timezone)
+                except pytz.exceptions.UnknownTimeZoneError:
+                    self.logger.error(f"[INTEGRATED_SCHEDULER] Unknown timezone: {timezone}, falling back to UTC")
+                    tz = pytz.UTC
+            
+            self.logger.info(f"[INTEGRATED_SCHEDULER] Using timezone object: {tz}")
             
             if schedule_type == 'cron':
                 cron_expr = schedule_config.get('cron', '')
@@ -227,36 +247,108 @@ class IntegratedScheduler:
                     # Parse cron expression (6 parts: second minute hour day month day_of_week)
                     parts = cron_expr.split()
                     if len(parts) == 6:
-                        return CronTrigger(
-                            second=parts[0],
-                            minute=parts[1], 
-                            hour=parts[2],
-                            day=parts[3],
-                            month=parts[4],
-                            day_of_week=parts[5]
-                        )
+                        trigger_kwargs = {
+                            'second': parts[0],
+                            'minute': parts[1], 
+                            'hour': parts[2],
+                            'day': parts[3],
+                            'month': parts[4],
+                            'day_of_week': parts[5],
+                            'timezone': tz  # Always set timezone for precise scheduling
+                        }
+                        
+                        self.logger.info(f"[INTEGRATED_SCHEDULER] Creating CronTrigger with args: {trigger_kwargs}")
+                        trigger = CronTrigger(**trigger_kwargs)
+                        
+                        # Log next run time for verification  
+                        from datetime import datetime
+                        current_time_in_tz = datetime.now(tz)
+                        next_run = trigger.get_next_fire_time(None, current_time_in_tz)
+                        
+                        if next_run:
+                            # Convert to both timezone and UTC for logging
+                            next_run_local = next_run.astimezone(tz)
+                            next_run_utc = next_run.astimezone(pytz.UTC)
+                            
+                            self.logger.info(f"[INTEGRATED_SCHEDULER] Next run in {timezone}: {next_run_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                            self.logger.info(f"[INTEGRATED_SCHEDULER] Next run in UTC: {next_run_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                        else:
+                            self.logger.warning(f"[INTEGRATED_SCHEDULER] Could not calculate next run time for {timezone}")
+                        
+                        return trigger
                     else:
                         self.logger.error(f"[INTEGRATED_SCHEDULER] Invalid cron expression: {cron_expr} (expected 6 parts)")
                         return None
             
             elif schedule_type == 'interval':
                 interval_config = schedule_config.get('interval', {})
-                return IntervalTrigger(
-                    days=interval_config.get('days', 0),
-                    hours=interval_config.get('hours', 0),
-                    minutes=interval_config.get('minutes', 0),
-                    seconds=interval_config.get('seconds', 0)
-                )
+                trigger_kwargs = {
+                    'days': interval_config.get('days', 0),
+                    'hours': interval_config.get('hours', 0),
+                    'minutes': interval_config.get('minutes', 0),
+                    'seconds': interval_config.get('seconds', 0),
+                    'timezone': tz  # Always set timezone
+                }
+                
+                self.logger.info(f"[INTEGRATED_SCHEDULER] Creating IntervalTrigger with args: {trigger_kwargs}")
+                trigger = IntervalTrigger(**trigger_kwargs)
+                
+                # Log next run time for verification
+                current_time_in_tz = datetime.now(tz)
+                next_run = trigger.get_next_fire_time(None, current_time_in_tz)
+                
+                if next_run:
+                    next_run_local = next_run.astimezone(tz)
+                    next_run_utc = next_run.astimezone(pytz.UTC)
+                    
+                    self.logger.info(f"[INTEGRATED_SCHEDULER] Interval next run in {timezone}: {next_run_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                    self.logger.info(f"[INTEGRATED_SCHEDULER] Interval next run in UTC: {next_run_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                else:
+                    self.logger.warning(f"[INTEGRATED_SCHEDULER] Could not calculate interval next run time for {timezone}")
+                
+                return trigger
             
             elif schedule_type == 'date' or schedule_type == 'once':
                 run_date = schedule_config.get('run_date')
                 if isinstance(run_date, str):
-                    run_date = datetime.fromisoformat(run_date)
+                    # Parse datetime and handle timezone
+                    if run_date.endswith('Z'):
+                        # UTC format
+                        dt = datetime.fromisoformat(run_date.replace('Z', '+00:00'))
+                        # Convert to target timezone if needed
+                        if timezone != 'UTC':
+                            dt = dt.replace(tzinfo=pytz.UTC).astimezone(tz)
+                    else:
+                        dt = datetime.fromisoformat(run_date)
+                        # If no timezone info, assume it's in the target timezone
+                        if dt.tzinfo is None:
+                            dt = tz.localize(dt)
+                    
+                    run_date = dt
+                    
                 elif not isinstance(run_date, datetime):
                     self.logger.error(f"[INTEGRATED_SCHEDULER] Invalid run_date format: {run_date}")
                     return None
                 
-                return DateTrigger(run_date=run_date)
+                trigger_kwargs = {
+                    'run_date': run_date,
+                    'timezone': tz  # Always set timezone
+                }
+                
+                self.logger.info(f"[INTEGRATED_SCHEDULER] Creating DateTrigger with args: {trigger_kwargs}")
+                trigger = DateTrigger(**trigger_kwargs)
+                
+                # Log scheduled time for verification
+                if run_date.tzinfo:
+                    run_date_local = run_date.astimezone(tz)
+                    run_date_utc = run_date.astimezone(pytz.UTC)
+                    
+                    self.logger.info(f"[INTEGRATED_SCHEDULER] One-time execution in {timezone}: {run_date_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                    self.logger.info(f"[INTEGRATED_SCHEDULER] One-time execution in UTC: {run_date_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                else:
+                    self.logger.info(f"[INTEGRATED_SCHEDULER] One-time execution scheduled (no timezone info): {run_date}")
+                
+                return trigger
             
             else:
                 self.logger.error(f"[INTEGRATED_SCHEDULER] Unknown schedule type: {schedule_type}")
@@ -264,18 +356,46 @@ class IntegratedScheduler:
                 
         except Exception as e:
             self.logger.error(f"[INTEGRATED_SCHEDULER] Error creating trigger: {e}")
+            import traceback
+            self.logger.error(f"[INTEGRATED_SCHEDULER] Trigger creation traceback: {traceback.format_exc()}")
             return None
     
     def _execute_scheduled_job(self, job_id: str):
-        """Execute a scheduled job using JobExecutor"""
+        """Execute a scheduled job using JobExecutor with timezone logging"""
         try:
+            # Get job configuration to determine timezone
+            job_config = self.job_manager.get_job(job_id)
+            job_timezone = 'UTC'  # Default
+            
+            if job_config:
+                configuration = job_config.get('configuration', {})
+                schedule_config = configuration.get('schedule', {})
+                job_timezone = schedule_config.get('timezone', 'UTC')
+            
+            # Log timezone execution details
+            import pytz
+            from datetime import datetime
+            
+            if job_timezone == 'UTC':
+                tz = pytz.UTC
+            else:
+                try:
+                    tz = pytz.timezone(job_timezone)
+                except:
+                    tz = pytz.UTC
+                    job_timezone = 'UTC'
+            
+            current_time = datetime.now(tz)
+            
             self.logger.info(f"[INTEGRATED_SCHEDULER] Executing scheduled job: {job_id}")
+            self.logger.info(f"[INTEGRATED_SCHEDULER] Job timezone: {job_timezone}")
+            self.logger.info(f"[INTEGRATED_SCHEDULER] Current time in {job_timezone}: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             
             # Use JobExecutor to run the job
             result = self.job_executor.execute_job(job_id)
             
             if result['success']:
-                self.logger.info(f"[INTEGRATED_SCHEDULER] Scheduled job {job_id} completed with status: {result['status']}")
+                self.logger.info(f"[INTEGRATED_SCHEDULER] Scheduled job {job_id} completed with status: {result['status']} in timezone {job_timezone}")
             else:
                 self.logger.error(f"[INTEGRATED_SCHEDULER] Scheduled job {job_id} failed: {result['error']}")
                 
