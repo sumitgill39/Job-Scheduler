@@ -164,12 +164,6 @@
                                         <i class="fas fa-edit"></i>
                                     </button>
                                     
-                                    <a href="{{ url_for('job_details', job_id=job.id) }}" 
-                                       class="btn btn-sm btn-outline-info btn-action"
-                                       data-bs-toggle="tooltip" title="View Details">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    
                                     <button type="button" class="btn btn-sm btn-outline-success btn-action" 
                                             onclick="viewJobConfiguration('{{ job.id }}')" 
                                             data-bs-toggle="tooltip" title="View Configuration">
@@ -246,8 +240,49 @@
                 </div>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-outline-info" onclick="previewJobConfigurationJSON()">
+                    <i class="fas fa-eye me-1"></i>Preview JSON
+                </button>
                 <button type="button" class="btn btn-outline-secondary" onclick="exportJobConfiguration()">
                     <i class="fas fa-download me-1"></i>Export Config
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JSON Preview Modal -->
+<div class="modal fade" id="jsonPreviewModal" tabindex="-1" aria-labelledby="jsonPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="jsonPreviewModalLabel">
+                    <i class="fas fa-code me-2"></i>Job Configuration JSON Preview
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    This is the raw JSON configuration that will be exported. You can copy this directly or use the export button to download as a file.
+                </div>
+                <div class="position-relative">
+                    <button type="button" class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2" 
+                            onclick="copyJSONToClipboard()" 
+                            data-bs-toggle="tooltip" 
+                            title="Copy to Clipboard">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                    <pre id="jsonPreviewContent" class="bg-dark text-light p-3 rounded" style="max-height: 600px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;"><code></code></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-success" onclick="copyJSONToClipboard()">
+                    <i class="fas fa-copy me-1"></i>Copy JSON
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="exportFromPreview()">
+                    <i class="fas fa-download me-1"></i>Export as File
                 </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
@@ -805,29 +840,197 @@
         `;
     }
 
-    function exportJobConfiguration() {
+    function generateExportData() {
         if (!currentJobConfigData) {
-            alert('No configuration data to export');
-            return;
+            return null;
         }
         
+        const config = currentJobConfigData.configuration || {};
+        const schedule = config.schedule || {};
+        
+        // Enhanced export data with comprehensive timezone information
         const exportData = {
             job_name: currentJobConfigData.name,
             job_id: currentJobConfigData.job_id,
             job_type: currentJobConfigData.job_type,
-            configuration: currentJobConfigData.configuration,
-            exported_at: new Date().toISOString(),
-            exported_by: 'Job Scheduler Web UI'
+            description: currentJobConfigData.description || '',
+            enabled: currentJobConfigData.enabled,
+            
+            // Basic job settings
+            basic_settings: {
+                timeout: config.basic?.timeout || 300,
+                max_retries: config.basic?.max_retries || 3,
+                retry_delay: config.basic?.retry_delay || 60,
+                run_as: config.basic?.run_as || null
+            },
+            
+            // Enhanced schedule configuration with timezone details
+            schedule_configuration: {
+                type: schedule.type || null,
+                timezone: schedule.timezone || 'UTC',
+                timezone_info: {
+                    is_utc: (schedule.timezone || 'UTC') === 'UTC',
+                    display_name: schedule.timezone || 'UTC',
+                    has_dst: schedule.timezone && schedule.timezone !== 'UTC' ? 'potentially' : false
+                },
+                
+                // Schedule-specific details
+                ...(schedule.type === 'cron' ? {
+                    cron_expression: schedule.cron || '',
+                    cron_format: '6-part (second minute hour day month day_of_week)'
+                } : {}),
+                
+                ...(schedule.type === 'interval' ? {
+                    interval_details: schedule.interval || {},
+                    interval_total_seconds: calculateIntervalSeconds(schedule.interval || {})
+                } : {}),
+                
+                ...(schedule.type === 'date' ? {
+                    run_date: schedule.run_date || '',
+                    is_one_time: true
+                } : {})
+            },
+            
+            // Job-type specific configuration
+            job_specific_configuration: (() => {
+                if (currentJobConfigData.job_type === 'sql') {
+                    const sqlConfig = config.sql || {};
+                    return {
+                        type: 'sql',
+                        connection_name: sqlConfig.connection_name || 'default',
+                        query_timeout: sqlConfig.query_timeout || 300,
+                        max_rows: sqlConfig.max_rows || 1000,
+                        query: sqlConfig.query || ''
+                    };
+                } else if (currentJobConfigData.job_type === 'powershell') {
+                    const psConfig = config.powershell || {};
+                    return {
+                        type: 'powershell',
+                        execution_policy: psConfig.execution_policy || 'RemoteSigned',
+                        working_directory: psConfig.working_directory || null,
+                        parameters: psConfig.parameters || [],
+                        script_content: psConfig.script_content || null,
+                        script_path: psConfig.script_path || null
+                    };
+                }
+                return { type: 'unknown' };
+            })(),
+            
+            // Export metadata
+            export_metadata: {
+                exported_at: new Date().toISOString(),
+                exported_by: 'Job Scheduler Web UI',
+                export_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                export_version: '1.1',
+                includes_timezone_info: true,
+                schema_description: 'Enhanced job configuration export with complete timezone information'
+            }
         };
+        
+        return exportData;
+    }
+
+    function calculateIntervalSeconds(interval) {
+        const days = interval.days || 0;
+        const hours = interval.hours || 0;
+        const minutes = interval.minutes || 0;
+        const seconds = interval.seconds || 0;
+        
+        return (days * 24 * 60 * 60) + (hours * 60 * 60) + (minutes * 60) + seconds;
+    }
+
+    function exportJobConfiguration() {
+        const exportData = generateExportData();
+        if (!exportData) {
+            alert('No configuration data to export');
+            return;
+        }
         
         const jsonContent = JSON.stringify(exportData, null, 2);
         const blob = new Blob([jsonContent], { type: 'application/json' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `job_config_${currentJobConfigData.name.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+        a.download = `job_config_${exportData.job_name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         window.URL.revokeObjectURL(url);
+        
+        showSuccess('Job configuration exported successfully with timezone information');
+    }
+
+    function previewJobConfigurationJSON() {
+        const exportData = generateExportData();
+        if (!exportData) {
+            alert('No configuration data to preview');
+            return;
+        }
+        
+        const jsonContent = JSON.stringify(exportData, null, 2);
+        
+        // Update modal content
+        const previewElement = document.getElementById('jsonPreviewContent');
+        const codeElement = previewElement.querySelector('code');
+        codeElement.textContent = jsonContent;
+        
+        // Update modal title
+        document.getElementById('jsonPreviewModalLabel').innerHTML = 
+            `<i class="fas fa-code me-2"></i>JSON Preview: ${exportData.job_name}`;
+        
+        // Show preview modal
+        const previewModal = new bootstrap.Modal(document.getElementById('jsonPreviewModal'));
+        previewModal.show();
+    }
+
+    function copyJSONToClipboard() {
+        const jsonContent = document.getElementById('jsonPreviewContent').querySelector('code').textContent;
+        
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(jsonContent).then(() => {
+                showSuccess('JSON configuration copied to clipboard');
+            }).catch(err => {
+                console.error('Failed to copy to clipboard:', err);
+                showError('Failed to copy to clipboard');
+            });
+        } else {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = jsonContent;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showSuccess('JSON configuration copied to clipboard');
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+                showError('Failed to copy to clipboard');
+            }
+            document.body.removeChild(textArea);
+        }
+    }
+
+    function exportFromPreview() {
+        const exportData = generateExportData();
+        if (!exportData) {
+            alert('No configuration data to export');
+            return;
+        }
+        
+        const jsonContent = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `job_config_${exportData.job_name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        
+        showSuccess('Job configuration exported from preview');
+        
+        // Close the preview modal
+        const previewModal = bootstrap.Modal.getInstance(document.getElementById('jsonPreviewModal'));
+        if (previewModal) {
+            previewModal.hide();
+        }
     }
 </script>
 {% endblock %}
