@@ -1530,7 +1530,7 @@ def create_routes(app):
             server = data.get('server')
             port = data.get('port', 1433)
             database = data.get('database')
-            auth_type = data.get('auth_type', 'windows')
+            auth_type = data.get('auth_type', 'sql')  # Default to SQL Server authentication
             username = data.get('username')
             password = data.get('password')
             
