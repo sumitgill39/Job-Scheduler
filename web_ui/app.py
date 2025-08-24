@@ -41,13 +41,18 @@ def create_app(scheduler_manager=None):
             app.connection_pool = get_connection_pool()
             logger.info("✅ Connection pool created successfully")
             
-            # Test the connection pool immediately
+            # Test the connection pool immediately to force database logging
             logger.info("🔍 Testing connection pool...")
-            test_connection = app.connection_pool.get_connection("system")
-            if test_connection:
-                logger.info("✅ Connection pool test successful")
-            else:
-                logger.error("❌ Connection pool test failed - no connection returned")
+            try:
+                test_connection = app.connection_pool.get_connection("system")
+                if test_connection:
+                    logger.info("✅ Connection pool test successful")
+                else:
+                    logger.error("❌ Connection pool test failed - no connection returned")
+            except Exception as test_error:
+                logger.error(f"❌ Connection pool test error: {test_error}")
+                # This will trigger the detailed database logging we added
+                raise
         except Exception as pool_error:
             logger.error(f"💥 Connection pool creation/test failed: {pool_error}")
             import traceback

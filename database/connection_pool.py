@@ -24,7 +24,7 @@ class ConnectionPool:
     
     def __init__(self):
         if not self._initialized:
-            self.logger = get_logger(__name__)
+            self.logger = get_logger("database.connection_pool")
             self.db_manager = DatabaseConnectionManager()
             self._cleanup_thread = None
             self._stop_cleanup = False

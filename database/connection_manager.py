@@ -27,7 +27,7 @@ class DatabaseConnectionManager:
     
     def __init__(self, config_file: str = "config/database_config.yaml"):
         self.config_file = config_file
-        self.logger = get_logger(__name__)  # Initialize logger first
+        self.logger = get_logger("database.connection_manager")  # Use explicit name for better tracking
         
         if not HAS_PYODBC:
             self.logger.warning("[INIT] pyodbc not available - DatabaseConnectionManager will operate in mock mode")

@@ -138,11 +138,29 @@ def setup_logger(name: str = "JobScheduler", log_level: str = None) -> logging.L
 
 
 def get_logger(name: str = None) -> logging.Logger:
-    """Get logger instance"""
-    if name:
-        return logging.getLogger(name)
-    
+    """Get logger instance - ensures all loggers write to same file"""
     global _logger_instance
+    
+    # Ensure main logger is setup first
+    if _logger_instance is None:
+        _logger_instance = WindowsLogger("JobScheduler")
+        _logger_instance.setup_logger()
+    
+    if name:
+        # Create/get named logger
+        logger = logging.getLogger(name)
+        
+        # If this logger doesn't have handlers, inherit from main logger
+        if not logger.handlers:
+            logger.setLevel(_logger_instance.logger.level)
+            # Copy handlers from main logger to ensure same file output
+            for handler in _logger_instance.logger.handlers:
+                logger.addHandler(handler)
+            logger.propagate = False  # Prevent duplicate messages
+        
+        return logger
+    
+    # Return main logger
     if _logger_instance and _logger_instance.logger:
         return _logger_instance.logger
     
