@@ -1454,7 +1454,7 @@ def create_routes(app):
             if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
-            stats = pool.get_pool_stats()
+            stats = db_manager.get_pool_stats()
             
             logger.info(f"[POOL_STATS] Retrieved connection pool statistics: {stats['total_connections']} active connections")
             

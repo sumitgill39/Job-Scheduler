@@ -101,8 +101,8 @@ class JobSchedulerApp:
             # Determine storage type from config or default to YAML
             storage_type = "yaml"  # Can be configured later
             storage_config = {
-                "yaml_file": os.path.join("config", "jobs.yaml"),
-                "history_file": os.path.join("config", "job_history.yaml")
+                "yaml_file": str(Path("config") / "jobs.yaml"),
+                "history_file": str(Path("config") / "job_history.yaml")
             }
             
             self.logger.debug(f"📁 Storage type: {storage_type}")
@@ -405,16 +405,17 @@ def test_system_components():
         
         # Test database connections
         print("\n3. Testing database connections...")
-        from database.connection_manager import DatabaseConnectionManager
+        from database.simple_connection_manager import get_database_manager
         
-        db_manager = DatabaseConnectionManager()
-        test_results = db_manager.test_all_connections()
+        db_manager = get_database_manager()
+        test_result = db_manager.test_connection()
         
-        for conn_name, result in test_results.items():
-            status = "✓ SUCCESS" if result['success'] else "✗ FAILED"
-            print(f"   {conn_name}: {status}")
-            if not result['success']:
-                print(f"     Error: {result.get('error', 'Unknown error')}")
+        status = "✓ SUCCESS" if test_result['success'] else "✗ FAILED"
+        print(f"   system: {status}")
+        if not test_result['success']:
+            print(f"     Error: {test_result.get('error', 'Unknown error')}")
+        else:
+            print(f"     Response time: {test_result['response_time']:.2f}s")
         
         # Test job creation
         print("\n4. Testing job creation...")
