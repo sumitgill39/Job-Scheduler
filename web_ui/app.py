@@ -32,32 +32,31 @@ def create_app(scheduler_manager=None):
     logger.info("🔧 Initializing Flask application components...")
     try:
         logger.debug("📦 Importing database and scheduler modules...")
-        from database.connection_pool import get_connection_pool
+        from database.simple_connection_manager import get_database_manager
         from core.job_manager import JobManager
         from core.integrated_scheduler import IntegratedScheduler
         
-        logger.info("💾 Creating connection pool...")
+        logger.info("💾 Creating database manager...")
         try:
-            app.connection_pool = get_connection_pool()
-            logger.info("✅ Connection pool created successfully")
+            app.db_manager = get_database_manager()
+            logger.info("✅ Database manager created successfully")
             
-            # Test the connection pool immediately to force database logging
-            logger.info("🔍 Testing connection pool...")
-            try:
-                test_connection = app.connection_pool.get_connection("system")
-                if test_connection:
-                    logger.info("✅ Connection pool test successful")
-                else:
-                    logger.error("❌ Connection pool test failed - no connection returned")
-            except Exception as test_error:
-                logger.error(f"❌ Connection pool test error: {test_error}")
-                # This will trigger the detailed database logging we added
-                raise
-        except Exception as pool_error:
-            logger.error(f"💥 Connection pool creation/test failed: {pool_error}")
+            # Test the database connection immediately
+            logger.info("🔍 Testing database connection...")
+            test_result = app.db_manager.test_connection()
+            if test_result['success']:
+                logger.info(f"✅ Database test successful in {test_result['response_time']:.2f}s")
+                logger.info(f"✅ Server: {test_result.get('server_version', 'Unknown')}")
+            else:
+                logger.error(f"❌ Database test failed: {test_result['error']}")
+                # Continue anyway - let the app start but log the issue
+                
+        except Exception as db_error:
+            logger.error(f"💥 Database manager creation failed: {db_error}")
             import traceback
-            logger.error(f"🔍 Connection pool stack trace: {traceback.format_exc()}")
-            raise
+            logger.error(f"🔍 Database manager stack trace: {traceback.format_exc()}")
+            # Set to None so app can still start
+            app.db_manager = None
         
         logger.info("📋 Creating job manager...")
         app.job_manager = JobManager()
@@ -144,14 +143,14 @@ def create_app(scheduler_manager=None):
             logger.error(f"🔍 Stack trace: {traceback.format_exc()}")
         
         try:
-            if hasattr(app, 'connection_pool') and app.connection_pool:
-                logger.info("💾 Shutting down connection pool...")
-                app.connection_pool.shutdown()
-                logger.info("✅ Connection pool shut down successfully")
+            if hasattr(app, 'db_manager') and app.db_manager:
+                logger.info("💾 Shutting down database manager...")
+                app.db_manager.shutdown()
+                logger.info("✅ Database manager shut down successfully")
             else:
-                logger.debug("ℹ️  No connection pool to shutdown")
+                logger.debug("ℹ️  No database manager to shutdown")
         except Exception as e:
-            logger.error(f"💥 Error during connection pool shutdown: {e}")
+            logger.error(f"💥 Error during database manager shutdown: {e}")
             import traceback
             logger.error(f"🔍 Stack trace: {traceback.format_exc()}")
         

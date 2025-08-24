@@ -8,9 +8,9 @@ databases:
     server: "USDF11DB197CI1\\PRD_DB01"  # Named instance
     port: 3433  # Custom port
     database: "sreutil"  # Updated database name
-    trusted_connection: false  # Using SQL Server authentication (boolean, not string)
-    username: "svc-devops"  # SQL Server username (corrected spelling)
-    password: "Welcome@1234"  # SQL Server password
+    trusted_connection: false  # Using SQL Server authentication
+    username: "svc"            # Production SQL username
+    password: "SbuJL9FH&m8X7Q" # Production SQL password
     connection_timeout: 30
     command_timeout: 300
     description: "System database for storing user connections"
