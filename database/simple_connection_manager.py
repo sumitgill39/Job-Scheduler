@@ -74,10 +74,22 @@ class DatabaseConfig:
         self.logger.info(f"[DB_CONFIG] DB_ENCRYPT = {self.encrypt}")
         self.logger.info(f"[DB_CONFIG] DB_TRUST_SERVER_CERTIFICATE = {self.trust_server_certificate}")
         
-        # Critical authentication logging
+        # CRITICAL AUTHENTICATION CHECKPOINT
+        trusted_raw = os.getenv('DB_TRUSTED_CONNECTION', 'false')
+        self.logger.critical(f"[DB_CONFIG] 🚨 RAW DB_TRUSTED_CONNECTION VALUE: '{trusted_raw}'")
+        self.logger.critical(f"[DB_CONFIG] 🚨 BOOLEAN RESULT: {self.trusted_connection}")
+        
         if self.trusted_connection:
-            self.logger.warning("[DB_CONFIG] ⚠️  USING WINDOWS AUTHENTICATION (trusted_connection=True)")
-            self.logger.warning("[DB_CONFIG] ⚠️  Will use current Windows user credentials")
+            self.logger.error("[DB_CONFIG] ❌ CRITICAL ERROR: WINDOWS AUTHENTICATION DETECTED!")
+            self.logger.error("[DB_CONFIG] ❌ This will use local Windows user credentials!")
+            self.logger.error("[DB_CONFIG] ❌ Raw env value was: '{}'".format(trusted_raw))
+            
+            # Get current Windows user for comparison
+            import getpass
+            current_user = getpass.getuser()
+            self.logger.error(f"[DB_CONFIG] ❌ Current Windows user: {current_user}")
+            self.logger.error("[DB_CONFIG] ❌ CHECK YOUR .ENV FILE - DB_TRUSTED_CONNECTION SHOULD BE 'false'")
+            
         else:
             self.logger.info(f"[DB_CONFIG] ✅ USING SQL SERVER AUTHENTICATION")
             self.logger.info(f"[DB_CONFIG] ✅ Username: '{self.username}'")
@@ -143,13 +155,15 @@ class DatabaseConfig:
         # Authentication - CRITICAL LOGGING
         if self.trusted_connection:
             components.append("Trusted_Connection=yes")
-            self.logger.warning("[CONNECTION_STRING] ⚠️  AUTHENTICATION: Windows Authentication (Trusted_Connection=yes)")
-            self.logger.warning("[CONNECTION_STRING] ⚠️  Will use current Windows user credentials!")
+            self.logger.error("[CONNECTION_STRING] ❌❌❌ WINDOWS AUTHENTICATION DETECTED IN CONNECTION STRING! ❌❌❌")
+            self.logger.error("[CONNECTION_STRING] ❌ Adding: Trusted_Connection=yes")
+            self.logger.error("[CONNECTION_STRING] ❌ This WILL use Windows credentials!")
             
             # Get current Windows user for comparison
             import getpass
             current_user = getpass.getuser()
-            self.logger.warning(f"[CONNECTION_STRING] ⚠️  Current Windows user: {current_user}")
+            self.logger.error(f"[CONNECTION_STRING] ❌ Current Windows user: {current_user}")
+            self.logger.error("[CONNECTION_STRING] ❌ THIS IS THE SOURCE OF THE AUTHENTICATION ISSUE!")
             
         else:
             if self.username and self.password:
