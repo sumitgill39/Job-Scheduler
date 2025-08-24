@@ -9,7 +9,7 @@
         <button class="btn btn-outline-secondary me-2" onclick="refreshJobs()">
             <i class="fas fa-sync-alt me-1"></i>Refresh
         </button>
-        <button class="btn btn-outline-info me-2" onclick="toggleAutoRefresh()" title="Toggle auto-refresh (currently every 2 minutes)">
+        <button class="btn btn-outline-info me-2" onclick="toggleAutoRefresh()" title="Toggle auto-refresh (currently every 30 seconds)">
             <i class="fas fa-clock me-1"></i>Auto-Refresh
         </button>
         <button class="btn btn-outline-warning me-2" onclick="loadAllJobStatus()" title="Load execution status for all jobs">
@@ -639,13 +639,13 @@
         showError('Bulk operations not yet implemented');
     }
     
-    // Reduced auto-refresh to every 2 minutes and only if user is active
+    // Auto-refresh every 30 seconds when user is active
     let refreshInterval = setInterval(() => {
         if (!document.hidden && document.hasFocus()) {
             console.log('Auto-refreshing jobs list...');
             refreshJobs();
         }
-    }, 120000); // 2 minutes instead of 30 seconds
+    }, 30000); // 30 seconds
     
     // Stop auto-refresh when user leaves the page
     document.addEventListener('visibilitychange', function() {
@@ -665,8 +665,8 @@
                 if (!document.hidden && document.hasFocus()) {
                     refreshJobs();
                 }
-            }, 120000);
-            showSuccess('Auto-refresh enabled (every 2 minutes)');
+            }, 30000);
+            showSuccess('Auto-refresh enabled (every 30 seconds)');
         } else {
             clearInterval(refreshInterval);
             showSuccess('Auto-refresh disabled');

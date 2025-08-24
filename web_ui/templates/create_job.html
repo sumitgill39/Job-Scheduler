@@ -106,8 +106,8 @@
                                         <div class="col-md-6">
                                             <label for="customAuthType" class="form-label">Authentication</label>
                                             <select class="form-select" id="customAuthType">
-                                                <option value="windows" selected>Windows Authentication</option>
-                                                <option value="sql">SQL Server Authentication</option>
+                                                <option value="sql" selected>SQL Server Authentication</option>
+                                                <option value="windows">Windows Authentication</option>
                                             </select>
                                         </div>
                                     </div>
@@ -1256,6 +1256,32 @@
         
         // Update timezone info initially
         updateTimezoneInfo();
+        
+        // Initialize custom auth type handler
+        const customAuthType = document.getElementById('customAuthType');
+        const sqlAuthFields = document.getElementById('sqlAuthFields');
+        
+        // Handle auth type changes
+        if (customAuthType && sqlAuthFields) {
+            customAuthType.addEventListener('change', function() {
+                if (this.value === 'sql') {
+                    sqlAuthFields.style.display = 'block';
+                    document.getElementById('customUsername').required = true;
+                    document.getElementById('customPassword').required = true;
+                } else {
+                    sqlAuthFields.style.display = 'none';
+                    document.getElementById('customUsername').required = false;
+                    document.getElementById('customPassword').required = false;
+                }
+            });
+            
+            // Initialize SQL auth fields as visible (since SQL is now default)
+            if (customAuthType.value === 'sql') {
+                sqlAuthFields.style.display = 'block';
+                document.getElementById('customUsername').required = true;
+                document.getElementById('customPassword').required = true;
+            }
+        }
     });
 </script>
 {% endblock %}

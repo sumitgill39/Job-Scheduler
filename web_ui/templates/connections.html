@@ -185,8 +185,8 @@
                             <div class="mb-3">
                                 <label for="connAuth" class="form-label">Authentication</label>
                                 <select class="form-select" id="connAuth">
+                                    <option value="sql" selected>SQL Server Authentication</option>
                                     <option value="windows">Windows Authentication</option>
-                                    <option value="sql">SQL Server Authentication</option>
                                 </select>
                             </div>
                         </div>
@@ -857,6 +857,15 @@
         // Check system database status only once on page load for connections page
         checkSystemDatabaseStatus();
         loadConnections();
+        
+        // Initialize SQL authentication fields as visible (since SQL is now default)
+        const sqlAuthSection = document.getElementById('connSqlAuth');
+        const authSelect = document.getElementById('connAuth');
+        if (sqlAuthSection && authSelect && authSelect.value === 'sql') {
+            sqlAuthSection.style.display = 'block';
+            document.getElementById('connUsername').required = true;
+            document.getElementById('connPassword').required = true;
+        }
         
         // Don't auto-refresh system status - let user trigger it manually
         // The status check is expensive and should be on-demand

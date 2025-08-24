@@ -7,7 +7,7 @@ class ConnectionMonitor {
     constructor() {
         this.statusCache = new Map();
         this.lastCheck = null;
-        this.checkInterval = 5 * 60 * 1000; // 5 minutes
+        this.checkInterval = 30 * 1000; // 30 seconds
         this.isRunning = false;
         this.healthCheckUrl = '/api/system/database-status';
     }

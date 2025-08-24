@@ -310,9 +310,58 @@
         }
     }
     
-    // Auto-refresh dashboard every 60 seconds
+    // Refresh dashboard status (without full page reload)
+    function refreshStatus() {
+        console.log('Refreshing dashboard status...');
+        
+        // Update database connection status
+        if (window.connectionMonitor) {
+            window.connectionMonitor.forceCheck();
+        }
+        
+        // Refresh job counts and recent jobs
+        fetch('/api/dashboard/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update job counts if elements exist
+                    if (data.job_counts) {
+                        updateElement('total-jobs', data.job_counts.total || '0');
+                        updateElement('active-jobs', data.job_counts.active || '0');
+                        updateElement('recent-executions', data.job_counts.recent_executions || '0');
+                    }
+                    
+                    // Update system status
+                    if (data.system_status) {
+                        updateElement('system-status', data.system_status.status || 'Unknown');
+                    }
+                    
+                    console.log('Dashboard status refreshed successfully');
+                } else {
+                    console.warn('Failed to refresh dashboard status:', data.error);
+                }
+            })
+            .catch(error => {
+                console.warn('Error refreshing dashboard status:', error);
+            });
+    }
+    
+    // Helper function to update element content
+    function updateElement(id, content) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = content;
+        }
+    }
+    
+    // Auto-refresh dashboard every 30 seconds
     setInterval(() => {
         refreshStatus();
-    }, 60000);
+    }, 30000);
+    
+    // Initial status refresh after page load
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(refreshStatus, 2000);
+    });
 </script>
 {% endblock %}
