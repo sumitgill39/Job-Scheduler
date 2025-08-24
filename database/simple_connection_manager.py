@@ -35,6 +35,20 @@ class DatabaseConfig:
     """Database configuration loaded from environment variables"""
     
     def __init__(self):
+        from utils.logger import get_logger
+        self.logger = get_logger(__name__)
+        
+        # Log the .env file location and existence
+        env_path = Path(__file__).parent.parent / '.env'
+        self.logger.info(f"[DB_CONFIG] Looking for .env file at: {env_path}")
+        self.logger.info(f"[DB_CONFIG] .env file exists: {env_path.exists()}")
+        
+        if env_path.exists():
+            self.logger.info(f"[DB_CONFIG] .env file size: {env_path.stat().st_size} bytes")
+        
+        # Load configuration with detailed logging
+        self.logger.info("[DB_CONFIG] Loading database configuration from environment variables...")
+        
         self.driver = os.getenv('DB_DRIVER', 'ODBC Driver 17 for SQL Server')
         self.server = os.getenv('DB_SERVER', 'localhost')
         self.port = int(os.getenv('DB_PORT', '1433'))
@@ -46,6 +60,42 @@ class DatabaseConfig:
         self.command_timeout = int(os.getenv('DB_COMMAND_TIMEOUT', '300'))
         self.encrypt = os.getenv('DB_ENCRYPT', 'false').lower() == 'true'
         self.trust_server_certificate = os.getenv('DB_TRUST_SERVER_CERTIFICATE', 'true').lower() == 'true'
+        
+        # Log all configuration values (mask password)
+        self.logger.info("[DB_CONFIG] ===== DATABASE CONFIGURATION LOADED =====")
+        self.logger.info(f"[DB_CONFIG] Config source: Environment variables (.env file)")
+        self.logger.info(f"[DB_CONFIG] DB_DRIVER = '{self.driver}'")
+        self.logger.info(f"[DB_CONFIG] DB_SERVER = '{self.server}'")
+        self.logger.info(f"[DB_CONFIG] DB_PORT = {self.port}")
+        self.logger.info(f"[DB_CONFIG] DB_DATABASE = '{self.database}'")
+        self.logger.info(f"[DB_CONFIG] DB_USERNAME = '{self.username}'")
+        self.logger.info(f"[DB_CONFIG] DB_PASSWORD = {'*' * len(self.password) if self.password else '(empty)'}")
+        self.logger.info(f"[DB_CONFIG] DB_TRUSTED_CONNECTION = {self.trusted_connection}")
+        self.logger.info(f"[DB_CONFIG] DB_ENCRYPT = {self.encrypt}")
+        self.logger.info(f"[DB_CONFIG] DB_TRUST_SERVER_CERTIFICATE = {self.trust_server_certificate}")
+        
+        # Critical authentication logging
+        if self.trusted_connection:
+            self.logger.warning("[DB_CONFIG] ⚠️  USING WINDOWS AUTHENTICATION (trusted_connection=True)")
+            self.logger.warning("[DB_CONFIG] ⚠️  Will use current Windows user credentials")
+        else:
+            self.logger.info(f"[DB_CONFIG] ✅ USING SQL SERVER AUTHENTICATION")
+            self.logger.info(f"[DB_CONFIG] ✅ Username: '{self.username}'")
+            if not self.username:
+                self.logger.error("[DB_CONFIG] ❌ ERROR: SQL Server auth requested but no username provided!")
+            if not self.password:
+                self.logger.error("[DB_CONFIG] ❌ ERROR: SQL Server auth requested but no password provided!")
+        
+        self.logger.info("[DB_CONFIG] ===== END CONFIGURATION =====")
+        
+        # Log raw environment variables for debugging
+        self.logger.debug("[DB_CONFIG] Raw environment variables:")
+        for key in os.environ:
+            if key.startswith('DB_'):
+                value = os.environ[key]
+                if 'PASSWORD' in key:
+                    value = '*' * len(value) if value else '(empty)'
+                self.logger.debug(f"[DB_CONFIG]   {key} = '{value}'")
         
         # Pool settings
         self.pool_max_connections = int(os.getenv('DB_POOL_MAX_CONNECTIONS', '10'))
@@ -59,6 +109,8 @@ class DatabaseConfig:
     
     def build_connection_string(self) -> str:
         """Build connection string from configuration"""
+        self.logger.info("[CONNECTION_STRING] Building database connection string...")
+        
         components = [
             f"DRIVER={{{self.driver}}}",
         ]
@@ -66,28 +118,50 @@ class DatabaseConfig:
         # Handle server with optional port and named instances
         if '\\' in self.server and self.port != 1433:
             # Named instance with custom port
-            components.append(f"SERVER={self.server},{self.port}")
+            server_component = f"SERVER={self.server},{self.port}"
+            components.append(server_component)
+            self.logger.info(f"[CONNECTION_STRING] Server: Named instance with custom port: {server_component}")
         elif '\\' in self.server:
             # Named instance with default port
-            components.append(f"SERVER={self.server}")
+            server_component = f"SERVER={self.server}"
+            components.append(server_component)
+            self.logger.info(f"[CONNECTION_STRING] Server: Named instance with default port: {server_component}")
         elif self.port != 1433:
             # Standard server with custom port
-            components.append(f"SERVER={self.server},{self.port}")
+            server_component = f"SERVER={self.server},{self.port}"
+            components.append(server_component)
+            self.logger.info(f"[CONNECTION_STRING] Server: Standard server with custom port: {server_component}")
         else:
             # Standard server with default port
-            components.append(f"SERVER={self.server}")
+            server_component = f"SERVER={self.server}"
+            components.append(server_component)
+            self.logger.info(f"[CONNECTION_STRING] Server: Standard server with default port: {server_component}")
         
         components.append(f"DATABASE={self.database}")
+        self.logger.info(f"[CONNECTION_STRING] Database: {self.database}")
         
-        # Authentication
+        # Authentication - CRITICAL LOGGING
         if self.trusted_connection:
             components.append("Trusted_Connection=yes")
+            self.logger.warning("[CONNECTION_STRING] ⚠️  AUTHENTICATION: Windows Authentication (Trusted_Connection=yes)")
+            self.logger.warning("[CONNECTION_STRING] ⚠️  Will use current Windows user credentials!")
+            
+            # Get current Windows user for comparison
+            import getpass
+            current_user = getpass.getuser()
+            self.logger.warning(f"[CONNECTION_STRING] ⚠️  Current Windows user: {current_user}")
+            
         else:
             if self.username and self.password:
                 components.append(f"UID={self.username}")
                 components.append(f"PWD={self.password}")
+                self.logger.info(f"[CONNECTION_STRING] ✅ AUTHENTICATION: SQL Server Authentication")
+                self.logger.info(f"[CONNECTION_STRING] ✅ SQL Username: {self.username}")
+                self.logger.info(f"[CONNECTION_STRING] ✅ SQL Password: {'*' * len(self.password)}")
             else:
-                raise ValueError("Username and password required for SQL Server authentication")
+                error_msg = "Username and password required for SQL Server authentication"
+                self.logger.error(f"[CONNECTION_STRING] ❌ ERROR: {error_msg}")
+                raise ValueError(error_msg)
         
         # Additional settings
         components.extend([
@@ -98,7 +172,19 @@ class DatabaseConfig:
             "MARS_Connection=yes"
         ])
         
-        return ";".join(components)
+        connection_string = ";".join(components)
+        
+        # Log the final connection string (with password masked)
+        safe_conn_str = connection_string
+        if 'PWD=' in safe_conn_str:
+            import re
+            safe_conn_str = re.sub(r'PWD=[^;]*', 'PWD=***', safe_conn_str)
+        
+        self.logger.info(f"[CONNECTION_STRING] ===== FINAL CONNECTION STRING =====")
+        self.logger.info(f"[CONNECTION_STRING] {safe_conn_str}")
+        self.logger.info(f"[CONNECTION_STRING] ===== END CONNECTION STRING =====")
+        
+        return connection_string
     
     def get_safe_connection_string(self) -> str:
         """Get connection string with masked password for logging"""

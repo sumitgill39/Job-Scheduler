@@ -160,8 +160,8 @@ class JobManager:
         try:
             system_connection = self.db_manager.get_connection()
             if not system_connection:
-                self.logger.error("[JOB_MANAGER] CRITICAL: System database connection failed - PowerShell jobs cannot be saved")
-                self.logger.error("[JOB_MANAGER] Check database configuration in config/database_config.yaml")
+                self.logger.error("[JOB_MANAGER] CRITICAL: System database connection failed - jobs cannot be saved")
+                self.logger.error("[JOB_MANAGER] Check database configuration in .env file")
                 self.logger.error("[JOB_MANAGER] Ensure SQL Server is accessible and pyodbc is installed")
                 return False
             
