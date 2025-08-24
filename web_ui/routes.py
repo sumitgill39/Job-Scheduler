@@ -910,7 +910,7 @@ def create_routes(app):
                 server=data.get('server'),
                 database=data.get('database'),
                 port=data.get('port', 1433),
-                auth_type=data.get('auth_type', 'windows'),
+                auth_type=data.get('auth_type', 'sql'),  # Default to SQL Server authentication
                 username=data.get('username'),
                 password=data.get('password'),
                 description=data.get('description')
@@ -1554,10 +1554,14 @@ def create_routes(app):
             
             components.append(f"DATABASE={database}")
             
-            # Authentication
+            # Authentication - Critical logging
             if auth_type == 'windows':
+                logger.error(f"❌❌❌ ROUTES: Windows authentication requested! This will use local credentials! ❌❌❌")
+                logger.error(f"❌ Server: {server}, Database: {database}")
+                logger.error(f"❌ This is likely the source of the mercer\\sumeet-gill authentication!")
                 components.append("Trusted_Connection=yes")
             else:
+                logger.info(f"✅ ROUTES: SQL Server authentication - Username: {username}")
                 if not username or not password:
                     return jsonify({'success': False, 'error': 'Username and password required for SQL authentication'}), 400
                 components.append(f"UID={username}")
