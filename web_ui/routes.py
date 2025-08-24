@@ -729,11 +729,11 @@ def create_routes(app):
                     logger.info(f"[API_CONNECTIONS] Cache expired (age: {cache_age:.1f}s), loading fresh data")
             
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
-            db_manager = pool.db_manager
+            # db_manager already set above
             
             logger.info(f"[API_CONNECTIONS] Loading connections from database (cache miss)")
             load_start = time.time()
@@ -899,11 +899,11 @@ def create_routes(app):
                 return jsonify({'success': False, 'error': 'No data provided'}), 400
             
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
-            db_manager = pool.db_manager
+            # db_manager already set above
             
             result = db_manager.create_custom_connection(
                 name=data.get('name'),
@@ -940,11 +940,11 @@ def create_routes(app):
         """API endpoint to delete a database connection"""
         try:
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
-            db_manager = pool.db_manager
+            # db_manager already set above
             
             success = db_manager.remove_connection(connection_name)
             
@@ -966,11 +966,11 @@ def create_routes(app):
         
         try:
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
-            db_manager = pool.db_manager
+            # db_manager already set above
             
             # Test the existing connection
             test_result = db_manager.test_connection(connection_name)
@@ -1000,11 +1000,11 @@ def create_routes(app):
         """Get system database connection status"""
         try:
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'connected': False, 'error': 'Database not available'}), 500
             
-            db_manager = pool.db_manager
+            # db_manager already set above
             
             # Test system database connection
             system_status = db_manager.test_connection("system")
@@ -1055,8 +1055,8 @@ def create_routes(app):
         
         try:
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available', 'total_time': time.time() - start_time}), 500
             
             import concurrent.futures
@@ -1183,11 +1183,11 @@ def create_routes(app):
         
         try:
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
-            db_manager = pool.db_manager
+            # db_manager already set above
             connections = db_manager.list_connections()
             
             logger.info(f"[DETAILED_VALIDATION] Found {len(connections)} connections to validate")
@@ -1321,11 +1321,11 @@ def create_routes(app):
         
         try:
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
-            db_manager = pool.db_manager
+            # db_manager already set above
             result = db_manager.test_connection(connection_name)
             test_time = time.time() - start_time
             
@@ -1401,8 +1401,8 @@ def create_routes(app):
         """Get connection audit trail"""
         try:
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
             connection_name = request.args.get('connection_name')
@@ -1410,7 +1410,7 @@ def create_routes(app):
             
             logger.info(f"[AUDIT_API] Retrieving audit trail" + (f" for connection '{connection_name}'" if connection_name else " (all connections)") + f" (limit: {limit})")
             
-            db_manager = pool.db_manager
+            # db_manager already set above
             audit_entries = db_manager.get_connection_audit_trail(connection_name, limit)
             
             logger.info(f"[AUDIT_API] Retrieved {len(audit_entries)} audit entries")
@@ -1450,8 +1450,8 @@ def create_routes(app):
         """Get connection pool statistics"""
         try:
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
             stats = pool.get_pool_stats()
@@ -1476,8 +1476,8 @@ def create_routes(app):
         """Manually trigger connection pool cleanup"""
         try:
             # Use global connection pool instance
-            pool = getattr(app, 'connection_pool', None)
-            if not pool:
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
             # Get stats before cleanup
@@ -2267,7 +2267,7 @@ def create_routes(app):
                 active_job_count = 0
             
             # Get connection statistics
-            pool = getattr(app, 'connection_pool', None)
+            db_manager = getattr(app, 'db_manager', None)
             if pool:
                 pool_stats = pool.get_pool_stats()
                 total_connections = pool_stats.get('total_connections', 0)

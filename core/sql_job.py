@@ -5,7 +5,7 @@ SQL Job implementation for Windows Job Scheduler
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
 from .job_base import JobBase, JobResult, JobStatus
-from database.connection_manager import DatabaseConnectionManager
+from database.simple_connection_manager import get_database_manager
 
 # Import pyodbc with error handling
 try:
@@ -52,8 +52,8 @@ class SqlJob(JobBase):
         self.fetch_size = fetch_size
         self.max_rows = max_rows
         
-        # Initialize connection manager
-        self.db_manager = DatabaseConnectionManager()
+        # Initialize database manager
+        self.db_manager = get_database_manager()
         
         self.job_logger.info(f"Initialized SQL job with query: {self.sql_query[:50]}...")
     
@@ -192,7 +192,7 @@ class SqlJob(JobBase):
             finally:
                 # Close connection
                 try:
-                    connection.close()
+                    self.db_manager.return_connection(connection)
                 except:
                     pass
         
@@ -216,17 +216,10 @@ class SqlJob(JobBase):
     def _get_connection(self):
         """Get database connection"""
         try:
-            if self.connection_string:
-                # Use direct connection string (add command timeout if not present)
-                self.job_logger.debug("Using direct connection string")
-                connection_str = self.connection_string
-                if "Command Timeout" not in connection_str:
-                    connection_str += f";Command Timeout={self.query_timeout}"
-                return pyodbc.connect(connection_str, timeout=30)
-            else:
-                # Use named connection from config (already includes proper timeouts)
-                self.job_logger.debug(f"Using named connection: {self.connection_name}")
-                return self.db_manager.get_connection(self.connection_name)
+            # The new database manager only supports environment-based connections
+            # Connection string and named connections are handled through .env config
+            self.job_logger.debug("Getting connection from database manager")
+            return self.db_manager.get_connection()
         
         except Exception as e:
             self.job_logger.error(f"Failed to get database connection: {e}")
@@ -240,7 +233,7 @@ class SqlJob(JobBase):
                 cursor = connection.cursor()
                 cursor.execute("SELECT 1 as test")
                 result = cursor.fetchone()
-                connection.close()
+                self.db_manager.return_connection(connection)
                 
                 return {
                     'success': True,
@@ -273,7 +266,7 @@ class SqlJob(JobBase):
                 cursor = connection.cursor()
                 # Try to prepare the query (syntax check)
                 cursor.prepare(self.sql_query)
-                connection.close()
+                self.db_manager.return_connection(connection)
                 
                 return {
                     'valid': True,
@@ -281,7 +274,7 @@ class SqlJob(JobBase):
                 }
             
             except pyodbc.Error as e:
-                connection.close()
+                self.db_manager.return_connection(connection)
                 return {
                     'valid': False,
                     'error': f'SQL syntax error: {str(e)}'
@@ -315,7 +308,7 @@ class SqlJob(JobBase):
                 columns = [column[0] for column in cursor.description]
                 
                 cursor.execute("SET SHOWPLAN_ALL OFF")
-                connection.close()
+                self.db_manager.return_connection(connection)
                 
                 return {
                     'success': True,
@@ -326,7 +319,7 @@ class SqlJob(JobBase):
                 }
             
             except pyodbc.Error as e:
-                connection.close()
+                self.db_manager.return_connection(connection)
                 return {
                     'success': False,
                     'error': f'Failed to get execution plan: {str(e)}'

@@ -13,7 +13,7 @@ from dataclasses import asdict
 import threading
 
 from utils.logger import get_logger
-from .connection_manager import DatabaseConnectionManager
+from .simple_connection_manager import get_database_manager
 
 
 class JobStorage:
@@ -60,7 +60,7 @@ class JobStorage:
     
     def _init_database_storage(self):
         """Initialize database storage"""
-        self.db_manager = DatabaseConnectionManager()
+        self.db_manager = get_database_manager()
         self.connection_name = self.storage_config.get('connection_name', 'default')
         
         # Create tables if they don't exist

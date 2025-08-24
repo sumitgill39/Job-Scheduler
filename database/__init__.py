@@ -2,7 +2,7 @@
 Database package for Windows Job Scheduler
 """
 
-from .connection_manager import DatabaseConnectionManager
+from .simple_connection_manager import SimpleDatabaseManager, get_database_manager
 from .job_storage import JobStorage
 
-__all__ = ['DatabaseConnectionManager', 'JobStorage']
+__all__ = ['SimpleDatabaseManager', 'get_database_manager', 'JobStorage']

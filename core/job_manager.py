@@ -7,7 +7,7 @@ import uuid
 import time
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-from database.connection_pool import get_connection_pool
+from database.simple_connection_manager import get_database_manager
 from utils.logger import get_logger
 
 
@@ -15,9 +15,9 @@ class JobManager:
     """Manages job configurations in database"""
     
     def __init__(self):
-        self.connection_pool = get_connection_pool()
+        self.db_manager = get_database_manager()
         self.logger = get_logger(__name__)
-        self.logger.info("[JOB_MANAGER] Job Manager initialized with connection pooling")
+        self.logger.info("[JOB_MANAGER] Job Manager initialized with database manager")
     
     def create_job(self, job_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new job and store in database
@@ -149,7 +149,7 @@ class JobManager:
     def _validate_connection(self, connection_name: str) -> bool:
         """Validate that a database connection exists"""
         try:
-            connections = self.connection_pool.db_manager.list_connections()
+            connections = self.db_manager.list_connections()
             return connection_name in connections
         except Exception as e:
             self.logger.warning(f"[JOB_MANAGER] Could not validate connection '{connection_name}': {e}")
@@ -158,7 +158,7 @@ class JobManager:
     def _save_job_to_database(self, job_config: Dict[str, Any]) -> bool:
         """Save job configuration to database"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 self.logger.error("[JOB_MANAGER] CRITICAL: System database connection failed - PowerShell jobs cannot be saved")
                 self.logger.error("[JOB_MANAGER] Check database configuration in config/database_config.yaml")
@@ -188,7 +188,7 @@ class JobManager:
             
             system_connection.commit()
             cursor.close()
-            # Don't close connection - let pool manage it
+            self.db_manager.return_connection(system_connection)
             
             self.logger.info(f"[JOB_MANAGER] Saved job '{job_config['name']}' to database")
             return True
@@ -204,7 +204,7 @@ class JobManager:
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve job configuration by ID from database"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 self.logger.error("[JOB_MANAGER] Cannot retrieve job - database connection failed")
                 return None
@@ -218,7 +218,7 @@ class JobManager:
             
             row = cursor.fetchone()
             cursor.close()
-            # Don't close connection - let pool manage it
+            self.db_manager.return_connection(system_connection)
             
             if not row:
                 return None
@@ -268,7 +268,7 @@ class JobManager:
     def list_jobs(self, job_type: str = None, enabled_only: bool = False) -> List[Dict[str, Any]]:
         """List all jobs with optional filtering from database"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 self.logger.error("[JOB_MANAGER] Cannot list jobs - database connection failed")
                 return []
@@ -291,7 +291,7 @@ class JobManager:
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
-            # Don't close connection - let pool manage it
+            self.db_manager.return_connection(system_connection)
             
             jobs = []
             for row in rows:
@@ -315,7 +315,7 @@ class JobManager:
     def delete_job(self, job_id: str) -> Dict[str, Any]:
         """Delete job configuration"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 return {
                     'success': False,
@@ -328,7 +328,7 @@ class JobManager:
             
             system_connection.commit()
             cursor.close()
-            # Don't close connection - let pool manage it
+            self.db_manager.return_connection(system_connection)
             
             if rows_affected > 0:
                 self.logger.info(f"[JOB_MANAGER] Deleted job {job_id}")
@@ -367,7 +367,7 @@ class JobManager:
                 new_enabled = bool(enabled)
             
             # Update the job enabled state
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 return {
                     'success': False,
@@ -384,7 +384,7 @@ class JobManager:
             rows_affected = cursor.rowcount
             system_connection.commit()
             cursor.close()
-            # Don't close connection - let pool manage it
+            self.db_manager.return_connection(system_connection)
             
             if rows_affected > 0:
                 action = 'enabled' if new_enabled else 'disabled'
@@ -410,7 +410,7 @@ class JobManager:
     def get_all_execution_history(self, limit: int = 1000) -> List[Dict[str, Any]]:
         """Get complete execution history from database"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 self.logger.error("[JOB_MANAGER] Cannot retrieve execution history - database connection failed")
                 return []
@@ -596,7 +596,7 @@ class JobManager:
     def _update_job_in_database(self, job_config: Dict[str, Any]) -> bool:
         """Update job configuration in database"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 self.logger.error("[JOB_MANAGER] Cannot update job - database connection failed")
                 return False
@@ -627,6 +627,7 @@ class JobManager:
             rows_affected = cursor.rowcount
             system_connection.commit()
             cursor.close()
+            self.db_manager.return_connection(system_connection)
             
             if rows_affected > 0:
                 self.logger.info(f"[JOB_MANAGER] Updated job '{job_config['name']}' in database")

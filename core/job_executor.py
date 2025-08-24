@@ -12,12 +12,12 @@ from .job_base import JobResult, JobStatus
 
 # Import database and job manager with error handling
 try:
-    from database.connection_pool import get_connection_pool
+    from database.simple_connection_manager import get_database_manager
     from .job_manager import JobManager
     HAS_DATABASE = True
 except ImportError as e:
     HAS_DATABASE = False
-    get_connection_pool = None
+    get_database_manager = None
     JobManager = None
 
 # Import job types with error handling
@@ -46,11 +46,11 @@ class JobExecutor:
         
         if not HAS_DATABASE:
             self.logger.error("[JOB_EXECUTOR] Database dependencies not available - JobExecutor will not function properly")
-            self.connection_pool = None
+            self.db_manager = None
             self.job_manager = None
             return
         
-        self.connection_pool = get_connection_pool()
+        self.db_manager = get_database_manager()
         self.job_manager = JobManager()
         self.logger.info("[JOB_EXECUTOR] Job executor initialized")
     
@@ -242,7 +242,7 @@ class JobExecutor:
     def _log_execution_start(self, job_config: Dict[str, Any]) -> Optional[int]:
         """Log job execution start to database"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 self.logger.error("[JOB_EXECUTOR] Cannot log execution: system database not available")
                 return None
@@ -272,6 +272,7 @@ class JobExecutor:
             
             system_connection.commit()
             cursor.close()
+            self.db_manager.return_connection(system_connection)
             
             self.logger.debug(f"[JOB_EXECUTOR] Logged execution start with ID: {execution_id}")
             return execution_id
@@ -287,7 +288,7 @@ class JobExecutor:
     def _log_execution_completion(self, execution_id: int, result: JobResult):
         """Log job execution completion to database"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 self.logger.error("[JOB_EXECUTOR] Cannot log completion: system database not available")
                 return
@@ -323,6 +324,7 @@ class JobExecutor:
             
             system_connection.commit()
             cursor.close()
+            self.db_manager.return_connection(system_connection)
             
             self.logger.debug(f"[JOB_EXECUTOR] Logged execution completion for ID: {execution_id}")
             
@@ -336,7 +338,7 @@ class JobExecutor:
     def _log_execution_failure(self, execution_id: int, error_message: str):
         """Log job execution failure to database"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 return
             
@@ -362,6 +364,7 @@ class JobExecutor:
             
             system_connection.commit()
             cursor.close()
+            self.db_manager.return_connection(system_connection)
             
         except Exception as e:
             self.logger.error(f"[JOB_EXECUTOR] Error logging execution failure: {e}")
@@ -369,7 +372,7 @@ class JobExecutor:
     def get_execution_history(self, job_id: str = None, limit: int = 50) -> List[Dict[str, Any]]:
         """Get job execution history from database"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 return []
             
@@ -395,6 +398,7 @@ class JobExecutor:
             
             rows = cursor.fetchall()
             cursor.close()
+            self.db_manager.return_connection(system_connection)
             
             history = []
             for row in rows:
@@ -430,7 +434,7 @@ class JobExecutor:
     def get_execution_history_incremental(self, job_id: str, since_timestamp: str = None, limit: int = 50) -> List[Dict[str, Any]]:
         """Get job execution history from database since a specific timestamp"""
         try:
-            system_connection = self.connection_pool.get_connection("system")
+            system_connection = self.db_manager.get_connection()
             if not system_connection:
                 return []
             
@@ -458,6 +462,7 @@ class JobExecutor:
             
             rows = cursor.fetchall()
             cursor.close()
+            self.db_manager.return_connection(system_connection)
             
             history = []
             for row in rows:
