@@ -165,19 +165,35 @@ class DatabaseConnectionManager:
     
     def get_connection_string(self, connection_name: str = "default") -> str:
         """Build connection string for specified connection"""
+        self.logger.info(f"[CONNECTION_STRING] Building connection string for '{connection_name}'")
+        
         # For system connection, always use config file to avoid recursion
         if connection_name == "system":
+            self.logger.debug(f"[CONNECTION_STRING] Using config file for system connection")
             db_config = self.config.get('databases', {}).get(connection_name)
         else:
+            self.logger.debug(f"[CONNECTION_STRING] Trying database first for '{connection_name}'")
             # First try to get from database
             db_config = self._get_connection_from_database(connection_name)
             
             if not db_config:
+                self.logger.debug(f"[CONNECTION_STRING] Database lookup failed, falling back to config file")
                 # Fall back to config file
                 db_config = self.config.get('databases', {}).get(connection_name)
         
         if not db_config:
-            raise ValueError(f"Database connection '{connection_name}' not found in configuration")
+            error_msg = f"Database connection '{connection_name}' not found in configuration"
+            self.logger.error(f"[CONNECTION_STRING] {error_msg}")
+            raise ValueError(error_msg)
+        
+        self.logger.info(f"[CONNECTION_STRING] Found configuration for '{connection_name}':")
+        self.logger.info(f"[CONNECTION_STRING]   Server: {db_config.get('server', 'NOT SET')}")
+        self.logger.info(f"[CONNECTION_STRING]   Port: {db_config.get('port', 'NOT SET')}")
+        self.logger.info(f"[CONNECTION_STRING]   Database: {db_config.get('database', 'NOT SET')}")
+        self.logger.info(f"[CONNECTION_STRING]   Driver: {db_config.get('driver', 'NOT SET')}")
+        self.logger.info(f"[CONNECTION_STRING]   Trusted Connection: {db_config.get('trusted_connection', 'NOT SET')}")
+        self.logger.info(f"[CONNECTION_STRING]   Username: {db_config.get('username', 'NOT SET')}")
+        self.logger.info(f"[CONNECTION_STRING]   Password: {'SET' if db_config.get('password') else 'NOT SET'}")
         
         # Build connection string components
         components = []
@@ -251,7 +267,8 @@ class DatabaseConnectionManager:
             import re
             debug_string = re.sub(r'PWD=[^;]*', 'PWD=***', debug_string)
         
-        self.logger.debug(f"Built connection string for '{connection_name}': {debug_string}")  # Changed from info to debug
+        self.logger.info(f"[CONNECTION_STRING] Built connection string for '{connection_name}': {debug_string}")
+        self.logger.debug(f"[CONNECTION_STRING] Full connection string components: {components}")
         
         return connection_string
     
@@ -311,43 +328,76 @@ class DatabaseConnectionManager:
     
     def _create_new_connection(self, connection_name: str):
         """Create a new database connection with retry logic"""
+        self.logger.info(f"[CONNECTION_CREATE] Starting connection creation for '{connection_name}'")
+        
         retry_settings = self.config.get('retry_settings', {})
         max_retries = retry_settings.get('max_retries', 3)
         retry_delay = retry_settings.get('retry_delay', 5)
         backoff_factor = retry_settings.get('backoff_factor', 2)
         
-        connection_string = self.get_connection_string(connection_name)
+        self.logger.info(f"[CONNECTION_CREATE] Retry settings - max_retries: {max_retries}, retry_delay: {retry_delay}, backoff_factor: {backoff_factor}")
+        
+        try:
+            connection_string = self.get_connection_string(connection_name)
+        except Exception as e:
+            self.logger.error(f"[CONNECTION_CREATE] Failed to build connection string for '{connection_name}': {e}")
+            return None
         
         for attempt in range(max_retries + 1):
             try:
-                self.logger.debug(f"[POOL] Attempting new database connection '{connection_name}' (attempt {attempt + 1})")
+                self.logger.info(f"[CONNECTION_CREATE] Attempt {attempt + 1}/{max_retries + 1} - Connecting to '{connection_name}'")
+                self.logger.debug(f"[CONNECTION_CREATE] Using pyodbc version: {pyodbc.version}")
                 
+                # Log the actual connection attempt
+                self.logger.info(f"[CONNECTION_CREATE] Calling pyodbc.connect() for '{connection_name}'...")
                 connection = pyodbc.connect(connection_string)
+                self.logger.info(f"[CONNECTION_CREATE] ✅ pyodbc.connect() successful for '{connection_name}'")
                 
-                # Test connection
+                # Test connection with a simple query
+                self.logger.debug(f"[CONNECTION_CREATE] Testing connection with SELECT 1 query...")
                 cursor = connection.cursor()
                 cursor.execute("SELECT 1")
-                cursor.fetchone()
+                result = cursor.fetchone()
                 cursor.close()
-                # Note: Don't close connection here - it will be managed by the pool
+                self.logger.info(f"[CONNECTION_CREATE] ✅ Connection test query successful, result: {result}")
                 
-                self.logger.debug(f"[POOL] Successfully created connection '{connection_name}'")
+                self.logger.info(f"[CONNECTION_CREATE] ✅ Successfully created and tested connection '{connection_name}'")
                 return connection
                 
             except pyodbc.Error as e:
-                error_msg = f"Database connection failed (attempt {attempt + 1}): {str(e)}"
+                error_code = getattr(e, 'args', [''])[0] if hasattr(e, 'args') and e.args else 'Unknown'
+                error_msg = str(e)
+                
+                self.logger.error(f"[CONNECTION_CREATE] ❌ pyodbc.Error on attempt {attempt + 1} for '{connection_name}':")
+                self.logger.error(f"[CONNECTION_CREATE]    Error Code: {error_code}")
+                self.logger.error(f"[CONNECTION_CREATE]    Error Message: {error_msg}")
+                
+                # Detailed error analysis
+                if "08001" in error_msg:
+                    self.logger.error(f"[CONNECTION_CREATE]    → SQL State 08001: Unable to connect to data source")
+                    if "No such host is known" in error_msg:
+                        self.logger.error(f"[CONNECTION_CREATE]    → DNS resolution failure for server name")
+                    elif "Tcp Provider" in error_msg:
+                        self.logger.error(f"[CONNECTION_CREATE]    → TCP/Network connectivity issue")
+                elif "28000" in error_msg:
+                    self.logger.error(f"[CONNECTION_CREATE]    → SQL State 28000: Invalid authorization specification (login failed)")
+                elif "08S01" in error_msg:
+                    self.logger.error(f"[CONNECTION_CREATE]    → SQL State 08S01: Communication link failure")
                 
                 if attempt < max_retries:
-                    self.logger.warning(f"[POOL] {error_msg}. Retrying in {retry_delay} seconds...")
+                    self.logger.warning(f"[CONNECTION_CREATE] Retrying in {retry_delay} seconds...")
                     time.sleep(retry_delay)
                     retry_delay *= backoff_factor  # Exponential backoff
                 else:
-                    self.logger.error(f"[POOL] {error_msg}. Max retries exceeded.")
+                    self.logger.error(f"[CONNECTION_CREATE] ❌ Max retries ({max_retries}) exceeded for '{connection_name}'")
                     
             except Exception as e:
-                self.logger.error(f"[POOL] Unexpected error connecting to database: {e}")
+                self.logger.error(f"[CONNECTION_CREATE] ❌ Unexpected error connecting to '{connection_name}': {type(e).__name__}: {e}")
+                import traceback
+                self.logger.error(f"[CONNECTION_CREATE] Stack trace: {traceback.format_exc()}")
                 break
         
+        self.logger.error(f"[CONNECTION_CREATE] ❌ Failed to create connection '{connection_name}' after all attempts")
         return None
     
     def _is_connection_valid(self, pool_entry: Dict) -> bool:

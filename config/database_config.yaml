@@ -5,7 +5,7 @@ databases:
   # System database connection - stores user connection configurations
   system:
     driver: "{ODBC Driver 17 for SQL Server}"
-    server: "USDF11DB197\\PROD_DB01"  # Named instance
+    server: "USDF11DB197CI1\\PRD_DB01"  # Named instance
     port: 3433  # Custom port
     database: "sreutil"  # Updated database name
     trusted_connection: false  # Using SQL Server authentication (boolean, not string)

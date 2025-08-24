@@ -37,8 +37,22 @@ def create_app(scheduler_manager=None):
         from core.integrated_scheduler import IntegratedScheduler
         
         logger.info("💾 Creating connection pool...")
-        app.connection_pool = get_connection_pool()
-        logger.info("✅ Connection pool created successfully")
+        try:
+            app.connection_pool = get_connection_pool()
+            logger.info("✅ Connection pool created successfully")
+            
+            # Test the connection pool immediately
+            logger.info("🔍 Testing connection pool...")
+            test_connection = app.connection_pool.get_connection("system")
+            if test_connection:
+                logger.info("✅ Connection pool test successful")
+            else:
+                logger.error("❌ Connection pool test failed - no connection returned")
+        except Exception as pool_error:
+            logger.error(f"💥 Connection pool creation/test failed: {pool_error}")
+            import traceback
+            logger.error(f"🔍 Connection pool stack trace: {traceback.format_exc()}")
+            raise
         
         logger.info("📋 Creating job manager...")
         app.job_manager = JobManager()
