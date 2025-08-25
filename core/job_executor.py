@@ -41,18 +41,36 @@ except ImportError as e:
 class JobExecutor:
     """Executes jobs and logs results to database"""
     
-    def __init__(self):
+    def __init__(self, job_manager=None, db_manager=None):
         self.logger = get_logger(__name__)
         
-        if not HAS_DATABASE:
-            self.logger.error("[JOB_EXECUTOR] Database dependencies not available - JobExecutor will not function properly")
-            self.db_manager = None
-            self.job_manager = None
-            return
+        # Use provided components if available (for disconnected mode)
+        if job_manager and db_manager:
+            self.logger.info("[JOB_EXECUTOR] Using provided components (disconnected mode)")
+            self.job_manager = job_manager
+            self.db_manager = db_manager
+        elif job_manager:
+            self.logger.info("[JOB_EXECUTOR] Using provided job manager with traditional DB manager")
+            self.job_manager = job_manager
+            if HAS_DATABASE:
+                self.db_manager = get_database_manager()
+            else:
+                self.logger.error("[JOB_EXECUTOR] Database dependencies not available")
+                self.db_manager = None
+        else:
+            # Traditional initialization
+            if not HAS_DATABASE:
+                self.logger.error("[JOB_EXECUTOR] Database dependencies not available - JobExecutor will not function properly")
+                self.db_manager = None
+                self.job_manager = None
+                return
+            
+            self.db_manager = get_database_manager()
+            self.job_manager = JobManager()
+            self.logger.info("[JOB_EXECUTOR] Job executor initialized in traditional mode")
         
-        self.db_manager = get_database_manager()
-        self.job_manager = JobManager()
-        self.logger.info("[JOB_EXECUTOR] Job executor initialized")
+        if self.job_manager and self.db_manager:
+            self.logger.info("[JOB_EXECUTOR] Job executor initialized successfully")
     
     def execute_job(self, job_id: str) -> Dict[str, Any]:
         """

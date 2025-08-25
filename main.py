@@ -19,6 +19,7 @@ from utils.windows_utils import WindowsUtils
 from core.scheduler_manager import SchedulerManager
 from cli.cli_manager import CLIManager
 from web_ui.app import create_app
+from database.disconnected_factory import create_disconnected_components
 
 
 class JobSchedulerApp:
@@ -98,17 +99,38 @@ class JobSchedulerApp:
         try:
             self.logger.info("⏰ Initializing Scheduler Manager...")
             
-            # Determine storage type from config or default to YAML
-            storage_type = "yaml"  # Can be configured later
-            storage_config = {
-                "yaml_file": str(Path("config") / "jobs.yaml"),
-                "history_file": str(Path("config") / "job_history.yaml")
-            }
+            # Check if disconnected mode is enabled (default: True)
+            use_disconnected = os.environ.get('USE_DISCONNECTED_MODE', 'true').lower() == 'true'
             
-            self.logger.debug(f"📁 Storage type: {storage_type}")
-            self.logger.debug(f"📁 Storage config: {storage_config}")
+            if use_disconnected:
+                self.logger.info("🔥 Using DISCONNECTED mode - eliminating connection pool issues!")
+                
+                # Create disconnected components
+                try:
+                    components = create_disconnected_components()
+                    self.scheduler_manager = components.get('integrated_scheduler')  # Use integrated scheduler
+                    self.disconnected_components = components  # Store all components
+                    self.logger.info("✅ Disconnected scheduler components initialized successfully")
+                except Exception as e:
+                    self.logger.error(f"Failed to create disconnected components: {e}")
+                    self.logger.info("Falling back to traditional scheduler...")
+                    use_disconnected = False
             
-            self.scheduler_manager = SchedulerManager(storage_type, storage_config)
+            if not use_disconnected:
+                # Fallback to traditional approach
+                self.logger.info("📊 Using traditional YAML-based scheduler")
+                storage_type = "yaml"
+                storage_config = {
+                    "yaml_file": str(Path("config") / "jobs.yaml"),
+                    "history_file": str(Path("config") / "job_history.yaml")
+                }
+                
+                self.logger.debug(f"📁 Storage type: {storage_type}")
+                self.logger.debug(f"📁 Storage config: {storage_config}")
+                
+                self.scheduler_manager = SchedulerManager(storage_type, storage_config)
+                self.disconnected_components = None
+            
             self.logger.info("✅ Scheduler manager initialized successfully")
             
         except Exception as e:
@@ -129,7 +151,9 @@ class JobSchedulerApp:
     def _init_web(self):
         """Initialize web application"""
         try:
-            self.web_app = create_app(self.scheduler_manager)
+            # Pass disconnected components to web app if available
+            use_disconnected = hasattr(self, 'disconnected_components') and self.disconnected_components
+            self.web_app = create_app(self.scheduler_manager, use_disconnected=use_disconnected)
             self.logger.info("Web application initialized")
         except Exception as e:
             self.logger.error(f"Failed to initialize web app: {e}")

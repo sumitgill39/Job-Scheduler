@@ -28,9 +28,23 @@ from utils.logger import get_logger, JobLogger
 class SchedulerManager:
     """Main scheduler manager for Windows Job Scheduler"""
     
-    def __init__(self, storage_type: str = "yaml", storage_config: Dict[str, Any] = None):
+    def __init__(self, storage_type: str = "yaml", storage_config: Dict[str, Any] = None, disconnected_components=None):
         self.logger = get_logger(__name__)
-        self.storage = JobStorage(storage_type, storage_config or {})
+        
+        # Use disconnected components if provided
+        if disconnected_components:
+            self.logger.info("Scheduler Manager using DISCONNECTED components - no connection pool issues!")
+            self.disconnected_mode = True
+            self.disconnected_components = disconnected_components
+            self.job_manager = disconnected_components.get('job_manager')
+            self.storage = None  # Don't use file storage in disconnected mode
+        else:
+            self.logger.info("Scheduler Manager using traditional YAML storage")
+            self.disconnected_mode = False
+            self.disconnected_components = None
+            self.job_manager = None
+            self.storage = JobStorage(storage_type, storage_config or {})
+        
         self._lock = Lock()
         self._shutdown_event = threading.Event()
         
@@ -44,7 +58,8 @@ class SchedulerManager:
         # Load existing jobs
         self._load_jobs_from_storage()
         
-        self.logger.info("Scheduler Manager initialized successfully")
+        mode_info = "DISCONNECTED" if self.disconnected_mode else "YAML"
+        self.logger.info(f"Scheduler Manager initialized successfully in {mode_info} mode")
     
     def _init_scheduler(self):
         """Initialize APScheduler"""
@@ -448,24 +463,53 @@ class SchedulerManager:
     def _load_jobs_from_storage(self):
         """Load jobs from storage on startup"""
         try:
-            job_configs = self.storage.load_all_jobs()
-            
-            for job_id, job_config in job_configs.items():
-                try:
-                    job = self._create_job_from_config(job_config)
-                    if job:
-                        self.jobs[job_id] = job
+            if self.disconnected_mode and self.job_manager:
+                # Load from disconnected job manager (database)
+                self.logger.info("Loading jobs from disconnected database...")
+                jobs_list = self.job_manager.list_jobs()
+                
+                for job_config in jobs_list:
+                    try:
+                        job_id = job_config['job_id']
+                        job = self._create_job_from_config(job_config)
+                        if job:
+                            self.jobs[job_id] = job
+                            
+                            # Check for schedule in configuration
+                            configuration = job_config.get('configuration', {})
+                            schedule_config = configuration.get('schedule')
+                            if schedule_config and job.enabled:
+                                self.schedule_job(job_id, schedule_config)
+                            
+                            self.logger.info(f"Loaded job from database: {job.name} ({job_id})")
                         
-                        schedule_config = job_config.get('schedule')
-                        if schedule_config and job.enabled:
-                            self.schedule_job(job_id, schedule_config)
+                    except Exception as e:
+                        self.logger.error(f"Failed to load job {job_config.get('job_id', 'unknown')}: {e}")
+                
+                self.logger.info(f"Loaded {len(self.jobs)} jobs from disconnected database")
+                
+            elif self.storage:
+                # Load from YAML storage (traditional)
+                job_configs = self.storage.load_all_jobs()
+                
+                for job_id, job_config in job_configs.items():
+                    try:
+                        job = self._create_job_from_config(job_config)
+                        if job:
+                            self.jobs[job_id] = job
+                            
+                            schedule_config = job_config.get('schedule')
+                            if schedule_config and job.enabled:
+                                self.schedule_job(job_id, schedule_config)
+                            
+                            self.logger.info(f"Loaded job from YAML: {job.name} ({job_id})")
                         
-                        self.logger.info(f"Loaded job: {job.name} ({job_id})")
-                    
-                except Exception as e:
-                    self.logger.error(f"Failed to load job {job_id}: {e}")
-            
-            self.logger.info(f"Loaded {len(self.jobs)} jobs from storage")
+                    except Exception as e:
+                        self.logger.error(f"Failed to load job {job_id}: {e}")
+                
+                self.logger.info(f"Loaded {len(self.jobs)} jobs from YAML storage")
+            else:
+                self.logger.warning("No storage available for loading jobs")
             
         except Exception as e:
             self.logger.error(f"Failed to load jobs from storage: {e}")

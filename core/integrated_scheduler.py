@@ -30,12 +30,20 @@ class IntegratedScheduler:
     - Provides unified API for job creation, scheduling, and execution
     """
     
-    def __init__(self):
+    def __init__(self, disconnected_components=None):
         self.logger = get_logger(__name__)
         
-        # Initialize components
-        self.job_manager = JobManager()
-        self.job_executor = JobExecutor()
+        # Initialize components - use disconnected if available
+        if disconnected_components:
+            self.logger.info("[INTEGRATED_SCHEDULER] Using DISCONNECTED components - no connection pool issues!")
+            self.job_manager = disconnected_components.get('job_manager')
+            self.job_executor = disconnected_components.get('job_executor')
+            self.disconnected_mode = True
+        else:
+            self.logger.info("[INTEGRATED_SCHEDULER] Using traditional connection pool components")
+            self.job_manager = JobManager()
+            self.job_executor = JobExecutor()
+            self.disconnected_mode = False
         
         # Initialize APScheduler
         self._init_scheduler()
@@ -43,7 +51,8 @@ class IntegratedScheduler:
         # Load existing scheduled jobs from database
         self._load_scheduled_jobs()
         
-        self.logger.info("[INTEGRATED_SCHEDULER] Integrated scheduler initialized")
+        mode_info = "DISCONNECTED" if self.disconnected_mode else "CONNECTION_POOL"
+        self.logger.info(f"[INTEGRATED_SCHEDULER] Integrated scheduler initialized in {mode_info} mode")
     
     def _init_scheduler(self):
         """Initialize APScheduler"""

@@ -8,9 +8,26 @@ from flask_wtf.csrf import CSRFProtect
 from utils.logger import get_logger
 
 
-def create_app(scheduler_manager=None):
+def create_app(scheduler_manager=None, use_disconnected=None):
     """Create and configure Flask application"""
     
+    # Check if we should use disconnected mode
+    if use_disconnected is None:
+        use_disconnected = os.environ.get('USE_DISCONNECTED_MODE', 'true').lower() == 'true'
+    
+    if use_disconnected:
+        # Use disconnected pattern (recommended)
+        logger = get_logger(__name__)
+        logger.info("🔥 Using DISCONNECTED mode - no connection pooling issues!")
+        
+        try:
+            from web_ui.disconnected_app import create_disconnected_app
+            return create_disconnected_app(scheduler_manager)
+        except Exception as e:
+            logger.error(f"Failed to create disconnected app: {e}")
+            logger.info("Falling back to traditional connection pool mode...")
+    
+    # Traditional connection pool mode (old approach)
     app = Flask(__name__)
     
     # Configuration
