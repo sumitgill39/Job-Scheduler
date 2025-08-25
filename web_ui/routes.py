@@ -973,7 +973,12 @@ def create_routes(app):
             # db_manager already set above
             
             # Test the existing connection
-            test_result = db_manager.test_connection(connection_name)
+            # Note: Current simple manager only supports system connection
+            if connection_name == "system":
+                test_result = db_manager.test_connection()
+            else:
+                # For non-system connections, we need to handle differently
+                test_result = {'success': False, 'error': 'Connection testing for non-system connections not implemented in simple manager'}
             
             if test_result['success']:
                 logger.info(f"[API_TEST] Connection '{connection_name}' test successful via API")
@@ -1007,7 +1012,7 @@ def create_routes(app):
             # db_manager already set above
             
             # Test system database connection
-            system_status = db_manager.test_connection("system")
+            system_status = db_manager.test_connection()
             
             if system_status['success']:
                 # Get system connection info dynamically
@@ -1080,7 +1085,11 @@ def create_routes(app):
                 logger.debug(f"[PARALLEL_VALIDATION] Starting test for connection '{conn_name}' in thread {threading.current_thread().name}")
                 
                 try:
-                    result = pool.db_manager.test_connection(conn_name)
+                    # Note: Current simple manager only supports system connection
+                    if conn_name == "system":
+                        result = pool.db_manager.test_connection()
+                    else:
+                        result = {'success': False, 'error': 'Connection testing for non-system connections not implemented in simple manager'}
                     thread_time = time.time() - thread_start
                     
                     if result['success']:
@@ -1209,7 +1218,11 @@ def create_routes(app):
                     logger.debug(f"[DETAILED_VALIDATION] Starting detailed test for '{conn_name}'")
                     test_start = time.time()
                     
-                    result = db_manager.test_connection(conn_name)
+                    # Note: Current simple manager only supports system connection
+                    if conn_name == "system":
+                        result = db_manager.test_connection()
+                    else:
+                        result = {'success': False, 'error': 'Connection testing for non-system connections not implemented in simple manager'}
                     test_time = time.time() - test_start
                     
                     if result.get('success'):
@@ -1326,7 +1339,11 @@ def create_routes(app):
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
             # db_manager already set above
-            result = db_manager.test_connection(connection_name)
+            # Note: Current simple manager only supports system connection
+            if connection_name == "system":
+                result = db_manager.test_connection()
+            else:
+                result = {'success': False, 'error': 'Connection testing for non-system connections not implemented in simple manager'}
             test_time = time.time() - start_time
             
             if result.get('success'):
