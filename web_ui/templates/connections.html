@@ -16,9 +16,6 @@
                         </div>
                     </div>
                     <div class="col-md-6 text-end">
-                        <button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="validateAllConnections()">
-                            <i class="fas fa-check-double me-1"></i>Validate All
-                        </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="loadConnections()">
                             <i class="fas fa-sync-alt me-1"></i>Refresh
                         </button>
@@ -41,14 +38,6 @@
                     Database Connections
                     <span id="connection-count" class="badge bg-secondary ms-2">0</span>
                 </h5>
-                <div class="d-flex align-items-center">
-                    <div class="me-3">
-                        <small class="text-muted me-2">Status:</small>
-                        <span id="valid-count" class="badge bg-success">0 Valid</span>
-                        <span id="invalid-count" class="badge bg-danger">0 Invalid</span>
-                        <span id="pending-count" class="badge bg-warning">0 Pending</span>
-                    </div>
-                </div>
             </div>
             <div class="card-body">
                 <!-- Loading indicator -->
@@ -65,12 +54,10 @@
                         <table class="table table-hover connection-table-optimized" id="connections-table">
                             <thead>
                                 <tr>
-                                    <th>Status</th>
                                     <th>Name</th>
                                     <th>Server</th>
                                     <th>Database</th>
                                     <th>Authentication</th>
-                                    <th>Response Time</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -95,36 +82,6 @@
     </div>
 </div>
 
-<!-- Validation Logs Section -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-file-alt me-2"></i>
-                    Validation Logs
-                    <span id="log-count" class="badge bg-secondary ms-2">0 entries</span>
-                </h5>
-                <div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearValidationLogs()">
-                        <i class="fas fa-trash me-1"></i>Clear Logs
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="exportValidationLogs()">
-                        <i class="fas fa-download me-1"></i>Export
-                    </button>
-                </div>
-            </div>
-            <div class="card-body">
-                <div id="validation-logs" class="validation-logs-container">
-                    <div class="text-center text-muted py-3">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Validation logs will appear here when connections are tested
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- New Connection Modal -->
 <div class="modal fade" id="connectionModal" tabindex="-1">
@@ -227,43 +184,15 @@
 
 {% block extra_css %}
 <style>
-.validation-logs-container {
-    background: #f8f9fa;
-    border-radius: 5px;
-    min-height: 150px;
-}
-
-.validation-logs-content {
-    background: white;
-    border-radius: 5px;
-    border: 1px solid #dee2e6;
-}
-
-.log-entry {
-    transition: background-color 0.2s ease;
-}
-
-.log-entry:hover {
-    background-color: #f8f9fa;
-}
-
-.log-message {
-    font-size: 0.9em;
-    line-height: 1.4;
-    word-wrap: break-word;
-}
-
 .connection-table-optimized {
     table-layout: fixed;
 }
 
-.connection-table-optimized th:nth-child(1) { width: 10%; }
-.connection-table-optimized th:nth-child(2) { width: 20%; }
+.connection-table-optimized th:nth-child(1) { width: 25%; }
+.connection-table-optimized th:nth-child(2) { width: 25%; }
 .connection-table-optimized th:nth-child(3) { width: 20%; }
 .connection-table-optimized th:nth-child(4) { width: 15%; }
-.connection-table-optimized th:nth-child(5) { width: 12%; }
-.connection-table-optimized th:nth-child(6) { width: 10%; }
-.connection-table-optimized th:nth-child(7) { width: 13%; }
+.connection-table-optimized th:nth-child(5) { width: 15%; }
 
 .fast-loading-indicator {
     border-left: 4px solid #007bff;
@@ -277,7 +206,6 @@
 
 {% block scripts %}
 <script>
-    let connectionStatuses = {};
     
     // Authentication type handling
     document.getElementById('connAuth').addEventListener('change', function() {
@@ -295,7 +223,6 @@
     
     // Prevent multiple simultaneous requests
     let loadingConnections = false;
-    let validatingConnections = false;
     
     // Load connections from database (optimized to prevent race conditions)
     function loadConnections() {
@@ -340,14 +267,6 @@
                 if (data.success && data.connections && data.connections.length > 0) {
                     displayConnections(data.connections);
                     showElement('connections-container');
-                    
-                    // Auto-validate all connections after loading (Issue 2 fix)
-                    // Only start validation if not already running
-                    if (!validatingConnections) {
-                        setTimeout(() => {
-                            validateAllConnectionsWithLogs();
-                        }, 100); // Minimal delay to let UI render
-                    }
                 } else {
                     showElement('empty-state');
                 }
@@ -366,12 +285,11 @@
         const tbody = document.getElementById('connections-tbody');
         tbody.innerHTML = '';
         
-        updateConnectionCounts(connections.length, 0, 0, connections.length);
+        document.getElementById('connection-count').textContent = connections.length;
         
         connections.forEach(conn => {
             const row = createConnectionRow(conn);
             tbody.appendChild(row);
-            connectionStatuses[conn.name] = 'pending';
         });
     }
     
@@ -382,11 +300,6 @@
         
         row.innerHTML = `
             <td>
-                <span id="status-${conn.name}" class="badge bg-warning">
-                    <i class="fas fa-clock me-1"></i>Pending
-                </span>
-            </td>
-            <td>
                 <strong>${conn.name}</strong>
                 ${conn.description ? `<br><small class="text-muted">${conn.description}</small>` : ''}
             </td>
@@ -394,294 +307,15 @@
             <td>${conn.database}</td>
             <td>${conn.auth_type}</td>
             <td>
-                <span id="time-${conn.name}" class="text-muted">-</span>
-            </td>
-            <td>
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-sm btn-outline-primary"
-                            onclick="testSingleConnection('${conn.name}')"
-                            data-bs-toggle="tooltip" title="Test Connection">
-                        <i class="fas fa-plug"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger"
-                            onclick="deleteConnection('${conn.name}')"
-                            data-bs-toggle="tooltip" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger"
+                        onclick="deleteConnection('${conn.name}')"
+                        data-bs-toggle="tooltip" title="Delete Connection">
+                    <i class="fas fa-trash me-1"></i>Delete
+                </button>
             </td>
         `;
         
         return row;
-    }
-    
-    // Update connection counts
-    function updateConnectionCounts(total, valid, invalid, pending) {
-        document.getElementById('connection-count').textContent = total;
-        document.getElementById('valid-count').textContent = `${valid} Valid`;
-        document.getElementById('invalid-count').textContent = `${invalid} Invalid`;
-        document.getElementById('pending-count').textContent = `${pending} Pending`;
-    }
-    
-    // Validate all connections with detailed logging
-    function validateAllConnectionsWithLogs() {
-        // Prevent multiple simultaneous validation requests
-        if (validatingConnections) {
-            console.log('[VALIDATION] Validation already in progress, skipping...');
-            addValidationLog('warning', 'BULK_VALIDATION_SKIP', 'Validation already in progress, skipping duplicate request');
-            return;
-        }
-        
-        validatingConnections = true;
-        
-        // Add log entry for validation start
-        addValidationLog('info', 'BULK_VALIDATION_START', 'Starting bulk validation of all connections...');
-        
-        // Update UI to show validation in progress
-        showValidationProgress();
-        
-        fetch('/api/connections/validate-all-detailed', {
-            method: 'POST'
-        })
-        .then(response => response.json())
-        .then(data => {
-            validatingConnections = false;
-            hideValidationProgress();
-            
-            if (data.success) {
-                updateConnectionStatuses(data.results);
-                updateConnectionCounts(
-                    data.total_connections,
-                    data.valid_connections,
-                    data.invalid_connections,
-                    0
-                );
-                
-                // Log detailed results for each connection
-                Object.entries(data.results).forEach(([connName, result]) => {
-                    if (result.success) {
-                        addValidationLog('success', connName, 
-                            `Connection validated successfully. Response time: ${result.response_time.toFixed(2)}s, Server: ${result.server_info || 'N/A'}`);
-                    } else {
-                        addValidationLog('error', connName, 
-                            `Connection validation failed: ${result.error}. Details: ${result.error_details || 'No additional details'}`);
-                    }
-                });
-                
-                addValidationLog('info', 'BULK_VALIDATION_COMPLETE', 
-                    `Bulk validation completed. ${data.valid_connections} valid, ${data.invalid_connections} invalid out of ${data.total_connections} total connections.`);
-                
-                showSuccess(`Validated ${data.total_connections} connections: ${data.valid_connections} valid, ${data.invalid_connections} invalid`);
-            } else {
-                addValidationLog('error', 'BULK_VALIDATION_ERROR', `Bulk validation failed: ${data.error}`);
-                showError('Failed to validate connections: ' + data.error);
-            }
-        })
-        .catch(error => {
-            validatingConnections = false;
-            hideValidationProgress();
-            addValidationLog('error', 'BULK_VALIDATION_ERROR', `Bulk validation error: ${error.message}`);
-            showError('Error validating connections: ' + error.message);
-        });
-    }
-    
-    // Legacy function for manual validation (calls the new function)
-    function validateAllConnections() {
-        validateAllConnectionsWithLogs();
-    }
-    
-    // Update connection statuses in UI
-    function updateConnectionStatuses(results) {
-        Object.entries(results).forEach(([connName, result]) => {
-            const statusElement = document.getElementById(`status-${connName}`);
-            const timeElement = document.getElementById(`time-${connName}`);
-            
-            if (result.success) {
-                statusElement.className = 'badge bg-success';
-                statusElement.innerHTML = '<i class="fas fa-check me-1"></i>Valid';
-                timeElement.textContent = `${result.response_time.toFixed(2)}s`;
-                connectionStatuses[connName] = 'valid';
-            } else {
-                statusElement.className = 'badge bg-danger';
-                statusElement.innerHTML = '<i class="fas fa-times me-1"></i>Invalid';
-                statusElement.title = result.error;
-                timeElement.textContent = 'Failed';
-                connectionStatuses[connName] = 'invalid';
-            }
-        });
-    }
-    
-    // Test single connection with logging
-    function testSingleConnection(connectionName) {
-        const statusElement = document.getElementById(`status-${connectionName}`);
-        const timeElement = document.getElementById(`time-${connectionName}`);
-        
-        addValidationLog('info', connectionName, 'Starting individual connection test...');
-        
-        statusElement.className = 'badge bg-info';
-        statusElement.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Testing...';
-        timeElement.textContent = '-';
-        
-        fetch(`/api/connections/${connectionName}/test-detailed`, {
-            method: 'POST'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                statusElement.className = 'badge bg-success';
-                statusElement.innerHTML = '<i class="fas fa-check me-1"></i>Valid';
-                timeElement.textContent = `${data.response_time.toFixed(2)}s`;
-                
-                addValidationLog('success', connectionName, 
-                    `Individual test successful. Response time: ${data.response_time.toFixed(2)}s, Server info: ${data.server_info || 'N/A'}, Connection method: ${data.connection_method || 'Default'}`);
-                showSuccess(`Connection "${connectionName}" is valid`);
-            } else {
-                statusElement.className = 'badge bg-danger';
-                statusElement.innerHTML = '<i class="fas fa-times me-1"></i>Invalid';
-                statusElement.title = data.error;
-                timeElement.textContent = 'Failed';
-                
-                addValidationLog('error', connectionName, 
-                    `Individual test failed: ${data.error}. Error code: ${data.error_code || 'N/A'}, Error details: ${data.error_details || 'No additional details'}, Suggested fix: ${data.suggested_fix || 'Check connection parameters'}`);
-                showError(`Connection "${connectionName}" failed: ${data.error}`);
-            }
-        })
-        .catch(error => {
-            statusElement.className = 'badge bg-danger';
-            statusElement.innerHTML = '<i class="fas fa-exclamation me-1"></i>Error';
-            timeElement.textContent = 'Error';
-            
-            addValidationLog('error', connectionName, `Individual test error: ${error.message}`);
-            showError('Error testing connection: ' + error.message);
-        });
-    }
-    
-    // Validation log management
-    let validationLogs = [];
-    
-    function addValidationLog(level, connection, message) {
-        const timestamp = new Date().toLocaleString();
-        const logEntry = {
-            timestamp: timestamp,
-            level: level,
-            connection: connection,
-            message: message,
-            id: Date.now() + Math.random()
-        };
-        
-        validationLogs.unshift(logEntry); // Add to beginning
-        
-        // Keep only last 100 logs
-        if (validationLogs.length > 100) {
-            validationLogs = validationLogs.slice(0, 100);
-        }
-        
-        updateValidationLogsDisplay();
-    }
-    
-    function updateValidationLogsDisplay() {
-        const logsContainer = document.getElementById('validation-logs');
-        const logCount = document.getElementById('log-count');
-        
-        logCount.textContent = `${validationLogs.length} entries`;
-        
-        if (validationLogs.length === 0) {
-            logsContainer.innerHTML = `
-                <div class="text-center text-muted py-3">
-                    <i class="fas fa-info-circle me-2"></i>
-                    Validation logs will appear here when connections are tested
-                </div>
-            `;
-            return;
-        }
-        
-        const logsHtml = validationLogs.map(log => {
-            const levelClass = {
-                'success': 'text-success',
-                'error': 'text-danger',
-                'warning': 'text-warning',
-                'info': 'text-info'
-            }[log.level] || 'text-muted';
-            
-            const levelIcon = {
-                'success': 'fas fa-check-circle',
-                'error': 'fas fa-exclamation-circle',
-                'warning': 'fas fa-exclamation-triangle',
-                'info': 'fas fa-info-circle'
-            }[log.level] || 'fas fa-circle';
-            
-            return `
-                <div class="log-entry border-bottom py-2">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <div class="d-flex align-items-center mb-1">
-                                <i class="${levelIcon} ${levelClass} me-2"></i>
-                                <strong class="me-2">${log.connection}</strong>
-                                <small class="text-muted">${log.timestamp}</small>
-                            </div>
-                            <div class="log-message">
-                                ${log.message}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        logsContainer.innerHTML = `
-            <div class="validation-logs-content" style="max-height: 400px; overflow-y: auto;">
-                ${logsHtml}
-            </div>
-        `;
-    }
-    
-    function clearValidationLogs() {
-        if (confirm('Clear all validation logs?')) {
-            validationLogs = [];
-            updateValidationLogsDisplay();
-            showSuccess('Validation logs cleared');
-        }
-    }
-    
-    function exportValidationLogs() {
-        if (validationLogs.length === 0) {
-            showError('No logs to export');
-            return;
-        }
-        
-        const csvContent = [
-            ['Timestamp', 'Level', 'Connection', 'Message'],
-            ...validationLogs.map(log => [log.timestamp, log.level, log.connection, log.message])
-        ].map(row => row.map(field => `"${field}"`).join(',')).join('\n');
-        
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `connection-validation-logs-${new Date().toISOString().split('T')[0]}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        
-        showSuccess('Validation logs exported successfully');
-    }
-    
-    function showValidationProgress() {
-        // Add a progress indicator to the validation logs section
-        const logsContainer = document.getElementById('validation-logs');
-        logsContainer.innerHTML = `
-            <div class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Validating connections...</span>
-                </div>
-                <div class="mt-2">Validating all connections...</div>
-            </div>
-        `;
-    }
-    
-    function hideValidationProgress() {
-        updateValidationLogsDisplay();
     }
     
     // Test connection form

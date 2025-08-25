@@ -199,6 +199,9 @@ class JobManager:
                 system_connection.rollback()
             except:
                 pass
+            # Return connection to pool even on error
+            if 'system_connection' in locals() and system_connection:
+                self.db_manager.return_connection(system_connection)
             return False
     
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
@@ -308,6 +311,9 @@ class JobManager:
             return jobs
             
         except Exception as e:
+            # Return connection to pool even on error
+            if 'system_connection' in locals() and system_connection:
+                self.db_manager.return_connection(system_connection)
             self.logger.error(f"[JOB_MANAGER] Error listing jobs: {e}")
             return []
     
@@ -401,6 +407,9 @@ class JobManager:
                 }
             
         except Exception as e:
+            # Return connection to pool even on error
+            if 'system_connection' in locals() and system_connection:
+                self.db_manager.return_connection(system_connection)
             self.logger.error(f"[JOB_MANAGER] Error toggling job {job_id}: {e}")
             return {
                 'success': False,
@@ -474,10 +483,16 @@ class JobManager:
                 
                 history.append(execution)
             
+            # Return connection to pool
+            self.db_manager.return_connection(system_connection)
+            
             self.logger.info(f"[JOB_MANAGER] Retrieved {len(history)} execution history records")
             return history
             
         except Exception as e:
+            # Return connection to pool even on error
+            if 'system_connection' in locals() and system_connection:
+                self.db_manager.return_connection(system_connection)
             self.logger.error(f"[JOB_MANAGER] Error retrieving execution history: {e}")
             return []
     
@@ -642,4 +657,7 @@ class JobManager:
                 system_connection.rollback()
             except:
                 pass
+            # Return connection to pool even on error
+            if 'system_connection' in locals() and system_connection:
+                self.db_manager.return_connection(system_connection)
             return False

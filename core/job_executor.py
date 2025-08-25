@@ -283,6 +283,9 @@ class JobExecutor:
                 system_connection.rollback()
             except:
                 pass
+            # Return connection to pool even on error
+            if 'system_connection' in locals() and system_connection:
+                self.db_manager.return_connection(system_connection)
             return None
     
     def _log_execution_completion(self, execution_id: int, result: JobResult):
@@ -334,6 +337,9 @@ class JobExecutor:
                 system_connection.rollback()
             except:
                 pass
+            # Return connection to pool even on error
+            if 'system_connection' in locals() and system_connection:
+                self.db_manager.return_connection(system_connection)
     
     def _log_execution_failure(self, execution_id: int, error_message: str):
         """Log job execution failure to database"""
@@ -368,6 +374,9 @@ class JobExecutor:
             
         except Exception as e:
             self.logger.error(f"[JOB_EXECUTOR] Error logging execution failure: {e}")
+            # Return connection to pool even on error
+            if 'system_connection' in locals() and system_connection:
+                self.db_manager.return_connection(system_connection)
     
     def get_execution_history(self, job_id: str = None, limit: int = 50) -> List[Dict[str, Any]]:
         """Get job execution history from database"""
@@ -428,6 +437,9 @@ class JobExecutor:
             return history
             
         except Exception as e:
+            # Return connection to pool even on error
+            if 'system_connection' in locals() and system_connection:
+                self.db_manager.return_connection(system_connection)
             self.logger.error(f"[JOB_EXECUTOR] Error getting execution history: {e}")
             return []
 
@@ -492,6 +504,9 @@ class JobExecutor:
             return history
             
         except Exception as e:
+            # Return connection to pool even on error
+            if 'system_connection' in locals() and system_connection:
+                self.db_manager.return_connection(system_connection)
             self.logger.error(f"[JOB_EXECUTOR] Error getting incremental execution history: {e}")
             return []
     
