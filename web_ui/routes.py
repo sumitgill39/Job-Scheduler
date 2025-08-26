@@ -17,49 +17,52 @@ def create_routes(app):
     
     @app.route('/')
     def index():
-        """Dashboard page"""
+        """Dashboard page using SQLAlchemy job manager"""
         
         try:
-            # Try integrated scheduler first, then fall back to old scheduler manager
-            integrated_scheduler = getattr(app, 'integrated_scheduler', None)
-            scheduler = getattr(app, 'scheduler_manager', None)
+            # Use SQLAlchemy job manager for data
             job_manager = getattr(app, 'job_manager', None)
+            scheduler_manager = getattr(app, 'scheduler_manager', None)
+            integrated_scheduler = getattr(app, 'integrated_scheduler', None)
             
-            if integrated_scheduler:
-                # Use integrated scheduler for status
-                status = integrated_scheduler.get_scheduler_status()
+            if job_manager:
+                # Get jobs from SQLAlchemy database
+                all_jobs = job_manager.list_jobs()
+                recent_jobs = all_jobs[:5] if all_jobs else []
                 
-                # Get recent jobs from database
-                if job_manager:
-                    jobs_raw = job_manager.list_jobs()
-                    recent_jobs = jobs_raw[:5] if jobs_raw else []
+                # Calculate status from database jobs
+                total_jobs = len(all_jobs)
+                enabled_jobs = len([job for job in all_jobs if job.get('enabled', True)])
+                disabled_jobs = total_jobs - enabled_jobs
+                
+                # Get scheduler status if available
+                if integrated_scheduler:
+                    scheduler_status = integrated_scheduler.get_scheduler_status()
+                    running = scheduler_status.get('running', False)
+                    scheduled_jobs = scheduler_status.get('scheduled_jobs', 0)
+                elif scheduler_manager:
+                    scheduler_status = scheduler_manager.get_scheduler_status()
+                    running = scheduler_status.get('running', False)
+                    scheduled_jobs = scheduler_status.get('scheduled_jobs', 0)
                 else:
-                    recent_jobs = []
-                    
-                logger.info("[DASHBOARD] Using integrated scheduler for dashboard")
+                    running = False
+                    scheduled_jobs = 0
                 
-            elif scheduler:
-                # Fallback to old scheduler manager
-                # Debug: Print available methods
-                available_methods = [method for method in dir(scheduler) if not method.startswith('_')]
-                logger.info(f"Available scheduler methods: {available_methods}")
+                status = {
+                    'running': running,
+                    'total_jobs': total_jobs,
+                    'enabled_jobs': enabled_jobs,
+                    'scheduled_jobs': scheduled_jobs,
+                    'disabled_jobs': disabled_jobs,
+                    'job_types': {},
+                    'next_run_times': [],
+                    'status': 'running' if running else 'stopped'
+                }
                 
-                # Check if the required method exists
-                if not hasattr(scheduler, 'get_all_jobs'):
-                    logger.error("SchedulerManager missing get_all_jobs method")
-                    return render_template('error.html', error="Scheduler missing required methods")
-                
-                # Get scheduler status
-                status = scheduler.get_scheduler_status()
-                
-                # Get recent jobs
-                jobs = scheduler.get_all_jobs()  # This should return a dict {job_id: job_object}
-                recent_jobs = list(jobs.values())[:5] if jobs else []
-                
-                logger.info("[DASHBOARD] Using legacy scheduler manager for dashboard")
+                logger.info(f"[DASHBOARD] Using SQLAlchemy job manager - {total_jobs} jobs loaded")
                 
             else:
-                # No scheduler available - show basic status
+                # No job manager available - show basic status
                 status = {
                     'running': False,
                     'total_jobs': 0,
@@ -71,7 +74,7 @@ def create_routes(app):
                     'status': 'not_available'
                 }
                 recent_jobs = []
-                logger.warning("[DASHBOARD] No scheduler available - showing basic status")
+                logger.warning("[DASHBOARD] No SQLAlchemy job manager available - showing basic status")
             
             return render_template('index.html', 
                                  status=status, 
@@ -2170,11 +2173,15 @@ def create_routes(app):
                 total_jobs = 0
                 active_job_count = 0
             
-            # Get connection statistics
-            db_manager = getattr(app, 'db_manager', None)
-            if pool:
-                pool_stats = pool.get_pool_stats()
-                total_connections = pool_stats.get('total_connections', 0)
+            # Get connection statistics from SQLAlchemy
+            database_engine = getattr(app, 'database_engine', None)
+            if database_engine and hasattr(database_engine, 'engine'):
+                try:
+                    # Try to get SQLAlchemy pool size
+                    pool = database_engine.engine.pool
+                    total_connections = pool.size() if hasattr(pool, 'size') else 0
+                except Exception:
+                    total_connections = 0
             else:
                 total_connections = 0
             

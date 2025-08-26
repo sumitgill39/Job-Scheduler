@@ -27,6 +27,14 @@ def create_app(scheduler_manager=None):
     # Track application start time for uptime calculation
     app._start_time = time.time()
     
+    # Always attach scheduler manager first (outside SQLAlchemy try/catch)
+    if scheduler_manager:
+        app.scheduler_manager = scheduler_manager
+        logger.info("✅ Scheduler manager attached to Flask app")
+    else:
+        app.scheduler_manager = None
+        logger.info("ℹ️ No scheduler manager provided")
+    
     # Initialize SQLAlchemy database and components
     logger.info("🔧 Initializing SQLAlchemy components...")
     try:
@@ -57,14 +65,8 @@ def create_app(scheduler_manager=None):
         app.job_executor = JobExecutor(job_manager=app.job_manager)
         logger.info("✅ SQLAlchemy job executor created successfully")
         
-        # Initialize integrated scheduler if provided
-        if scheduler_manager:
-            app.scheduler_manager = scheduler_manager
-            logger.info("✅ Scheduler manager attached to Flask app")
-        else:
-            logger.info("ℹ️ No scheduler manager provided")
-            
-            # Try to create integrated scheduler
+        # Try to create integrated scheduler if no scheduler manager provided
+        if not scheduler_manager:
             try:
                 logger.info("⏰ Creating integrated scheduler...")
                 from core.integrated_scheduler import IntegratedScheduler
@@ -77,6 +79,8 @@ def create_app(scheduler_manager=None):
                 logger.error(f"💥 Integrated scheduler initialization failed: {e}")
                 logger.info("📝 Continuing without integrated scheduler")
                 app.integrated_scheduler = None
+        else:
+            app.integrated_scheduler = None
         
         logger.info("✅ All SQLAlchemy components initialized successfully")
         
@@ -85,11 +89,12 @@ def create_app(scheduler_manager=None):
         import traceback
         logger.error(f"🔍 Stack trace: {traceback.format_exc()}")
         
-        # Set minimal components so app can still start
+        # Set minimal components so app can still start (but keep scheduler_manager)
         app.database_engine = None
         app.job_manager = None
         app.job_executor = None
         app.integrated_scheduler = None
+        # Keep app.scheduler_manager as it was set above
     
     # Register blueprints/routes
     try:
