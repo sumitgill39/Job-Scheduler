@@ -12,6 +12,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import func
 from datetime import datetime
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 Base = declarative_base()
 
