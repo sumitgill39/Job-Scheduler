@@ -569,11 +569,11 @@ function testJobManagerStatus() {
 }
 
 function testConnectionPoolStatus() {
-    return fetch('/api/system/connection-pool-stats')
+    return fetch('/api/system/database-stats')
         .then(response => response.json())
         .then(data => {
             const success = data.success;
-            const status = success ? `${data.pool_stats.active_connections} active` : 'Offline';
+            const status = success ? `SQLAlchemy Pool: ${data.database_stats.pool_size || 0} size` : 'Offline';
             updateWorkflowComponent('pool', success, status);
         })
         .catch(() => {
@@ -674,41 +674,41 @@ function updateStatusBadge(elementId, success, text) {
 }
 
 function loadConnectionPoolStats() {
-    fetch('/api/system/connection-pool-stats')
+    fetch('/api/system/database-stats')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                const stats = data.pool_stats;
+                const stats = data.database_stats;
                 document.getElementById('connectionPoolStats').innerHTML = `
                     <div class="mb-2">
                         <div class="d-flex justify-content-between">
-                            <span>Total Connections:</span>
-                            <strong>${stats.total_connections}</strong>
+                            <span>SQLAlchemy Pool Size:</span>
+                            <strong>${stats.pool_size || 0}</strong>
                         </div>
                     </div>
                     <div class="mb-2">
                         <div class="d-flex justify-content-between">
-                            <span>Active Connections:</span>
-                            <strong>${stats.active_connections}</strong>
+                            <span>Checked Out:</span>
+                            <strong>${stats.checked_out || 0}</strong>
                         </div>
                     </div>
                     <div class="mb-2">
                         <div class="d-flex justify-content-between">
-                            <span>Idle Connections:</span>
-                            <strong>${stats.idle_connections}</strong>
+                            <span>Overflow:</span>
+                            <strong>${stats.overflow || 0}</strong>
                         </div>
                     </div>
                     <div class="mb-0">
                         <div class="d-flex justify-content-between">
-                            <span>Pool Health:</span>
-                            <span class="badge bg-${stats.health === 'healthy' ? 'success' : 'warning'}">${stats.health}</span>
+                            <span>Pool Status:</span>
+                            <span class="badge bg-success">SQLAlchemy</span>
                         </div>
                     </div>
                 `;
             }
         })
         .catch(error => {
-            document.getElementById('connectionPoolStats').innerHTML = '<div class="text-danger">Failed to load stats</div>';
+            document.getElementById('connectionPoolStats').innerHTML = '<div class="text-danger">Failed to load SQLAlchemy stats</div>';
         });
 }
 
@@ -785,8 +785,8 @@ function testAllConnections() {
 }
 
 function cleanupConnectionPool() {
-    if (confirm('Clean up idle database connections?')) {
-        executeAdminCommand('/api/system/cleanup-pool', 'Cleaning up connection pool...');
+    if (confirm('Check database health and connectivity?')) {
+        executeAdminCommand('/api/system/database-health', 'Checking SQLAlchemy database health...');
     }
 }
 

@@ -1,8 +1,8 @@
 """
 Database package for Windows Job Scheduler
+SQLAlchemy-based implementation
 """
 
-from .simple_connection_manager import SimpleDatabaseManager, get_database_manager
-from .job_storage import JobStorage
+from .sqlalchemy_models import JobConfiguration, JobExecutionHistory, DatabaseEngine, init_database
 
-__all__ = ['SimpleDatabaseManager', 'get_database_manager', 'JobStorage']
+__all__ = ['JobConfiguration', 'JobExecutionHistory', 'DatabaseEngine', 'init_database']

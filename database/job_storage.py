@@ -13,7 +13,7 @@ from dataclasses import asdict
 import threading
 
 from utils.logger import get_logger
-from .simple_connection_manager import get_database_manager
+from .sqlalchemy_models import get_db_session, JobConfiguration, JobExecutionHistory
 
 
 class JobStorage:

@@ -19,7 +19,6 @@ from utils.windows_utils import WindowsUtils
 from core.scheduler_manager import SchedulerManager
 from cli.cli_manager import CLIManager
 from web_ui.app import create_app
-from database.disconnected_factory import create_disconnected_components
 
 
 class JobSchedulerApp:
@@ -95,43 +94,24 @@ class JobSchedulerApp:
             sys.exit(1)
     
     def _init_scheduler(self):
-        """Initialize scheduler manager with enhanced logging"""
+        """Initialize scheduler manager with SQLAlchemy"""
         try:
-            self.logger.info("⏰ Initializing Scheduler Manager...")
+            self.logger.info("⏰ Initializing Scheduler Manager with SQLAlchemy...")
             
-            # Check if disconnected mode is enabled (default: True)
-            use_disconnected = os.environ.get('USE_DISCONNECTED_MODE', 'true').lower() == 'true'
+            # Use YAML-based scheduler manager (integrated with SQLAlchemy job manager)
+            self.logger.info("📊 Using YAML-based scheduler with SQLAlchemy job storage")
+            storage_type = "yaml"
+            storage_config = {
+                "yaml_file": str(Path("config") / "jobs.yaml"),
+                "history_file": str(Path("config") / "job_history.yaml")
+            }
             
-            if use_disconnected:
-                self.logger.info("🔥 Using DISCONNECTED mode - eliminating connection pool issues!")
-                
-                # Create disconnected components
-                try:
-                    components = create_disconnected_components()
-                    self.scheduler_manager = components.get('integrated_scheduler')  # Use integrated scheduler
-                    self.disconnected_components = components  # Store all components
-                    self.logger.info("✅ Disconnected scheduler components initialized successfully")
-                except Exception as e:
-                    self.logger.error(f"Failed to create disconnected components: {e}")
-                    self.logger.info("Falling back to traditional scheduler...")
-                    use_disconnected = False
+            self.logger.debug(f"📁 Storage type: {storage_type}")
+            self.logger.debug(f"📁 Storage config: {storage_config}")
             
-            if not use_disconnected:
-                # Fallback to traditional approach
-                self.logger.info("📊 Using traditional YAML-based scheduler")
-                storage_type = "yaml"
-                storage_config = {
-                    "yaml_file": str(Path("config") / "jobs.yaml"),
-                    "history_file": str(Path("config") / "job_history.yaml")
-                }
-                
-                self.logger.debug(f"📁 Storage type: {storage_type}")
-                self.logger.debug(f"📁 Storage config: {storage_config}")
-                
-                self.scheduler_manager = SchedulerManager(storage_type, storage_config)
-                self.disconnected_components = None
+            self.scheduler_manager = SchedulerManager(storage_type, storage_config)
             
-            self.logger.info("✅ Scheduler manager initialized successfully")
+            self.logger.info("✅ SQLAlchemy scheduler manager initialized successfully")
             
         except Exception as e:
             self.logger.error(f"💥 CRITICAL: Failed to initialize scheduler: {e}")
@@ -428,14 +408,14 @@ def test_system_components():
             print(f"   Error: {ps_result['stderr']}")
         
         # Test database connections
-        print("\n3. Testing database connections...")
-        from database.simple_connection_manager import get_database_manager
+        print("\n3. Testing SQLAlchemy database connection...")
+        from database.sqlalchemy_models import DatabaseEngine
         
-        db_manager = get_database_manager()
-        test_result = db_manager.test_connection()
+        db_engine = DatabaseEngine()
+        test_result = db_engine.test_connection()
         
         status = "✓ SUCCESS" if test_result['success'] else "✗ FAILED"
-        print(f"   system: {status}")
+        print(f"   SQLAlchemy: {status}")
         if not test_result['success']:
             print(f"     Error: {test_result.get('error', 'Unknown error')}")
         else:

@@ -1002,28 +1002,29 @@ def create_routes(app):
     
     @app.route('/api/system/database-status', methods=['GET'])
     def api_system_database_status():
-        """Get system database connection status"""
+        """Get system database connection status using SQLAlchemy"""
         try:
-            # Use global connection pool instance
-            db_manager = getattr(app, 'db_manager', None)
-            if not db_manager:
-                return jsonify({'success': False, 'connected': False, 'error': 'Database not available'}), 500
+            # Use SQLAlchemy database engine
+            database_engine = getattr(app, 'database_engine', None)
+            if not database_engine:
+                return jsonify({'success': False, 'connected': False, 'error': 'SQLAlchemy database engine not available'}), 500
             
-            # db_manager already set above
-            
-            # Test system database connection
-            system_status = db_manager.test_connection()
+            # Test SQLAlchemy database connection
+            system_status = database_engine.test_connection()
             
             if system_status['success']:
-                # Get system connection info dynamically
-                system_info = db_manager.get_connection_info("system")
-                database_name = system_info.get('database', 'Unknown') if system_info else 'Unknown'
-                server_name = system_info.get('server', 'Unknown') if system_info else 'Unknown'
-                port = system_info.get('port') if system_info else None
+                # Get connection info from environment/config
+                import os
+                from dotenv import load_dotenv
+                load_dotenv()
+                
+                database_name = os.getenv('DB_DATABASE', 'Unknown')
+                server_name = os.getenv('DB_SERVER', 'Unknown')
+                port = os.getenv('DB_PORT')
                 
                 # Build server display string
                 server_display = server_name
-                if port and port != 1433:
+                if port and port != '1433':
                     server_display += f":{port}"
                 
                 return jsonify({
@@ -1462,64 +1463,57 @@ def create_routes(app):
                 'error': str(e)
             }), 500
     
-    @app.route('/api/system/connection-pool-stats', methods=['GET'])
-    def api_connection_pool_stats():
-        """Get connection pool statistics"""
+    @app.route('/api/system/database-stats', methods=['GET'])
+    def api_database_stats():
+        """Get SQLAlchemy database statistics"""
         try:
-            # Use global connection pool instance
-            db_manager = getattr(app, 'db_manager', None)
-            if not db_manager:
-                return jsonify({'success': False, 'error': 'Database not available'}), 500
+            # Use SQLAlchemy database engine
+            database_engine = getattr(app, 'database_engine', None)
+            if not database_engine:
+                return jsonify({'success': False, 'error': 'SQLAlchemy database engine not available'}), 500
             
-            stats = db_manager.get_pool_stats()
+            # Get SQLAlchemy pool stats
+            stats = database_engine.get_pool_stats()
             
-            logger.info(f"[POOL_STATS] Retrieved connection pool statistics: {stats['total_connections']} active connections")
+            logger.info(f"[DB_STATS] Retrieved SQLAlchemy database statistics: {stats.get('pool_size', 0)} pool size")
             
             return jsonify({
                 'success': True,
-                'pool_stats': stats,
+                'database_stats': stats,
                 'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
             })
             
         except Exception as e:
-            logger.error(f"[POOL_STATS] Error retrieving pool stats: {e}")
+            logger.error(f"[DB_STATS] Error retrieving database stats: {e}")
             return jsonify({
                 'success': False,
                 'error': str(e)
             }), 500
     
-    @app.route('/api/system/cleanup-pool', methods=['POST'])
-    def api_cleanup_pool():
-        """Manually trigger connection pool cleanup"""
+    @app.route('/api/system/database-health', methods=['POST'])
+    def api_database_health():
+        """Check SQLAlchemy database health and connectivity"""
         try:
-            # Use global connection pool instance
-            db_manager = getattr(app, 'db_manager', None)
-            if not db_manager:
-                return jsonify({'success': False, 'error': 'Database not available'}), 500
+            # Use SQLAlchemy database engine
+            database_engine = getattr(app, 'database_engine', None)
+            if not database_engine:
+                return jsonify({'success': False, 'error': 'SQLAlchemy database engine not available'}), 500
             
-            # Get stats before cleanup
-            stats_before = pool.get_pool_stats()
+            # Test connection and get stats
+            health_check = database_engine.test_connection()
+            stats = database_engine.get_pool_stats()
             
-            # Perform cleanup
-            pool.cleanup_pool()
-            
-            # Get stats after cleanup
-            stats_after = pool.get_pool_stats()
-            
-            cleaned_connections = stats_before['total_connections'] - stats_after['total_connections']
-            
-            logger.info(f"[POOL_CLEANUP] Manual cleanup completed: removed {cleaned_connections} connections")
+            logger.info(f"[DB_HEALTH] Database health check completed: {health_check['success']}")
             
             return jsonify({
                 'success': True,
-                'message': f'Pool cleanup completed: removed {cleaned_connections} expired connections',
-                'before': stats_before,
-                'after': stats_after,
-                'cleaned_connections': cleaned_connections
+                'message': 'Database health check completed',
+                'health_check': health_check,
+                'stats': stats
             })
             
         except Exception as e:
-            logger.error(f"[POOL_CLEANUP] Error during pool cleanup: {e}")
+            logger.error(f"[DB_HEALTH] Error during database health check: {e}")
             return jsonify({
                 'success': False,
                 'error': str(e)
@@ -1527,136 +1521,25 @@ def create_routes(app):
     
     @app.route('/api/test-connection', methods=['POST'])
     def api_test_connection():
-        """API endpoint to test a database connection"""
+        """API endpoint to test database connection using current SQLAlchemy settings"""
         try:
-            data = request.get_json()
-            if not data:
-                return jsonify({'success': False, 'error': 'No data provided'}), 400
+            # Use the current SQLAlchemy database engine for testing
+            database_engine = getattr(app, 'database_engine', None)
+            if not database_engine:
+                return jsonify({'success': False, 'error': 'SQLAlchemy database engine not available'}), 500
             
-            # Validate required fields
-            required_fields = ['server', 'database']
-            for field in required_fields:
-                if not data.get(field):
-                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            # Test the current database connection
+            logger.info(f"[TEST_CONNECTION] Testing current SQLAlchemy database connection")
             
-            # Import required modules
-            import pyodbc
-            import time
+            result = database_engine.test_connection()
             
-            # Build connection string directly for testing
-            server = data.get('server')
-            port = data.get('port', 1433)
-            database = data.get('database')
-            auth_type = data.get('auth_type', 'sql')  # Default to SQL Server authentication
-            username = data.get('username')
-            password = data.get('password')
-            
-            # Build connection string components
-            components = []
-            components.append("DRIVER={ODBC Driver 17 for SQL Server}")
-            
-            # Handle server and port
-            if '\\' in server and port and port != 1433:
-                # Named instance with custom port
-                components.append(f"SERVER={server},{port}")
-            elif '\\' in server:
-                # Named instance - don't add port for default
-                components.append(f"SERVER={server}")
-            elif port and port != 1433:
-                # Custom port
-                components.append(f"SERVER={server},{port}")
-            else:
-                # Default port
-                components.append(f"SERVER={server}")
-            
-            components.append(f"DATABASE={database}")
-            
-            # Authentication - Critical logging
-            if auth_type == 'windows':
-                logger.error(f"❌❌❌ ROUTES: Windows authentication requested! This will use local credentials! ❌❌❌")
-                logger.error(f"❌ Server: {server}, Database: {database}")
-                logger.error(f"❌ This is likely the source of the mercer\\sumeet-gill authentication!")
-                components.append("Trusted_Connection=yes")
-            else:
-                logger.info(f"✅ ROUTES: SQL Server authentication - Username: {username}")
-                if not username or not password:
-                    return jsonify({'success': False, 'error': 'Username and password required for SQL authentication'}), 400
-                components.append(f"UID={username}")
-                components.append(f"PWD={password}")
-            
-            # Connection settings
-            components.extend([
-                "Connection Timeout=10",
-                "Command Timeout=30",
-                "Encrypt=no",
-                "TrustServerCertificate=yes"
-            ])
-            
-            connection_string = ";".join(components)
-            
-            # Log the connection string for debugging (without password)
-            debug_string = connection_string.replace(password, "***") if password else connection_string
-            logger.info(f"Testing connection with string: {debug_string}")
-            
-            # Test the connection
-            start_time = time.time()
-            
-            try:
-                logger.info(f"Testing connection to {server}\\{database}")
-                
-                connection = pyodbc.connect(connection_string)
-                cursor = connection.cursor()
-                cursor.execute("SELECT 1 as test, @@VERSION as version")
-                result = cursor.fetchone()
-                cursor.close()
-                connection.close()
-                
-                response_time = time.time() - start_time
-                
-                return jsonify({
-                    'success': True,
-                    'message': 'Connection successful',
-                    'response_time': response_time,
-                    'server_info': {
-                        'test_result': result[0] if result else None,
-                        'version': result[1][:100] if result and len(result) > 1 else 'Unknown'
-                    }
-                })
-                
-            except pyodbc.Error as e:
-                response_time = time.time() - start_time
-                error_msg = str(e)
-                
-                # Extract more user-friendly error message
-                if "Login failed" in error_msg:
-                    error_msg = "Login failed - check username and password"
-                elif "Server does not exist" in error_msg:
-                    error_msg = "Server not found - check server name and port"
-                elif "Database" in error_msg and "does not exist" in error_msg:
-                    error_msg = "Database not found - check database name"
-                elif "timeout" in error_msg.lower():
-                    error_msg = "Connection timeout - check server accessibility"
-                
-                logger.error(f"Connection test failed: {e}")
-                
-                return jsonify({
-                    'success': False,
-                    'error': error_msg,
-                    'response_time': response_time
-                })
-                
-        except ImportError as e:
-            logger.error(f"Import error in test connection: {e}")
-            return jsonify({
-                'success': False,
-                'error': 'pyodbc driver not available - please install ODBC Driver for SQL Server'
-            }), 500
+            return jsonify(result)
             
         except Exception as e:
-            logger.error(f"API test connection error: {e}")
+            logger.error(f"[TEST_CONNECTION] Error testing connection: {e}")
             return jsonify({
                 'success': False,
-                'error': f'Unexpected error: {str(e)}'
+                'error': f'Connection test failed: {str(e)}'
             }), 500
     
     @app.route('/connections')

@@ -5,7 +5,7 @@ SQL Job implementation for Windows Job Scheduler
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
 from .job_base import JobBase, JobResult, JobStatus
-from database.simple_connection_manager import get_database_manager
+from database.sqlalchemy_models import get_db_session
 
 # Import pyodbc with error handling
 try:
