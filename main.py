@@ -131,9 +131,8 @@ class JobSchedulerApp:
     def _init_web(self):
         """Initialize web application"""
         try:
-            # Pass disconnected components to web app if available
-            use_disconnected = hasattr(self, 'disconnected_components') and self.disconnected_components
-            self.web_app = create_app(self.scheduler_manager, use_disconnected=use_disconnected)
+            # Initialize web app with SQLAlchemy support
+            self.web_app = create_app(self.scheduler_manager)
             self.logger.info("Web application initialized")
         except Exception as e:
             self.logger.error(f"Failed to initialize web app: {e}")

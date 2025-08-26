@@ -32,7 +32,7 @@ class WindowsLogger:
         
         # Default configuration with enhanced crash diagnosis
         return {
-            'log_file': 'logs\\scheduler.log',
+            'log_file': os.path.join('logs', 'scheduler.log'),
             'max_file_size': '50MB',  # Increased for more logging
             'backup_count': 10,  # Keep more backups for crash analysis
             'format': '%(asctime)s.%(msecs)03d [%(process)d:%(thread)d] %(name)-20s %(levelname)-8s %(funcName)-20s:%(lineno)-4d %(message)s',
@@ -65,7 +65,7 @@ class WindowsLogger:
         self.logger.addHandler(console_handler)
         
         # File handler
-        log_file = self.config.get('log_file', 'logs\\scheduler.log')
+        log_file = self.config.get('log_file', os.path.join('logs', 'scheduler.log'))
         self._ensure_log_directory(log_file)
         
         try:
