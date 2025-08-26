@@ -12,8 +12,7 @@ pytz==2024.1
 croniter==2.0.1
 
 # SQLAlchemy for clean database operations
-sqlalchemy==2.0.23
-pymssql==2.2.8
+sqlalchemy>=2.0.43
 
 # Windows-specific dependencies (only installed on Windows)
 pywin32>=306; sys_platform == "win32"

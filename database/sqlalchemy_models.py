@@ -93,7 +93,7 @@ class JobExecutionHistory(Base):
             'return_code': self.return_code,
             'retry_count': self.retry_count,
             'max_retries': self.max_retries,
-            'metadata': self.metadata
+            'execution_metadata': self.execution_metadata
         }
 
 
