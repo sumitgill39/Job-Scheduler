@@ -60,11 +60,10 @@ class JobStorage:
     
     def _init_database_storage(self):
         """Initialize database storage"""
-        self.db_manager = get_database_manager()
+        # SQLAlchemy initialization handled by init_database() function
         self.connection_name = self.storage_config.get('connection_name', 'default')
         
-        # Create tables if they don't exist
-        self._create_database_tables()
+        # Tables created by SQLAlchemy init_database() function
     
     def _create_database_tables(self):
         """Create database tables for job storage"""

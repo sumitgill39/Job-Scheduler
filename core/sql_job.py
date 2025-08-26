@@ -52,8 +52,8 @@ class SqlJob(JobBase):
         self.fetch_size = fetch_size
         self.max_rows = max_rows
         
-        # Initialize database manager
-        self.db_manager = get_database_manager()
+        # No need for database manager initialization with SQLAlchemy
+        # SQLAlchemy sessions are created per-request
         
         self.job_logger.info(f"Initialized SQL job with query: {self.sql_query[:50]}...")
     
@@ -191,10 +191,8 @@ class SqlJob(JobBase):
             
             finally:
                 # Close connection
-                try:
-                    self.db_manager.return_connection(connection)
-                except:
-                    pass
+                # SQLAlchemy session cleanup handled automatically
+                pass
         
         except Exception as e:
             error_msg = f"Unexpected error in SQL job: {str(e)}"
@@ -214,36 +212,29 @@ class SqlJob(JobBase):
             )
     
     def _get_connection(self):
-        """Get database connection"""
+        """Get database connection using SQLAlchemy"""
         try:
-            # The new database manager only supports environment-based connections
-            # Connection string and named connections are handled through .env config
-            self.job_logger.debug("Getting connection from database manager")
-            return self.db_manager.get_connection()
+            # Use SQLAlchemy session for database operations
+            self.job_logger.debug("Getting SQLAlchemy session")
+            return get_db_session()
         
         except Exception as e:
-            self.job_logger.error(f"Failed to get database connection: {e}")
+            self.job_logger.error(f"Failed to get SQLAlchemy session: {e}")
             return None
     
     def test_connection(self) -> Dict[str, Any]:
         """Test database connection"""
         try:
-            connection = self._get_connection()
-            if connection:
-                cursor = connection.cursor()
-                cursor.execute("SELECT 1 as test")
-                result = cursor.fetchone()
-                self.db_manager.return_connection(connection)
+            # Use SQLAlchemy session context manager
+            with get_db_session() as session:
+                from sqlalchemy import text
+                result = session.execute(text("SELECT 1 as test"))
+                test_value = result.fetchone()[0]
                 
                 return {
                     'success': True,
                     'message': 'Connection successful',
-                    'test_result': result[0] if result else None
-                }
-            else:
-                return {
-                    'success': False,
-                    'message': 'Failed to establish connection'
+                    'test_result': test_value
                 }
         
         except Exception as e:
@@ -266,7 +257,7 @@ class SqlJob(JobBase):
                 cursor = connection.cursor()
                 # Try to prepare the query (syntax check)
                 cursor.prepare(self.sql_query)
-                self.db_manager.return_connection(connection)
+                # SQLAlchemy session cleanup handled automatically
                 
                 return {
                     'valid': True,
@@ -274,7 +265,7 @@ class SqlJob(JobBase):
                 }
             
             except pyodbc.Error as e:
-                self.db_manager.return_connection(connection)
+                # SQLAlchemy session cleanup handled automatically
                 return {
                     'valid': False,
                     'error': f'SQL syntax error: {str(e)}'
@@ -308,7 +299,7 @@ class SqlJob(JobBase):
                 columns = [column[0] for column in cursor.description]
                 
                 cursor.execute("SET SHOWPLAN_ALL OFF")
-                self.db_manager.return_connection(connection)
+                # SQLAlchemy session cleanup handled automatically
                 
                 return {
                     'success': True,
@@ -319,7 +310,7 @@ class SqlJob(JobBase):
                 }
             
             except pyodbc.Error as e:
-                self.db_manager.return_connection(connection)
+                # SQLAlchemy session cleanup handled automatically
                 return {
                     'success': False,
                     'error': f'Failed to get execution plan: {str(e)}'

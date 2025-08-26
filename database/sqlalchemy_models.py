@@ -169,7 +169,8 @@ class DatabaseEngine:
         try:
             with self.get_session() as session:
                 # Simple test query
-                session.execute('SELECT 1 as test_value')
+                from sqlalchemy import text
+                session.execute(text('SELECT 1 as test_value'))
                 return {
                     'success': True,
                     'message': 'Database connection successful'
