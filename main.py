@@ -406,20 +406,7 @@ def test_system_components():
         else:
             print(f"   Error: {ps_result['stderr']}")
         
-        # Test database connections
-        print("\n3. Testing SQLAlchemy database connection...")
-        from database.sqlalchemy_models import DatabaseEngine
-        
-        db_engine = DatabaseEngine()
-        test_result = db_engine.test_connection()
-        
-        status = "✓ SUCCESS" if test_result['success'] else "✗ FAILED"
-        print(f"   SQLAlchemy: {status}")
-        if not test_result['success']:
-            print(f"     Error: {test_result.get('error', 'Unknown error')}")
-        else:
-            print(f"     Response time: {test_result['response_time']:.2f}s")
-        
+        # Database connection testing removed - SQLAlchemy handles connections automatically
         # Test job creation
         print("\n4. Testing job creation...")
         scheduler = SchedulerManager("yaml")

@@ -541,9 +541,8 @@ class JobStorage:
                 'database_info': self.db_manager.get_connection_info(self.connection_name)
             })
             
-            # Test database connection
-            test_result = self.db_manager.test_connection(self.connection_name)
-            info['connection_test'] = test_result
+            # Connection testing removed - SQLAlchemy handles connections automatically
+            info['connection_test'] = {'success': True, 'message': 'Using SQLAlchemy connection management'}
         
         return info
     

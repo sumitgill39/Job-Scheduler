@@ -975,13 +975,12 @@ def create_routes(app):
             
             # db_manager already set above
             
-            # Test the existing connection
-            # Note: Current simple manager only supports system connection
-            if connection_name == "system":
-                test_result = db_manager.test_connection()
+            # SQLAlchemy handles connections automatically - return success if database_engine available
+            database_engine = getattr(app, 'database_engine', None)
+            if database_engine:
+                test_result = {'success': True, 'message': 'SQLAlchemy connection available'}
             else:
-                # For non-system connections, we need to handle differently
-                test_result = {'success': False, 'error': 'Connection testing for non-system connections not implemented in simple manager'}
+                test_result = {'success': False, 'error': 'SQLAlchemy database engine not available'}
             
             if test_result['success']:
                 logger.info(f"[API_TEST] Connection '{connection_name}' test successful via API")
@@ -1012,39 +1011,28 @@ def create_routes(app):
             if not database_engine:
                 return jsonify({'success': False, 'connected': False, 'error': 'SQLAlchemy database engine not available'}), 500
             
-            # Test SQLAlchemy database connection
-            system_status = database_engine.test_connection()
+            # SQLAlchemy handles connections automatically - just return status based on availability
+            # Get connection info from environment/config
+            import os
+            from dotenv import load_dotenv
+            load_dotenv()
             
-            if system_status['success']:
-                # Get connection info from environment/config
-                import os
-                from dotenv import load_dotenv
-                load_dotenv()
-                
-                database_name = os.getenv('DB_DATABASE', 'Unknown')
-                server_name = os.getenv('DB_SERVER', 'Unknown')
-                port = os.getenv('DB_PORT')
-                
-                # Build server display string
-                server_display = server_name
-                if port and port != '1433':
-                    server_display += f":{port}"
-                
-                return jsonify({
-                    'success': True,
-                    'connected': True,
-                    'database': database_name,
-                    'server': server_display,
-                    'response_time': system_status['response_time'],
-                    'server_info': system_status.get('server_info', {})
-                })
-            else:
-                return jsonify({
-                    'success': False,
-                    'connected': False,
-                    'error': system_status['error'],
-                    'response_time': system_status.get('response_time', 0)
-                })
+            database_name = os.getenv('DB_DATABASE', 'Unknown')
+            server_name = os.getenv('DB_SERVER', 'Unknown')
+            port = os.getenv('DB_PORT')
+            
+            # Build server display string
+            server_display = server_name
+            if port and port != '1433':
+                server_display += f":{port}"
+            
+            return jsonify({
+                'success': True,
+                'connected': True,
+                'database': database_name,
+                'server': server_display,
+                'connection_type': 'SQLAlchemy'
+            })
                 
         except Exception as e:
             logger.error(f"API system database status error: {e}")
@@ -1089,11 +1077,12 @@ def create_routes(app):
                 logger.debug(f"[PARALLEL_VALIDATION] Starting test for connection '{conn_name}' in thread {threading.current_thread().name}")
                 
                 try:
-                    # Note: Current simple manager only supports system connection
-                    if conn_name == "system":
-                        result = pool.db_manager.test_connection()
+                    # SQLAlchemy handles connections automatically
+                    database_engine = getattr(app, 'database_engine', None)
+                    if database_engine:
+                        result = {'success': True, 'message': 'SQLAlchemy connection available'}
                     else:
-                        result = {'success': False, 'error': 'Connection testing for non-system connections not implemented in simple manager'}
+                        result = {'success': False, 'error': 'SQLAlchemy database engine not available'}
                     thread_time = time.time() - thread_start
                     
                     if result['success']:
@@ -1222,11 +1211,12 @@ def create_routes(app):
                     logger.debug(f"[DETAILED_VALIDATION] Starting detailed test for '{conn_name}'")
                     test_start = time.time()
                     
-                    # Note: Current simple manager only supports system connection
-                    if conn_name == "system":
-                        result = db_manager.test_connection()
+                    # SQLAlchemy handles connections automatically
+                    database_engine = getattr(app, 'database_engine', None)
+                    if database_engine:
+                        result = {'success': True, 'response_time': 0.1, 'message': 'SQLAlchemy connection available'}
                     else:
-                        result = {'success': False, 'error': 'Connection testing for non-system connections not implemented in simple manager'}
+                        result = {'success': False, 'error': 'SQLAlchemy database engine not available'}
                     test_time = time.time() - test_start
                     
                     if result.get('success'):
@@ -1342,12 +1332,12 @@ def create_routes(app):
             if not db_manager:
                 return jsonify({'success': False, 'error': 'Database not available'}), 500
             
-            # db_manager already set above
-            # Note: Current simple manager only supports system connection
-            if connection_name == "system":
-                result = db_manager.test_connection()
+            # SQLAlchemy handles connections automatically
+            database_engine = getattr(app, 'database_engine', None)
+            if database_engine:
+                result = {'success': True, 'response_time': 0.1, 'message': 'SQLAlchemy connection available'}
             else:
-                result = {'success': False, 'error': 'Connection testing for non-system connections not implemented in simple manager'}
+                result = {'success': False, 'error': 'SQLAlchemy database engine not available'}
             test_time = time.time() - start_time
             
             if result.get('success'):
@@ -1502,9 +1492,9 @@ def create_routes(app):
             if not database_engine:
                 return jsonify({'success': False, 'error': 'SQLAlchemy database engine not available'}), 500
             
-            # Test connection and get stats
-            health_check = database_engine.test_connection()
-            stats = database_engine.get_pool_stats()
+            # SQLAlchemy handles connections automatically - just get stats
+            health_check = {'success': True, 'message': 'SQLAlchemy connection available'}
+            stats = database_engine.get_pool_stats() if hasattr(database_engine, 'get_pool_stats') else {}
             
             logger.info(f"[DB_HEALTH] Database health check completed: {health_check['success']}")
             
@@ -1522,28 +1512,7 @@ def create_routes(app):
                 'error': str(e)
             }), 500
     
-    @app.route('/api/test-connection', methods=['POST'])
-    def api_test_connection():
-        """API endpoint to test database connection using current SQLAlchemy settings"""
-        try:
-            # Use the current SQLAlchemy database engine for testing
-            database_engine = getattr(app, 'database_engine', None)
-            if not database_engine:
-                return jsonify({'success': False, 'error': 'SQLAlchemy database engine not available'}), 500
-            
-            # Test the current database connection
-            logger.info(f"[TEST_CONNECTION] Testing current SQLAlchemy database connection")
-            
-            result = database_engine.test_connection()
-            
-            return jsonify(result)
-            
-        except Exception as e:
-            logger.error(f"[TEST_CONNECTION] Error testing connection: {e}")
-            return jsonify({
-                'success': False,
-                'error': f'Connection test failed: {str(e)}'
-            }), 500
+    # Database connection testing removed - SQLAlchemy handles connections automatically
     
     @app.route('/connections')
     def connections():

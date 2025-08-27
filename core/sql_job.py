@@ -222,26 +222,7 @@ class SqlJob(JobBase):
             self.job_logger.error(f"Failed to get SQLAlchemy session: {e}")
             return None
     
-    def test_connection(self) -> Dict[str, Any]:
-        """Test database connection"""
-        try:
-            # Use SQLAlchemy session context manager
-            with get_db_session() as session:
-                from sqlalchemy import text
-                result = session.execute(text("SELECT 1 as test"))
-                test_value = result.fetchone()[0]
-                
-                return {
-                    'success': True,
-                    'message': 'Connection successful',
-                    'test_result': test_value
-                }
-        
-        except Exception as e:
-            return {
-                'success': False,
-                'message': f'Connection test failed: {str(e)}'
-            }
+    # Connection testing removed - SQLAlchemy handles connections automatically
     
     def validate_query(self) -> Dict[str, Any]:
         """Validate SQL query syntax"""
@@ -390,21 +371,17 @@ if __name__ == "__main__":
     print(f"Created SQL job: {job}")
     print(f"Job config: {job.to_dict()}")
     
-    # Test connection
-    conn_test = job.test_connection()
-    print(f"Connection test: {conn_test}")
+    # Connection testing removed - SQLAlchemy handles connections automatically
+    # Validate query
+    validation = job.validate_query()
+    print(f"Query validation: {validation}")
     
-    if conn_test['success']:
-        # Validate query
-        validation = job.validate_query()
-        print(f"Query validation: {validation}")
-        
-        if validation['valid']:
-            # Execute job
-            result = job.run()
-            print(f"Execution result: {result.status.value}")
-            print(f"Output: {result.output}")
-            if result.metadata:
-                print(f"Metadata: {result.metadata}")
+    if validation['valid']:
+        # Execute job
+        result = job.run()
+        print(f"Execution result: {result.status.value}")
+        print(f"Output: {result.output}")
+        if result.metadata:
+            print(f"Metadata: {result.metadata}")
     else:
-        print("Skipping execution due to connection failure")
+        print("Skipping execution due to query validation failure")

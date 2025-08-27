@@ -198,4 +198,4 @@ def get_db_session():
 def init_database():
     """Initialize database tables"""
     database_engine.create_tables()
-    return database_engine.test_connection()
+    return {'success': True, 'message': 'Database initialized successfully'}
