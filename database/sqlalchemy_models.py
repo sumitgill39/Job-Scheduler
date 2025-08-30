@@ -111,29 +111,29 @@ class DatabaseEngine:
     
     def _setup_engine(self):
         """Setup SQLAlchemy engine from environment variables"""
-        # Get database configuration from environment
+        # Get database configuration from environment - defaults for local SQL Express
         db_driver = os.getenv('DB_DRIVER', 'ODBC Driver 17 for SQL Server')
-        db_server = os.getenv('DB_SERVER', 'localhost')
+        db_server = os.getenv('DB_SERVER', 'DESKTOP-4ADGDVE\\SQLEXPRESS')
         db_port = os.getenv('DB_PORT', '1433')
-        db_database = os.getenv('DB_DATABASE', 'scheduler_db')
+        db_database = os.getenv('DB_DATABASE', 'sreutil')
         db_username = os.getenv('DB_USERNAME', '')
         db_password = os.getenv('DB_PASSWORD', '')
-        db_trusted_connection = os.getenv('DB_TRUSTED_CONNECTION', 'false').lower() == 'true'
+        db_trusted_connection = os.getenv('DB_TRUSTED_CONNECTION', 'true').lower() == 'true'
         db_encrypt = os.getenv('DB_ENCRYPT', 'false').lower() == 'true'
-        db_trust_server_certificate = os.getenv('DB_TRUST_SERVER_CERTIFICATE', 'false').lower() == 'true'
+        db_trust_server_certificate = os.getenv('DB_TRUST_SERVER_CERTIFICATE', 'true').lower() == 'true'
         
-        # Build connection string
+        # Build connection string for SQL Server Express (named pipes)
         if db_trusted_connection:
-            # Windows Authentication
+            # Windows Authentication with named pipes for SQL Server Express
             connection_string = (
-                f"mssql+pyodbc://@{db_server}:{db_port}/{db_database}"
+                f"mssql+pyodbc://@{db_server}/{db_database}"
                 f"?driver={db_driver.replace(' ', '+')}"
                 f"&trusted_connection=yes"
             )
         else:
             # SQL Server Authentication
             connection_string = (
-                f"mssql+pyodbc://{db_username}:{db_password}@{db_server}:{db_port}/{db_database}"
+                f"mssql+pyodbc://{db_username}:{db_password}@{db_server}/{db_database}"
                 f"?driver={db_driver.replace(' ', '+')}"
             )
         

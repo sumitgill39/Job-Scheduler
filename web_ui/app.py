@@ -56,7 +56,12 @@ def create_app(scheduler_manager=None):
         # Initialize job manager with SQLAlchemy
         logger.info("📋 Creating SQLAlchemy job manager...")
         from core.job_manager import JobManager
+        from simple_connection_manager import simple_connection_manager
+        
         app.job_manager = JobManager()
+        
+        # Add simple connection manager for routes compatibility
+        app.db_manager = simple_connection_manager
         logger.info("✅ SQLAlchemy job manager created successfully")
         
         # Initialize job executor

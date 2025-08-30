@@ -2,9 +2,9 @@
 -- Job Scheduler Database Setup Script
 -- =============================================
 -- Run this script in SSMS to create the database and tables
--- Server: USDF11DB197\PROD_DB01,3433
--- Username: sve-devops
--- Password: Welcome@1234
+-- Server: DESKTOP-4ADGDVE\SQLEXPRESS
+-- Authentication: Windows Authentication (Trusted Connection)
+-- Database: sreutil
 
 -- Step 1: Use the existing sreutil database
 USE [sreutil]

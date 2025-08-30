@@ -188,11 +188,11 @@
     table-layout: fixed;
 }
 
-.connection-table-optimized th:nth-child(1) { width: 25%; }
-.connection-table-optimized th:nth-child(2) { width: 25%; }
+.connection-table-optimized th:nth-child(1) { width: 22%; }
+.connection-table-optimized th:nth-child(2) { width: 23%; }
 .connection-table-optimized th:nth-child(3) { width: 20%; }
 .connection-table-optimized th:nth-child(4) { width: 15%; }
-.connection-table-optimized th:nth-child(5) { width: 15%; }
+.connection-table-optimized th:nth-child(5) { width: 20%; }
 
 .fast-loading-indicator {
     border-left: 4px solid #007bff;
@@ -307,6 +307,11 @@
             <td>${conn.database}</td>
             <td>${conn.auth_type}</td>
             <td>
+                <button type="button" class="btn btn-sm btn-outline-success me-1"
+                        onclick="validateConnection('${conn.connection_id}', '${conn.name}')"
+                        data-bs-toggle="tooltip" title="Validate Connection">
+                    <i class="fas fa-check-circle me-1"></i>Validate
+                </button>
                 <button type="button" class="btn btn-sm btn-outline-danger"
                         onclick="deleteConnection('${conn.name}')"
                         data-bs-toggle="tooltip" title="Delete Connection">
@@ -430,6 +435,31 @@
         .catch(error => {
             hideLoading();
             showError('Error saving connection: ' + error.message);
+        });
+    }
+    
+    // Validate connection
+    function validateConnection(connectionId, connectionName) {
+        showLoading(`Validating connection "${connectionName}"...`);
+        
+        fetch(`/api/connections/${connectionId}/validate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                showSuccess(`Connection "${connectionName}" validated successfully! Response time: ${data.response_time}ms`);
+            } else {
+                showError(`Connection validation failed: ${data.error}`);
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Error validating connection: ' + error.message);
         });
     }
     

@@ -49,3 +49,28 @@
   run_as: null
   sql_query: SELECT GETUTCDATE() as utc_time, 'Europe/London' as timezone_test
   timeout: 30
+aecb0f8b-62ab-410d-a90c-70221a275c27:
+  connection_name: default
+  connection_string: null
+  created_date: '2025-08-30T00:17:50.726058'
+  current_status: pending
+  database_name: null
+  description: ''
+  enabled: true
+  fetch_size: 1000
+  is_running: false
+  job_id: aecb0f8b-62ab-410d-a90c-70221a275c27
+  job_type: sql
+  last_run_time: null
+  max_retries: 3
+  max_rows: 10000
+  metadata: {}
+  modified_date: '2025-08-30T00:17:50.726058'
+  name: System Test SQL Job
+  next_run_time: null
+  query_timeout: 300
+  retry_count: 0
+  retry_delay: 60
+  run_as: null
+  sql_query: SELECT 'System test successful' as message
+  timeout: 300

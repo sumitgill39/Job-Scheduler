@@ -861,22 +861,40 @@ def create_routes(app):
                 logger.info(f"[INDIVIDUAL_LOAD] Found {len(connection_names)} connections from config fallback")
             
             # Process each connection
-            for conn_name in connection_names:
+            logger.info(f"[INDIVIDUAL_LOAD] Processing {len(connection_names)} connections")
+            for conn_item in connection_names:
                 try:
-                    conn_info = db_manager.get_connection_info(conn_name)
-                    if conn_info:
+                    logger.info(f"[INDIVIDUAL_LOAD] Processing conn_item: {type(conn_item)} - {conn_item}")
+                    # Check if list_connections returned dictionaries or strings
+                    if isinstance(conn_item, dict):
+                        # We already have the connection data from list_connections()
+                        logger.info(f"[INDIVIDUAL_LOAD] Adding dict connection: {conn_item.get('name')}")
                         connections.append({
-                            'name': conn_name,
-                            'server': conn_info.get('server'),
-                            'database': conn_info.get('database'),
-                            'description': conn_info.get('description', ''),
-                            'auth_type': 'windows' if conn_info.get('trusted_connection') else 'sql',
-                            'port': conn_info.get('port', 1433),
+                            'name': conn_item.get('name'),
+                            'server': conn_item.get('server_name'),
+                            'database': conn_item.get('database_name'), 
+                            'description': conn_item.get('description', ''),
+                            'auth_type': 'windows' if conn_item.get('trusted_connection') else 'sql',
+                            'port': conn_item.get('port', 1433),
                             'status': 'pending',
                             'response_time': None
                         })
+                    else:
+                        # conn_item is a connection name, need to get more info
+                        conn_info = db_manager.get_connection_info(conn_item)
+                        if conn_info:
+                            connections.append({
+                                'name': conn_item,
+                                'server': conn_info.get('server_name'),
+                                'database': conn_info.get('database_name'),
+                                'description': conn_info.get('description', ''),
+                                'auth_type': 'windows' if conn_info.get('trusted_connection') else 'sql',
+                                'port': conn_info.get('port', 1433),
+                                'status': 'pending',
+                                'response_time': None
+                            })
                 except Exception as e:
-                    logger.warning(f"[INDIVIDUAL_LOAD] Failed to load connection '{conn_name}': {e}")
+                    logger.warning(f"[INDIVIDUAL_LOAD] Failed to load connection '{conn_item}': {e}")
                     continue
             
             individual_time = time.time() - individual_start
@@ -938,6 +956,62 @@ def create_routes(app):
             logger.error(f"API create connection error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/connections/test', methods=['POST'])
+    def api_test_connection_data():
+        """API endpoint to test connection data before saving"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'success': False, 'error': 'No connection data provided'}), 400
+            
+            # Use global connection manager instance
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
+                return jsonify({'success': False, 'error': 'Database manager not available'}), 500
+            
+            # Prepare connection data for validation
+            connection_data = {
+                'name': data.get('name', 'Test Connection'),
+                'server': data.get('server'),
+                'server_name': data.get('server'),
+                'database': data.get('database'),
+                'database_name': data.get('database'),
+                'port': data.get('port', 1433),
+                'trusted_connection': data.get('auth_type') == 'windows' or data.get('trusted_connection', True),
+                'username': data.get('username'),
+                'password': data.get('password'),
+                'driver': data.get('driver', 'ODBC Driver 17 for SQL Server'),
+                'connection_timeout': data.get('connection_timeout', 30)
+            }
+            
+            logger.info(f"[API_TEST_DATA] Testing connection data for: {connection_data.get('name')}")
+            
+            # Validate the connection data
+            result = db_manager.validate_connection_data(connection_data)
+            
+            if result['success']:
+                logger.info(f"[API_TEST_DATA] Connection validation successful for: {connection_data.get('name')}")
+                return jsonify({
+                    'success': True,
+                    'message': result.get('message', 'Connection test successful'),
+                    'response_time': result.get('response_time', 0),
+                    'server': result.get('server'),
+                    'database': result.get('database')
+                })
+            else:
+                logger.warning(f"[API_TEST_DATA] Connection validation failed for: {connection_data.get('name')} - {result.get('error')}")
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Connection test failed'),
+                    'response_time': result.get('response_time', 0),
+                    'server': result.get('server'),
+                    'database': result.get('database')
+                }), 400
+                
+        except Exception as e:
+            logger.error(f"[API_TEST_DATA] Error testing connection data: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/connections/<connection_name>', methods=['DELETE'])
     def api_delete_connection(connection_name):
         """API endpoint to delete a database connection"""
@@ -975,12 +1049,8 @@ def create_routes(app):
             
             # db_manager already set above
             
-            # SQLAlchemy handles connections automatically - return success if database_engine available
-            database_engine = getattr(app, 'database_engine', None)
-            if database_engine:
-                test_result = {'success': True, 'message': 'SQLAlchemy connection available'}
-            else:
-                test_result = {'success': False, 'error': 'SQLAlchemy database engine not available'}
+            # Use the connection manager's test method for proper validation
+            test_result = db_manager.test_connection(connection_name)
             
             if test_result['success']:
                 logger.info(f"[API_TEST] Connection '{connection_name}' test successful via API")
@@ -1001,6 +1071,44 @@ def create_routes(app):
         except Exception as e:
             logger.error(f"[API_TEST] API test existing connection error for '{connection_name}': {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/connections/<connection_id>/validate', methods=['POST'])
+    def api_validate_connection_by_id(connection_id):
+        """API endpoint to validate an existing database connection by ID for SQL job execution"""
+        logger.info(f"[API_VALIDATE] Validating connection '{connection_id}' for SQL job execution")
+        
+        try:
+            # Use simple connection manager instance
+            db_manager = getattr(app, 'db_manager', None)
+            if not db_manager:
+                return jsonify({'success': False, 'error': 'Database manager not available'}), 500
+            
+            # Use the standard validation function for SQL jobs
+            validation_result = db_manager.validate_connection_for_sql_job(connection_id)
+            
+            if validation_result['success']:
+                logger.info(f"[API_VALIDATE] Connection '{connection_id}' validation successful for SQL job execution")
+                return jsonify({
+                    'success': True,
+                    'message': validation_result.get('message', 'Connection validation successful'),
+                    'response_time': validation_result.get('response_time', 0),
+                    'connection_id': validation_result.get('connection_id'),
+                    'connection_name': validation_result.get('connection_name'),
+                    'server': validation_result.get('server'),
+                    'database': validation_result.get('database')
+                })
+            else:
+                logger.warning(f"[API_VALIDATE] Connection '{connection_id}' validation failed: {validation_result.get('error')}")
+                return jsonify({
+                    'success': False,
+                    'error': validation_result.get('error', 'Connection validation failed'),
+                    'connection_id': validation_result.get('connection_id'),
+                    'connection_name': validation_result.get('connection_name')
+                }), 400
+                
+        except Exception as e:
+            logger.error(f"[API_VALIDATE] Connection validation error for '{connection_id}': {e}")
+            return jsonify({'success': False, 'error': str(e), 'connection_id': connection_id}), 500
     
     @app.route('/api/system/database-status', methods=['GET'])
     def api_system_database_status():
