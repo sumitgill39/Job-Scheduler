@@ -13,6 +13,26 @@ def create_routes(app):
     
     logger = get_logger(__name__)
     
+    def get_job_executor():
+        """Get or create a JobExecutor instance with proper job_manager"""
+        # First try to use the existing JobExecutor from the app
+        job_executor = getattr(app, 'job_executor', None)
+        if job_executor:
+            return job_executor
+        
+        # Fallback: create new JobExecutor with job_manager
+        job_manager = getattr(app, 'job_manager', None)
+        if job_manager:
+            try:
+                from core.job_executor import JobExecutor
+                return JobExecutor(job_manager=job_manager)
+            except ImportError as e:
+                logger.error(f"Cannot import JobExecutor: {e}")
+                return None
+        else:
+            logger.error("No job_manager available for JobExecutor")
+            return None
+    
     # Authentication removed - direct access to all functionality
     
     @app.route('/')
@@ -200,17 +220,21 @@ def create_routes(app):
             # Get job execution history
             try:
                 # Try to use JobExecutor first
-                try:
-                    from core.job_executor import JobExecutor
-                    job_executor = JobExecutor()
-                    history = job_executor.get_execution_history(job_id, limit=20)
-                    logger.debug(f"[JOB_DETAILS] Loaded {len(history)} execution records from JobExecutor")
-                except ImportError as ie:
-                    logger.warning(f"[JOB_DETAILS] JobExecutor not available: {ie}")
-                    # Fallback to job manager for all execution history, then filter
-                    all_history = job_manager.get_all_execution_history(limit=100)
-                    history = [h for h in all_history if h.get('job_id') == job_id][:20]
-                    logger.debug(f"[JOB_DETAILS] Filtered {len(history)} execution records for job {job_id}")
+                job_executor = get_job_executor()
+                if job_executor:
+                    try:
+                        history = job_executor.get_execution_history(job_id, limit=20)
+                        logger.debug(f"[JOB_DETAILS] Loaded {len(history)} execution records from JobExecutor")
+                    except Exception as e:
+                        logger.warning(f"[JOB_DETAILS] JobExecutor failed: {e}")
+                        # Fallback to job manager
+                        history = job_manager.get_execution_history(job_id, limit=20)
+                        logger.debug(f"[JOB_DETAILS] Loaded {len(history)} execution records from JobManager")
+                else:
+                    logger.warning(f"[JOB_DETAILS] JobExecutor not available")
+                    # Fallback to job manager
+                    history = job_manager.get_execution_history(job_id, limit=20)
+                    logger.debug(f"[JOB_DETAILS] Loaded {len(history)} execution records from JobManager")
             except Exception as e:
                 logger.warning(f"[JOB_DETAILS] Could not load execution history: {e}")
                 history = []
@@ -613,11 +637,9 @@ def create_routes(app):
                     }), 400
             else:
                 # Fallback to direct JobExecutor
-                try:
-                    from core.job_executor import JobExecutor
-                    job_executor = JobExecutor()
-                except ImportError as e:
-                    logger.error(f"[API_RUN_JOB] Cannot import JobExecutor: {e}")
+                job_executor = get_job_executor()
+                if not job_executor:
+                    logger.error(f"[API_RUN_JOB] JobExecutor not available")
                     return jsonify({
                         'success': False,
                         'error': 'Job execution not available: Missing database dependencies (pyodbc). Please install SQL Server drivers.'
@@ -1663,10 +1685,8 @@ def create_routes(app):
     def api_job_history(job_id):
         """API endpoint for job execution history"""
         try:
-            try:
-                from core.job_executor import JobExecutor
-                job_executor = JobExecutor()
-            except ImportError as e:
+            job_executor = get_job_executor()
+            if not job_executor:
                 return jsonify({
                     'success': False,
                     'error': 'Job execution history not available: Missing database dependencies.'
@@ -1695,10 +1715,8 @@ def create_routes(app):
     def api_job_history_incremental(job_id):
         """API endpoint for incremental job execution history"""
         try:
-            try:
-                from core.job_executor import JobExecutor
-                job_executor = JobExecutor()
-            except ImportError as e:
+            job_executor = get_job_executor()
+            if not job_executor:
                 return jsonify({
                     'success': False,
                     'error': 'Job execution history not available: Missing database dependencies.'
@@ -1736,10 +1754,8 @@ def create_routes(app):
     def api_job_status(job_id):
         """API endpoint for job status"""
         try:
-            try:
-                from core.job_executor import JobExecutor
-                job_executor = JobExecutor()
-            except ImportError as e:
+            job_executor = get_job_executor()
+            if not job_executor:
                 return jsonify({
                     'success': False,
                     'error': 'Job status not available: Missing database dependencies.'
@@ -1760,10 +1776,8 @@ def create_routes(app):
     def api_all_executions():
         """API endpoint for all job executions"""
         try:
-            try:
-                from core.job_executor import JobExecutor
-                job_executor = JobExecutor()
-            except ImportError as e:
+            job_executor = get_job_executor()
+            if not job_executor:
                 return jsonify({
                     'success': False,
                     'error': 'Execution history not available: Missing database dependencies.'
@@ -1797,10 +1811,8 @@ def create_routes(app):
             execution_id = request.args.get('execution_id', type=int)
             include_details = request.args.get('include_details', 'true').lower() == 'true'
             
-            try:
-                from core.job_executor import JobExecutor
-                job_executor = JobExecutor()
-            except ImportError as e:
+            job_executor = get_job_executor()
+            if not job_executor:
                 return jsonify({
                     'success': False,
                     'error': 'Execution logs not available: Missing database dependencies.'

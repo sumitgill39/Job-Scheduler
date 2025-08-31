@@ -99,6 +99,9 @@ class JobExecutor:
             # TODO: Log execution using SQLAlchemy
             self.logger.info(f"[JOB_EXECUTOR] Completed execution with status: {result.status.value}")
             
+            # Generate execution_id for API compatibility
+            execution_id = f"{job_id}_{int(start_time.timestamp() * 1000)}"
+            
             return {
                 'success': True,
                 'status': result.status.value,
@@ -106,7 +109,8 @@ class JobExecutor:
                 'output': result.output[:1000] if result.output else '',
                 'error_message': result.error_message,
                 'start_time': start_time.isoformat(),
-                'end_time': end_time.isoformat()
+                'end_time': end_time.isoformat(),
+                'execution_id': execution_id
             }
             
         except Exception as e:
@@ -145,18 +149,19 @@ class JobExecutor:
                 if not HAS_SQL_JOB:
                     self.logger.warning("[JOB_EXECUTOR] Using MOCK SQL job - pyodbc dependencies not available")
                 
+                # Handle both nested and flat configuration formats
                 return SqlJob(
                     job_id=job_config['job_id'],
                     name=job_config['name'],
                     description=job_config.get('description', ''),
-                    sql_query=sql_config.get('query', ''),
-                    connection_name=sql_config.get('connection_name', 'system'),
-                    query_timeout=sql_config.get('query_timeout', 300),
-                    max_rows=sql_config.get('max_rows', 1000),
-                    timeout=basic_config.get('timeout', 300),
-                    max_retries=basic_config.get('max_retries', 3),
-                    retry_delay=basic_config.get('retry_delay', 60),
-                    run_as=basic_config.get('run_as', ''),
+                    sql_query=sql_config.get('query', '') or job_config.get('sql_query', ''),
+                    connection_name=sql_config.get('connection_name', '') or job_config.get('connection_name', 'system'),
+                    query_timeout=sql_config.get('query_timeout', 0) or job_config.get('query_timeout', 300),
+                    max_rows=sql_config.get('max_rows', 0) or job_config.get('max_rows', 1000),
+                    timeout=basic_config.get('timeout', 0) or job_config.get('timeout', 300),
+                    max_retries=basic_config.get('max_retries', 0) or job_config.get('max_retries', 3),
+                    retry_delay=basic_config.get('retry_delay', 0) or job_config.get('retry_delay', 60),
+                    run_as=basic_config.get('run_as', '') or job_config.get('run_as', ''),
                     enabled=job_config.get('enabled', True)
                 )
             
@@ -167,19 +172,28 @@ class JobExecutor:
                 if not HAS_POWERSHELL_JOB:
                     self.logger.warning("[JOB_EXECUTOR] Using MOCK PowerShell job - dependencies not available")
                 
+                # Handle both nested and flat configuration formats
+                script_content = ps_config.get('script_content', '') or job_config.get('script_content', '')
+                script_path = ps_config.get('script_path', '') or job_config.get('script_path', '')
+                
+                # If neither script_content nor script_path is provided, provide a default
+                if not script_content and not script_path:
+                    self.logger.warning(f"[JOB_EXECUTOR] PowerShell job {job_config['job_id']} has no script_content or script_path. Using default.")
+                    script_content = "Write-Host 'No script content provided for this PowerShell job'"
+                
                 return PowerShellJob(
                     job_id=job_config['job_id'],
                     name=job_config['name'],
                     description=job_config.get('description', ''),
-                    script_content=ps_config.get('script_content', ''),
-                    script_path=ps_config.get('script_path', ''),
-                    execution_policy=ps_config.get('execution_policy', 'RemoteSigned'),
-                    working_directory=ps_config.get('working_directory', ''),
-                    parameters=ps_config.get('parameters', []),
-                    timeout=basic_config.get('timeout', 300),
-                    max_retries=basic_config.get('max_retries', 3),
-                    retry_delay=basic_config.get('retry_delay', 60),
-                    run_as=basic_config.get('run_as', ''),
+                    script_content=script_content,
+                    script_path=script_path,
+                    execution_policy=ps_config.get('execution_policy', '') or job_config.get('execution_policy', 'RemoteSigned'),
+                    working_directory=ps_config.get('working_directory', '') or job_config.get('working_directory', ''),
+                    parameters=ps_config.get('parameters', []) or job_config.get('parameters', []),
+                    timeout=basic_config.get('timeout', 0) or job_config.get('timeout', 300),
+                    max_retries=basic_config.get('max_retries', 0) or job_config.get('max_retries', 3),
+                    retry_delay=basic_config.get('retry_delay', 0) or job_config.get('retry_delay', 60),
+                    run_as=basic_config.get('run_as', '') or job_config.get('run_as', ''),
                     enabled=job_config.get('enabled', True)
                 )
             

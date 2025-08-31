@@ -261,3 +261,64 @@ class JobManager:
                 'success': False,
                 'error': f'Error deleting job: {str(e)}'
             }
+    
+    def get_execution_history(self, job_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get execution history for a specific job
+        
+        Args:
+            job_id: Job ID to get history for
+            limit: Maximum number of records to return
+            
+        Returns:
+            List of execution history dictionaries
+        """
+        try:
+            from database.sqlalchemy_models import JobExecutionHistory, get_db_session
+            
+            self.logger.info(f"[JOB_MANAGER] Getting execution history for job: {job_id} (limit: {limit})")
+            
+            with get_db_session() as session:
+                query = session.query(JobExecutionHistory).filter(
+                    JobExecutionHistory.job_id == job_id
+                ).order_by(JobExecutionHistory.start_time.desc()).limit(limit)
+                
+                executions = query.all()
+                
+                result = [execution.to_dict() for execution in executions]
+                
+                self.logger.info(f"[JOB_MANAGER] Found {len(result)} execution records for job {job_id}")
+                return result
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error getting execution history for job {job_id}: {e}")
+            return []
+    
+    def get_all_execution_history(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get execution history for all jobs
+        
+        Args:
+            limit: Maximum number of records to return
+            
+        Returns:
+            List of execution history dictionaries
+        """
+        try:
+            from database.sqlalchemy_models import JobExecutionHistory, get_db_session
+            
+            self.logger.info(f"[JOB_MANAGER] Getting all execution history (limit: {limit})")
+            
+            with get_db_session() as session:
+                query = session.query(JobExecutionHistory).order_by(
+                    JobExecutionHistory.start_time.desc()
+                ).limit(limit)
+                
+                executions = query.all()
+                
+                result = [execution.to_dict() for execution in executions]
+                
+                self.logger.info(f"[JOB_MANAGER] Found {len(result)} total execution records")
+                return result
+            
+        except Exception as e:
+            self.logger.error(f"[JOB_MANAGER] Error getting all execution history: {e}")
+            return []

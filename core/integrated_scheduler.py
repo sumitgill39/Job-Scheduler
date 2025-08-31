@@ -42,7 +42,8 @@ class IntegratedScheduler:
         else:
             self.logger.info("[INTEGRATED_SCHEDULER] Using traditional connection pool components")
             self.job_manager = JobManager()
-            self.job_executor = JobExecutor()
+            # FIX: Initialize JobExecutor with job_manager parameter
+            self.job_executor = JobExecutor(job_manager=self.job_manager)
             self.disconnected_mode = False
         
         # Initialize APScheduler
