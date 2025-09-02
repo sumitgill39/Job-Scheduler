@@ -406,11 +406,11 @@ def create_routes(app):
             # Update the job
             result = job_manager.update_job(job_id, data)
             
-            if result['success']:
+            if result.get('success', False):
                 logger.info(f"[API_UPDATE_JOB] Job {job_id} updated successfully")
                 return jsonify(result)
             else:
-                logger.warning(f"[API_UPDATE_JOB] Failed to update job {job_id}: {result['error']}")
+                logger.warning(f"[API_UPDATE_JOB] Failed to update job {job_id}: {result.get('error', 'Unknown error')}")
                 return jsonify(result), 400
                 
         except Exception as e:
@@ -469,7 +469,7 @@ def create_routes(app):
             # Debug: Log the complete received data
             logger.info(f"[API_JOB_CREATE] Received data keys: {list(data.keys())}")
             if data.get('schedule'):
-                logger.info(f"[API_JOB_CREATE] Schedule configuration: {data['schedule']}")
+                logger.info(f"[API_JOB_CREATE] Schedule configuration: {data.get('schedule')}")
             
             if data.get('type') == 'sql':
                 sql_query = data.get('sql_query', 'NONE')
@@ -510,13 +510,13 @@ def create_routes(app):
                 # Use integrated scheduler for job creation with scheduling
                 result = integrated_scheduler.create_job_with_schedule(data)
                 
-                if result['success']:
-                    logger.info(f"[API_JOB_CREATE] Job created successfully: {result['job_id']}")
+                if result.get('success', False):
+                    logger.info(f"[API_JOB_CREATE] Job created successfully: {result.get('job_id', 'unknown')}")
                     if result.get('scheduled'):
-                        logger.info(f"[API_JOB_CREATE] Job {result['job_id']} was also scheduled")
+                        logger.info(f"[API_JOB_CREATE] Job {result.get('job_id', 'unknown')} was also scheduled")
                     return jsonify(result), 201
                 else:
-                    logger.warning(f"[API_JOB_CREATE] Job creation failed: {result['error']}")
+                    logger.warning(f"[API_JOB_CREATE] Job creation failed: {result.get('error', 'Unknown error')}")
                     return jsonify(result), 400
             else:
                 # Fallback to basic job manager if integrated scheduler not available
@@ -529,16 +529,16 @@ def create_routes(app):
                 
                 result = job_manager.create_job(data)
                 
-                if result['success']:
-                    logger.info(f"[API_JOB_CREATE] Job created successfully (no scheduling): {result['job_id']}")
+                if result.get('success', False):
+                    logger.info(f"[API_JOB_CREATE] Job created successfully (no scheduling): {result.get('job_id', 'unknown')}")
                     if data.get('schedule'):
                         result['warning'] = 'Job created but scheduling not available - integrated scheduler not initialized'
                     return jsonify(result), 201
                 else:
-                    logger.warning(f"[API_JOB_CREATE] Job creation failed: {result['error']}")
+                    logger.warning(f"[API_JOB_CREATE] Job creation failed: {result.get('error', 'Unknown error')}")
                     
                     # Provide more specific error message for database connectivity issues
-                    error_message = result['error']
+                    error_message = result.get('error', 'Unknown error')
                     if 'Failed to save job to database' in error_message:
                         if data.get('type') == 'powershell':
                             error_message = 'CRITICAL: PowerShell job cannot be saved - SQL Server database connection failed. Check database configuration and ensure pyodbc is installed with SQL Server drivers.'
@@ -608,69 +608,48 @@ def create_routes(app):
 
     @app.route('/api/jobs/<job_id>/run', methods=['POST'])
     def api_run_job(job_id):
-        """API endpoint to run a job immediately"""
-        logger.info(f"[API_RUN_JOB] Received request to run job: {job_id}")
+        """API endpoint to run a job immediately - NEW MODERN EXECUTION"""
+        logger.info(f"[API_RUN_JOB_V2] Received request to run job: {job_id}")
         
         try:
-            # Try to use integrated scheduler first
-            integrated_scheduler = getattr(app, 'integrated_scheduler', None)
-            if integrated_scheduler:
-                result = integrated_scheduler.run_job_now(job_id)
-                
-                if result['success']:
-                    logger.info(f"[API_RUN_JOB] Job {job_id} executed successfully via integrated scheduler")
-                    return jsonify({
-                        'success': True,
-                        'message': f'Job executed with status: {result["status"]}',
-                        'execution_id': result['execution_id'],
-                        'status': result['status'],
-                        'duration_seconds': result['duration_seconds'],
-                        'output': result['output'],
-                        'start_time': result['start_time'],
-                        'end_time': result['end_time']
-                    })
-                else:
-                    logger.warning(f"[API_RUN_JOB] Job {job_id} execution failed: {result['error']}")
-                    return jsonify({
-                        'success': False,
-                        'error': result['error']
-                    }), 400
+            # Get job manager to fetch job data
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job manager not available'
+                }), 500
+            
+            # Get job data
+            job_data = job_manager.get_job(job_id)
+            if not job_data:
+                return jsonify({
+                    'success': False,
+                    'error': f'Job {job_id} not found'
+                }), 404
+            
+            # Import and use modern job API
+            from core.modern_job_api import modern_job_api
+            
+            # Execute job with new modern engine
+            result = modern_job_api.execute_job_immediately(job_data)
+            
+            # Log result
+            if result['success']:
+                logger.info(f"[API_RUN_JOB_V2] Job {job_id} executed successfully via modern engine")
             else:
-                # Fallback to direct JobExecutor
-                job_executor = get_job_executor()
-                if not job_executor:
-                    logger.error(f"[API_RUN_JOB] JobExecutor not available")
-                    return jsonify({
-                        'success': False,
-                        'error': 'Job execution not available: Missing database dependencies (pyodbc). Please install SQL Server drivers.'
-                    }), 500
-                
-                result = job_executor.execute_job(job_id)
-                
-                if result['success']:
-                    logger.info(f"[API_RUN_JOB] Job {job_id} executed successfully via fallback executor")
-                    return jsonify({
-                        'success': True,
-                        'message': f'Job executed with status: {result["status"]}',
-                        'execution_id': result['execution_id'],
-                        'status': result['status'],
-                        'duration_seconds': result['duration_seconds'],
-                        'output': result['output'],
-                        'start_time': result['start_time'],
-                        'end_time': result['end_time']
-                    })
-                else:
-                    logger.warning(f"[API_RUN_JOB] Job {job_id} execution failed: {result['error']}")
-                    return jsonify({
-                        'success': False,
-                        'error': result['error']
-                    }), 400
-        
+                logger.warning(f"[API_RUN_JOB_V2] Job {job_id} execution failed: {result.get('error', 'Unknown error')}")
+            
+            status_code = 200 if result['success'] else 400
+            return jsonify(result), status_code
+            
         except Exception as e:
-            logger.error(f"[API_RUN_JOB] API run job error: {e}")
+            import traceback
+            logger.error(f"[API_RUN_JOB_V2] API run job error: {e}")
+            logger.error(f"[API_RUN_JOB_V2] Full traceback: {traceback.format_exc()}")
             return jsonify({
                 'success': False,
-                'error': str(e)
+                'error': f'Modern execution failed: {str(e)}'
             }), 500
     
     @app.route('/api/jobs/<job_id>/toggle', methods=['POST'])
@@ -687,16 +666,16 @@ def create_routes(app):
             
             result = job_manager.toggle_job(job_id, enabled)
             
-            if result['success']:
+            if result.get('success', False):
                 return jsonify({
                     'success': True,
-                    'message': result['message'],
-                    'enabled': result['enabled']
+                    'message': result.get('message', 'Job status updated'),
+                    'enabled': result.get('enabled', False)
                 })
             else:
                 return jsonify({
                     'success': False,
-                    'error': result['error']
+                    'error': result.get('error', 'Unknown error')
                 }), 400
         
         except Exception as e:
@@ -713,15 +692,15 @@ def create_routes(app):
             
             result = job_manager.delete_job(job_id)
             
-            if result['success']:
+            if result.get('success', False):
                 return jsonify({
                     'success': True,
-                    'message': result['message']
+                    'message': result.get('message', 'Job deleted successfully')
                 })
             else:
                 return jsonify({
                     'success': False,
-                    'error': result['error']
+                    'error': result.get('error', 'Unknown error')
                 }), 400
         
         except Exception as e:
@@ -959,18 +938,18 @@ def create_routes(app):
                 description=data.get('description')
             )
             
-            if result['success']:
+            if result.get('success', False):
                 # Invalidate cache since we added a new connection
                 _invalidate_connection_cache()
                 return jsonify({
                     'success': True, 
-                    'message': result['message'],
+                    'message': result.get('message', 'Connection created successfully'),
                     'test_details': result.get('test_details', {})
                 })
             else:
                 return jsonify({
                     'success': False, 
-                    'error': result['error'],
+                    'error': result.get('error', 'Unknown error'),
                     'test_details': result.get('test_details', {})
                 }), 400
                 
@@ -1011,7 +990,7 @@ def create_routes(app):
             # Validate the connection data
             result = db_manager.validate_connection_data(connection_data)
             
-            if result['success']:
+            if result.get('success', False):
                 logger.info(f"[API_TEST_DATA] Connection validation successful for: {connection_data.get('name')}")
                 return jsonify({
                     'success': True,
@@ -1074,7 +1053,7 @@ def create_routes(app):
             # Use the connection manager's test method for proper validation
             test_result = db_manager.test_connection(connection_name)
             
-            if test_result['success']:
+            if test_result.get('success', False):
                 logger.info(f"[API_TEST] Connection '{connection_name}' test successful via API")
                 return jsonify({
                     'success': True,
@@ -1108,7 +1087,7 @@ def create_routes(app):
             # Use the standard validation function for SQL jobs
             validation_result = db_manager.validate_connection_for_sql_job(connection_id)
             
-            if validation_result['success']:
+            if validation_result.get('success', False):
                 logger.info(f"[API_VALIDATE] Connection '{connection_id}' validation successful for SQL job execution")
                 return jsonify({
                     'success': True,
@@ -1215,14 +1194,14 @@ def create_routes(app):
                         result = {'success': False, 'error': 'SQLAlchemy database engine not available'}
                     thread_time = time.time() - thread_start
                     
-                    if result['success']:
-                        logger.info(f"[PARALLEL_VALIDATION] Connection '{conn_name}' validated successfully in {thread_time:.2f}s (response: {result['response_time']:.2f}s)")
+                    if result.get('success', False):
+                        logger.info(f"[PARALLEL_VALIDATION] Connection '{conn_name}' validated successfully in {thread_time:.2f}s (response: {result.get('response_time', 0):.2f}s)")
                     else:
                         logger.warning(f"[PARALLEL_VALIDATION] Connection '{conn_name}' validation failed in {thread_time:.2f}s: {result.get('error', 'Unknown error')}")
                     
                     return conn_name, {
-                        'success': result['success'],
-                        'status': 'valid' if result['success'] else 'invalid',
+                        'success': result.get('success', False),
+                        'status': 'valid' if result.get('success', False) else 'invalid',
                         'response_time': result.get('response_time', 0),
                         'thread_time': thread_time,
                         'error': result.get('error', ''),
@@ -1262,7 +1241,7 @@ def create_routes(app):
                     results[conn_name] = result
                     completed_count += 1
                     
-                    logger.debug(f"[PARALLEL_VALIDATION] Completed {completed_count}/{len(connections)}: '{conn_name}' -> {result['status']}")
+                    logger.debug(f"[PARALLEL_VALIDATION] Completed {completed_count}/{len(connections)}: '{conn_name}' -> {result.get('status', 'unknown')}")
             
             parallel_time = time.time() - parallel_start
             total_time = time.time() - start_time
@@ -1279,8 +1258,8 @@ def create_routes(app):
             
             # Log detailed results
             for conn_name, result in results.items():
-                status = "✓" if result['success'] else "✗"
-                logger.debug(f"[PARALLEL_VALIDATION] {status} {conn_name}: {result['status']} ({result['response_time']:.2f}s)")
+                status = "✓" if result.get('success', False) else "✗"
+                logger.debug(f"[PARALLEL_VALIDATION] {status} {conn_name}: {result.get('status', 'unknown')} ({result.get('response_time', 0):.2f}s)")
             
             return jsonify({
                 'success': True,
@@ -1907,6 +1886,14 @@ def create_routes(app):
         except Exception as e:
             logger.error(f"[DEBUG] Debug endpoint error: {e}")
             return jsonify({'error': str(e)}), 500
+    
+    # Register modern job execution routes
+    try:
+        from core.modern_job_api import create_modern_job_routes
+        modern_api = create_modern_job_routes(app)
+        logger.info("[ROUTES] Modern job execution API routes registered successfully")
+    except ImportError as e:
+        logger.warning(f"[ROUTES] Could not register modern job API routes: {e}")
     
     # Authentication removed - all routes now publicly accessible
     
