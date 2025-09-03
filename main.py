@@ -98,12 +98,11 @@ class JobSchedulerApp:
         try:
             self.logger.info("⏰ Initializing Scheduler Manager with SQLAlchemy...")
             
-            # Use YAML-based scheduler manager (integrated with SQLAlchemy job manager)
-            self.logger.info("📊 Using YAML-based scheduler with SQLAlchemy job storage")
-            storage_type = "yaml"
+            # Use database-based scheduler manager (integrated with SQLAlchemy job manager)
+            self.logger.info("📊 Using database-based scheduler with SQLAlchemy job storage")
+            storage_type = "database"
             storage_config = {
-                "yaml_file": str(Path("config") / "jobs.yaml"),
-                "history_file": str(Path("config") / "job_history.yaml")
+                "connection_name": "default"  # Use default database connection
             }
             
             self.logger.debug(f"📁 Storage type: {storage_type}")
