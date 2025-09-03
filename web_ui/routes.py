@@ -754,71 +754,46 @@ def create_routes(app):
                     'error': f'Job {job_id} not found'
                 }), 404
             
-            # Import and use V2 execution engine
-            import asyncio
-            from core.v2.execution_engine import get_execution_engine, initialize_execution_engine
-            from core.v2.data_models import create_job_from_legacy
+            # Use the working unified job executor
+            job_executor = getattr(app, 'job_executor', None)
+            if not job_executor:
+                # Fallback: create job executor
+                from core.job_executor import JobExecutor
+                job_executor = JobExecutor(job_manager=job_manager)
             
-            # Convert legacy job data to V2 format
-            v2_job = create_job_from_legacy(job_data)
+            # Execute job directly (this works perfectly as tested)
+            execution_result = job_executor.execute_job(job_id)
             
-            # Execute job with V2 engine
-            async def execute_job_async():
-                engine = get_execution_engine()
-                if engine.status.value != "running":
-                    await initialize_execution_engine()
-                    engine = get_execution_engine()
-                
-                return await engine.execute_job_immediately(v2_job)
-            
-            # Run async execution
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            v2_result = loop.run_until_complete(execute_job_async())
-            
-            # Convert V2 result to expected format
+            # Convert to API response format
             result = {
-                'success': v2_result.status.value == "success",
-                'job_id': job_data.get('job_id'),
-                'execution_id': v2_result.execution_id,
-                'status': v2_result.status.value,
-                'duration': v2_result.duration_seconds,
-                'start_time': v2_result.start_time.isoformat() if v2_result.start_time else None,
-                'end_time': v2_result.end_time.isoformat() if v2_result.end_time else None,
-                'step_results': [
-                    {
-                        'step_name': sr.step_name,
-                        'status': sr.status.value,
-                        'duration': sr.duration_seconds,
-                        'output': sr.output,
-                        'error': sr.error_message
-                    } for sr in (v2_result.step_results or [])
-                ]
+                'success': execution_result.get('success', False),
+                'job_id': job_id,
+                'execution_id': execution_result.get('execution_id'),
+                'status': execution_result.get('status', 'unknown'),
+                'message': execution_result.get('message', ''),
+                'output': execution_result.get('output', ''),
+                'error': execution_result.get('error'),
+                'duration': execution_result.get('duration_seconds', 0),
+                'start_time': execution_result.get('start_time'),
+                'end_time': execution_result.get('end_time')
             }
-            
-            if not result['success']:
-                result['error'] = v2_result.error_message or "Job execution failed"
             
             # Log result
             if result['success']:
-                logger.info(f"[API_RUN_JOB_V2] Job {job_id} executed successfully via modern engine")
+                logger.info(f"[API_RUN_JOB] Job {job_id} executed successfully")
             else:
-                logger.warning(f"[API_RUN_JOB_V2] Job {job_id} execution failed: {result.get('error', 'Unknown error')}")
+                logger.warning(f"[API_RUN_JOB] Job {job_id} execution failed: {result.get('error', 'Unknown error')}")
             
             status_code = 200 if result['success'] else 400
             return jsonify(result), status_code
             
         except Exception as e:
             import traceback
-            logger.error(f"[API_RUN_JOB_V2] API run job error: {e}")
-            logger.error(f"[API_RUN_JOB_V2] Full traceback: {traceback.format_exc()}")
+            logger.error(f"[API_RUN_JOB] API run job error: {e}")
+            logger.error(f"[API_RUN_JOB] Full traceback: {traceback.format_exc()}")
             return jsonify({
                 'success': False,
-                'error': f'Modern execution failed: {str(e)}'
+                'error': f'Job execution failed: {str(e)}'
             }), 500
     
     @app.route('/api/jobs/<job_id>/toggle', methods=['POST'])
