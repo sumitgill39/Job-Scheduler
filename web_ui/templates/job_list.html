@@ -15,9 +15,41 @@
         <button class="btn btn-outline-warning me-2" onclick="loadAllJobStatus()" title="Load execution status for all jobs">
             <i class="fas fa-history me-1"></i>Load Status
         </button>
+        <a href="/admin/job-queue" class="btn btn-outline-success me-2" title="View job queue status">
+            <i class="fas fa-stream me-1"></i>Queue
+        </a>
         <a href="{{ url_for('create_job') }}" class="btn btn-primary">
             <i class="fas fa-plus me-1"></i>Create Job
         </a>
+    </div>
+</div>
+
+<!-- Real-time Queue Status Widget -->
+<div class="card mb-3" id="queueStatusWidget" style="display: none;">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <small class="text-muted">Real-time Queue Status:</small>
+                <span id="queueStatusText" class="ms-2 fw-bold">Loading...</span>
+            </div>
+            <div class="d-flex gap-3">
+                <div>
+                    <small class="text-muted">Queued:</small>
+                    <span id="queuedCount" class="badge bg-warning">0</span>
+                </div>
+                <div>
+                    <small class="text-muted">Running:</small>
+                    <span id="runningCount" class="badge bg-success">0</span>
+                </div>
+                <div>
+                    <small class="text-muted">Engine:</small>
+                    <span id="engineStatus" class="badge bg-secondary">Unknown</span>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary" onclick="toggleQueueWidget()" title="Hide queue status">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1076,5 +1108,138 @@
             previewModal.hide();
         }
     }
+
+    // Real-time Queue Monitoring Functions
+    let queueMonitoringEnabled = false;
+    let queueMonitoringInterval = null;
+
+    function initializeQueueMonitoring() {
+        // Check if user wants queue monitoring (stored in localStorage)
+        const savedPreference = localStorage.getItem('queueMonitoringEnabled');
+        if (savedPreference === 'true') {
+            enableQueueMonitoring();
+        }
+    }
+
+    function enableQueueMonitoring() {
+        queueMonitoringEnabled = true;
+        localStorage.setItem('queueMonitoringEnabled', 'true');
+        document.getElementById('queueStatusWidget').style.display = 'block';
+        
+        // Start polling queue status
+        refreshQueueStatus();
+        queueMonitoringInterval = setInterval(refreshQueueStatus, 10000); // Every 10 seconds
+        
+        // Add queue button to toggle monitoring on
+        const queueBtn = document.querySelector('a[href="/admin/job-queue"]');
+        if (queueBtn) {
+            queueBtn.classList.remove('btn-outline-success');
+            queueBtn.classList.add('btn-success');
+        }
+    }
+
+    function disableQueueMonitoring() {
+        queueMonitoringEnabled = false;
+        localStorage.setItem('queueMonitoringEnabled', 'false');
+        document.getElementById('queueStatusWidget').style.display = 'none';
+        
+        if (queueMonitoringInterval) {
+            clearInterval(queueMonitoringInterval);
+            queueMonitoringInterval = null;
+        }
+        
+        // Reset queue button
+        const queueBtn = document.querySelector('a[href="/admin/job-queue"]');
+        if (queueBtn) {
+            queueBtn.classList.remove('btn-success');
+            queueBtn.classList.add('btn-outline-success');
+        }
+    }
+
+    function toggleQueueWidget() {
+        if (queueMonitoringEnabled) {
+            disableQueueMonitoring();
+        } else {
+            enableQueueMonitoring();
+        }
+    }
+
+    function refreshQueueStatus() {
+        if (!queueMonitoringEnabled) return;
+        
+        fetch('/api/admin/job-queue/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateQueueStatusWidget(data);
+                } else {
+                    console.error('Queue status error:', data.error);
+                    document.getElementById('queueStatusText').textContent = 'Error loading status';
+                    document.getElementById('queueStatusText').className = 'ms-2 fw-bold text-danger';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching queue status:', error);
+                document.getElementById('queueStatusText').textContent = 'Connection error';
+                document.getElementById('queueStatusText').className = 'ms-2 fw-bold text-danger';
+            });
+    }
+
+    function updateQueueStatusWidget(data) {
+        const summary = data.summary;
+        
+        // Update status text
+        const statusText = document.getElementById('queueStatusText');
+        if (summary.engine_status === 'running') {
+            statusText.textContent = 'System operational';
+            statusText.className = 'ms-2 fw-bold text-success';
+        } else {
+            statusText.textContent = 'System ' + summary.engine_status;
+            statusText.className = 'ms-2 fw-bold text-warning';
+        }
+        
+        // Update counts
+        document.getElementById('queuedCount').textContent = summary.total_queued;
+        document.getElementById('runningCount').textContent = summary.total_active;
+        
+        // Update engine status badge
+        const engineBadge = document.getElementById('engineStatus');
+        engineBadge.textContent = summary.engine_status.toUpperCase();
+        
+        if (summary.engine_status === 'running') {
+            engineBadge.className = 'badge bg-success';
+        } else {
+            engineBadge.className = 'badge bg-danger';
+        }
+        
+        // Update queue count badge colors based on load
+        const queuedBadge = document.getElementById('queuedCount');
+        if (summary.total_queued === 0) {
+            queuedBadge.className = 'badge bg-secondary';
+        } else if (summary.total_queued < 5) {
+            queuedBadge.className = 'badge bg-info';
+        } else if (summary.total_queued < 10) {
+            queuedBadge.className = 'badge bg-warning';
+        } else {
+            queuedBadge.className = 'badge bg-danger';
+        }
+    }
+
+    // Initialize queue monitoring when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeQueueMonitoring();
+        
+        // Add click handler to queue button to toggle monitoring
+        const queueBtn = document.querySelector('a[href="/admin/job-queue"]');
+        if (queueBtn) {
+            queueBtn.addEventListener('click', function(e) {
+                if (e.shiftKey) {
+                    // Shift+click to toggle monitoring without navigating
+                    e.preventDefault();
+                    toggleQueueWidget();
+                }
+            });
+        }
+    });
 </script>
 {% endblock %}

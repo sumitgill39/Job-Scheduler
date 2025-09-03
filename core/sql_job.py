@@ -101,25 +101,20 @@ class SqlJob(JobBase):
                 )
             
             try:
-                # Execute query
-                cursor = connection.cursor()
-                
-                # Set query timeout (pyodbc doesn't support per-query timeout easily)
-                # The timeout is typically handled at connection level via connection string
-                # or by using SQL Server's query timeout mechanisms
+                # Execute query using SQLAlchemy session
                 self.job_logger.debug(f"Executing with timeout configuration: {self.query_timeout} seconds")
-                self.job_logger.debug(f"Note: Timeout enforcement depends on connection string configuration")
-                
                 self.job_logger.debug(f"Executing query: {self.sql_query}")
                 start_exec = datetime.now()
                 
-                cursor.execute(self.sql_query)
+                # Use SQLAlchemy session to execute raw SQL
+                from sqlalchemy import text
+                result = connection.execute(text(self.sql_query))
                 
                 # Handle different query types
-                if cursor.description:
+                if result.returns_rows:
                     # SELECT query - fetch results
-                    rows = cursor.fetchmany(self.max_rows)
-                    columns = [column[0] for column in cursor.description]
+                    rows = result.fetchmany(self.max_rows)
+                    columns = list(result.keys())
                     
                     # Format results
                     result_data = {
@@ -136,16 +131,14 @@ class SqlJob(JobBase):
                     
                 else:
                     # Non-SELECT query (INSERT, UPDATE, DELETE, etc.)
-                    rows_affected = cursor.rowcount
+                    rows_affected = result.rowcount
                     result_data = {
                         'rows_affected': rows_affected,
                         'query_type': 'non_select'
                     }
                     output = f"Query executed successfully. {rows_affected} rows affected."
                 
-                # Commit transaction for non-SELECT queries
-                if not cursor.description:
-                    connection.commit()
+                # SQLAlchemy sessions handle commits automatically
                 
                 exec_time = (datetime.now() - start_exec).total_seconds()
                 self.job_logger.info(f"Query completed in {exec_time:.2f} seconds")

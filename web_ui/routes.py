@@ -47,7 +47,32 @@ def create_routes(app):
             
             if job_manager:
                 # Get jobs from SQLAlchemy database
-                all_jobs = job_manager.list_jobs()
+                all_jobs_raw = job_manager.list_jobs()
+                
+                # Transform job data to include job_type field that template expects
+                all_jobs = []
+                for job in all_jobs_raw:
+                    # Extract job_type from different sources based on version
+                    job_type = 'unknown'
+                    if job.get('_version') == 'v2' and job.get('parsed_config'):
+                        job_type = job['parsed_config'].get('type', 'unknown').lower()
+                    elif job.get('job_type'):  # V1 jobs
+                        job_type = job['job_type'].lower()
+                    elif job.get('configuration'):  # V1 fallback
+                        try:
+                            import json
+                            config = json.loads(job['configuration']) if isinstance(job['configuration'], str) else job['configuration']
+                            if 'sql' in str(config).lower():
+                                job_type = 'sql'
+                            elif 'powershell' in str(config).lower():
+                                job_type = 'powershell'
+                        except:
+                            pass
+                    
+                    # Add job_type field to job data
+                    job['job_type'] = job_type
+                    all_jobs.append(job)
+                
                 recent_jobs = all_jobs[:5] if all_jobs else []
                 
                 # Calculate status from database jobs
@@ -178,8 +203,22 @@ def create_routes(app):
     def edit_job(job_id):
         """Edit job page"""
         try:
-            logger.info(f"[EDIT_JOB] Rendering edit job page for job {job_id}")
-            return render_template('edit_job.html', job_id=job_id)
+            logger.info(f"[EDIT_JOB] Loading edit job page for job {job_id}")
+            
+            # Get job manager
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                flash('Job manager not available', 'error')
+                return redirect(url_for('job_list'))
+            
+            # Get job data
+            job_data = job_manager.get_job(job_id)
+            if not job_data:
+                flash(f'Job {job_id} not found', 'error')
+                return redirect(url_for('job_list'))
+            
+            logger.info(f"[EDIT_JOB] Successfully loaded job data for editing: {job_data['name']}")
+            return render_template('edit_job.html', job_id=job_id, job=job_data)
             
         except Exception as e:
             logger.error(f"[EDIT_JOB] Edit job page error: {e}")
@@ -346,6 +385,66 @@ def create_routes(app):
             logger.error(f"API status error: {e}")
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/dashboard/status')
+    def api_dashboard_status():
+        """API endpoint for dashboard status refresh"""
+        try:
+            # Use SQLAlchemy job manager for data
+            job_manager = getattr(app, 'job_manager', None)
+            scheduler_manager = getattr(app, 'scheduler_manager', None)
+            integrated_scheduler = getattr(app, 'integrated_scheduler', None)
+            
+            if job_manager:
+                # Get jobs from SQLAlchemy database
+                all_jobs = job_manager.list_jobs()
+                
+                # Calculate status from database jobs
+                total_jobs = len(all_jobs)
+                enabled_jobs = len([job for job in all_jobs if job.get('enabled', True)])
+                
+                # Get scheduler status if available
+                if integrated_scheduler:
+                    scheduler_status = integrated_scheduler.get_scheduler_status()
+                    running = scheduler_status.get('running', False)
+                    scheduled_jobs = scheduler_status.get('scheduled_jobs', 0)
+                elif scheduler_manager:
+                    scheduler_status = scheduler_manager.get_scheduler_status()
+                    running = scheduler_status.get('running', False)
+                    scheduled_jobs = scheduler_status.get('scheduled_jobs', 0)
+                else:
+                    running = False
+                    scheduled_jobs = 0
+                
+                return jsonify({
+                    'success': True,
+                    'job_counts': {
+                        'total': total_jobs,
+                        'active': enabled_jobs,
+                        'recent_executions': len(all_jobs[:10])  # Last 10 as recent
+                    },
+                    'system_status': {
+                        'status': 'running' if running else 'stopped',
+                        'scheduler_running': running,
+                        'scheduled_jobs': scheduled_jobs
+                    }
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job manager not available',
+                    'job_counts': {'total': 0, 'active': 0, 'recent_executions': 0},
+                    'system_status': {'status': 'not_available', 'scheduler_running': False, 'scheduled_jobs': 0}
+                })
+        
+        except Exception as e:
+            logger.error(f"Dashboard status API error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'job_counts': {'total': 0, 'active': 0, 'recent_executions': 0},
+                'system_status': {'status': 'error', 'scheduler_running': False, 'scheduled_jobs': 0}
+            }), 500
+    
     @app.route('/api/jobs/<job_id>', methods=['GET'])
     def api_get_job(job_id):
         """API endpoint to get individual job details"""
@@ -507,8 +606,13 @@ def create_routes(app):
             # Use integrated scheduler instead of just job manager
             integrated_scheduler = getattr(app, 'integrated_scheduler', None)
             if integrated_scheduler:
+                # Remove description field if present (not supported by current schema)
+                clean_data = data.copy()
+                if 'description' in clean_data:
+                    clean_data.pop('description')
+                
                 # Use integrated scheduler for job creation with scheduling
-                result = integrated_scheduler.create_job_with_schedule(data)
+                result = integrated_scheduler.create_job_with_schedule(clean_data)
                 
                 if result.get('success', False):
                     logger.info(f"[API_JOB_CREATE] Job created successfully: {result.get('job_id', 'unknown')}")
@@ -527,7 +631,12 @@ def create_routes(app):
                         'error': 'Job management system not available'
                     }), 500
                 
-                result = job_manager.create_job(data)
+                # Remove description field if present (not supported by current schema)
+                clean_data = data.copy()
+                if 'description' in clean_data:
+                    clean_data.pop('description')
+                
+                result = job_manager.create_job(clean_data)
                 
                 if result.get('success', False):
                     logger.info(f"[API_JOB_CREATE] Job created successfully (no scheduling): {result.get('job_id', 'unknown')}")
@@ -628,11 +737,54 @@ def create_routes(app):
                     'error': f'Job {job_id} not found'
                 }), 404
             
-            # Import and use modern job API
-            from core.modern_job_api import modern_job_api
+            # Import and use V2 execution engine
+            import asyncio
+            from core.v2.execution_engine import get_execution_engine, initialize_execution_engine
+            from core.v2.data_models import create_job_from_legacy
             
-            # Execute job with new modern engine
-            result = modern_job_api.execute_job_immediately(job_data)
+            # Convert legacy job data to V2 format
+            v2_job = create_job_from_legacy(job_data)
+            
+            # Execute job with V2 engine
+            async def execute_job_async():
+                engine = get_execution_engine()
+                if engine.status.value != "running":
+                    await initialize_execution_engine()
+                    engine = get_execution_engine()
+                
+                return await engine.execute_job_immediately(v2_job)
+            
+            # Run async execution
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            v2_result = loop.run_until_complete(execute_job_async())
+            
+            # Convert V2 result to expected format
+            result = {
+                'success': v2_result.status.value == "success",
+                'job_id': job_data.get('job_id'),
+                'execution_id': v2_result.execution_id,
+                'status': v2_result.status.value,
+                'duration': v2_result.duration_seconds,
+                'start_time': v2_result.start_time.isoformat() if v2_result.start_time else None,
+                'end_time': v2_result.end_time.isoformat() if v2_result.end_time else None,
+                'step_results': [
+                    {
+                        'step_name': sr.step_name,
+                        'status': sr.status.value,
+                        'duration': sr.duration_seconds,
+                        'output': sr.output,
+                        'error': sr.error_message
+                    } for sr in (v2_result.step_results or [])
+                ]
+            }
+            
+            if not result['success']:
+                result['error'] = v2_result.error_message or "Job execution failed"
             
             # Log result
             if result['success']:
@@ -1729,6 +1881,39 @@ def create_routes(app):
                 'error': str(e)
             }), 500
     
+    @app.route('/api/jobs/<job_id>/history/<execution_id>')
+    def api_execution_details(job_id, execution_id):
+        """API endpoint to get individual execution details"""
+        try:
+            # Get execution details from database
+            from database.sqlalchemy_models import JobExecutionHistory, get_db_session
+            
+            with get_db_session() as session:
+                execution = session.query(JobExecutionHistory).filter(
+                    JobExecutionHistory.job_id == job_id,
+                    JobExecutionHistory.execution_id == execution_id
+                ).first()
+                
+                if execution:
+                    logger.info(f"[API_EXECUTION_DETAILS] Found execution {execution_id} for job {job_id}")
+                    return jsonify({
+                        'success': True,
+                        'execution': execution.to_dict()
+                    })
+                else:
+                    logger.warning(f"[API_EXECUTION_DETAILS] Execution {execution_id} not found for job {job_id}")
+                    return jsonify({
+                        'success': False,
+                        'error': f'Execution {execution_id} not found for job {job_id}'
+                    }), 404
+        
+        except Exception as e:
+            logger.error(f"[API_EXECUTION_DETAILS] Error getting execution details: {e}")
+            return jsonify({
+                'success': False,
+                'error': f'Failed to get execution details: {str(e)}'
+            }), 500
+    
     @app.route('/api/jobs/<job_id>/status')
     def api_job_status(job_id):
         """API endpoint for job status"""
@@ -1887,13 +2072,9 @@ def create_routes(app):
             logger.error(f"[DEBUG] Debug endpoint error: {e}")
             return jsonify({'error': str(e)}), 500
     
-    # Register modern job execution routes
-    try:
-        from core.modern_job_api import create_modern_job_routes
-        modern_api = create_modern_job_routes(app)
-        logger.info("[ROUTES] Modern job execution API routes registered successfully")
-    except ImportError as e:
-        logger.warning(f"[ROUTES] Could not register modern job API routes: {e}")
+    # Note: Old modern job API routes removed to prevent conflicts with V2 implementation
+    # V2 execution engine is now integrated directly into the /api/jobs/<job_id>/run route above
+    logger.info("[ROUTES] Using integrated V2 execution engine (old modern_job_api routes disabled)")
     
     # Authentication removed - all routes now publicly accessible
     
@@ -2538,6 +2719,334 @@ def create_routes(app):
         except Exception as e:
             logger.error(f"[ADMIN] Export config error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/admin/job-queue/status')
+    def api_admin_job_queue_status():
+        """Get job queue status across all timezones"""
+        try:
+            from core.v2.execution_engine import get_execution_engine
+            
+            engine = get_execution_engine()
+            if not engine or engine.status.value != "running":
+                return jsonify({
+                    'success': False,
+                    'error': 'Execution engine not running'
+                }), 503
+            
+            # Get timezone queue status
+            queue_status = engine.get_timezone_queue_status()
+            active_jobs = engine.get_active_jobs()
+            
+            # Calculate totals
+            total_queued = sum(status.get('queue_size', 0) for status in queue_status.values())
+            total_active = sum(status.get('active_executions', 0) for status in queue_status.values())
+            total_processed = sum(status.get('total_processed', 0) for status in queue_status.values())
+            
+            return jsonify({
+                'success': True,
+                'timestamp': datetime.now().isoformat(),
+                'summary': {
+                    'total_queued': total_queued,
+                    'total_active': total_active,
+                    'total_processed': total_processed,
+                    'engine_status': engine.status.value
+                },
+                'timezone_queues': queue_status,
+                'active_jobs': active_jobs
+            })
+            
+        except Exception as e:
+            logger.error(f"[ADMIN] Job queue status error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/admin/job-queue/metrics')
+    def api_admin_job_queue_metrics():
+        """Get detailed job queue metrics"""
+        try:
+            from core.v2.execution_engine import get_execution_engine
+            
+            engine = get_execution_engine()
+            if not engine or engine.status.value != "running":
+                return jsonify({
+                    'success': False,
+                    'error': 'Execution engine not running'
+                }), 503
+            
+            # Get comprehensive metrics
+            metrics = engine.get_execution_metrics()
+            
+            return jsonify({
+                'success': True,
+                'timestamp': datetime.now().isoformat(),
+                'metrics': metrics
+            })
+            
+        except Exception as e:
+            logger.error(f"[ADMIN] Job queue metrics error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/admin/job-queue')
+    def admin_job_queue():
+        """Job queue monitoring page"""
+        try:
+            logger.info("[ADMIN_JOB_QUEUE] Rendering job queue page")
+            return render_template('admin_job_queue.html')
+            
+        except Exception as e:
+            logger.error(f"[ADMIN_JOB_QUEUE] Job queue page error: {e}")
+            flash(f'Error loading job queue: {str(e)}', 'error')
+            return redirect(url_for('admin_panel'))
+
+    # =============================================
+    # V2 JOB MANAGEMENT ROUTES (YAML-based)
+    # =============================================
+
+    @app.route('/api/v2/jobs', methods=['GET'])
+    def api_v2_list_jobs():
+        """List all V2 jobs"""
+        try:
+            # Use unified JobManager with V2 filtering
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job manager not available'
+                }), 500
+            
+            enabled_only = request.args.get('enabled_only', 'false').lower() == 'true'
+            limit = request.args.get('limit', type=int)
+            
+            jobs = job_manager.list_jobs(enabled_only=enabled_only, limit=limit, version='v2')
+            
+            return jsonify({
+                'success': True,
+                'jobs': jobs,
+                'total_count': len(jobs)
+            })
+            
+        except Exception as e:
+            logger.error(f"[API_V2_JOBS] Error listing V2 jobs: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/v2/jobs', methods=['POST'])
+    def api_v2_create_job():
+        """Create a new V2 job"""
+        try:
+            # Use unified JobManager for V2 job creation
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job manager not available'
+                }), 500
+            
+            job_data = request.get_json()
+            if not job_data:
+                return jsonify({
+                    'success': False,
+                    'error': 'No job data provided'
+                }), 400
+            
+            # Ensure this is treated as a V2 job by requiring yaml_config
+            if 'yaml_config' not in job_data:
+                return jsonify({
+                    'success': False,
+                    'error': 'V2 jobs require yaml_config field'
+                }), 400
+            
+            result = job_manager.create_job(job_data)
+            
+            if result['success']:
+                return jsonify(result), 201
+            else:
+                return jsonify(result), 400
+                
+        except Exception as e:
+            logger.error(f"[API_V2_JOBS] Error creating V2 job: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/v2/jobs/<job_id>', methods=['GET'])
+    def api_v2_get_job(job_id):
+        """Get a V2 job by ID"""
+        try:
+            # Use unified JobManager
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job manager not available'
+                }), 500
+            
+            job = job_manager.get_job(job_id, version='v2')
+            
+            if job:
+                return jsonify({
+                    'success': True,
+                    'job': job
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': f'V2 job {job_id} not found'
+                }), 404
+                
+        except Exception as e:
+            logger.error(f"[API_V2_JOBS] Error getting V2 job {job_id}: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/v2/jobs/<job_id>', methods=['PUT'])
+    def api_v2_update_job(job_id):
+        """Update a V2 job"""
+        try:
+            # Use unified JobManager
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job manager not available'
+                }), 500
+            
+            job_data = request.get_json()
+            if not job_data:
+                return jsonify({
+                    'success': False,
+                    'error': 'No job data provided'
+                }), 400
+            
+            result = job_manager.update_job(job_id, job_data)
+            
+            if result['success']:
+                return jsonify(result)
+            else:
+                return jsonify(result), 400
+                
+        except Exception as e:
+            logger.error(f"[API_V2_JOBS] Error updating V2 job {job_id}: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/v2/jobs/<job_id>', methods=['DELETE'])
+    def api_v2_delete_job(job_id):
+        """Delete a V2 job"""
+        try:
+            # Use unified JobManager
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job manager not available'
+                }), 500
+            
+            result = job_manager.delete_job(job_id)
+            
+            if result['success']:
+                return jsonify(result)
+            else:
+                return jsonify(result), 404
+                
+        except Exception as e:
+            logger.error(f"[API_V2_JOBS] Error deleting V2 job {job_id}: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/v2/jobs/<job_id>/run', methods=['POST'])
+    def api_v2_run_job(job_id):
+        """Execute a V2 job immediately"""
+        try:
+            # Use unified execution system
+            try:
+                from core.job_executor import JobExecutor
+                executor = JobExecutor()
+                result = executor.execute_job(job_id)
+            except ImportError:
+                # Fallback: Job execution not available
+                return jsonify({
+                    'success': False,
+                    'error': 'Job execution not available - unified executor required'
+                }), 503
+            
+            return jsonify(result)
+                
+        except Exception as e:
+            logger.error(f"[API_V2_JOBS] Error executing V2 job {job_id}: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/v2/jobs/<job_id>/history', methods=['GET'])
+    def api_v2_job_history(job_id):
+        """Get execution history for a V2 job"""
+        try:
+            # Use unified JobManager for history
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job manager not available'
+                }), 500
+            
+            limit = request.args.get('limit', 50, type=int)
+            history = job_manager.get_execution_history(job_id, limit)
+            
+            return jsonify({
+                'success': True,
+                'job_id': job_id,
+                'execution_history': history,
+                'total_count': len(history)
+            })
+                
+        except Exception as e:
+            logger.error(f"[API_V2_JOBS] Error getting V2 job history {job_id}: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/v2/jobs/samples', methods=['GET'])
+    def api_v2_sample_configs():
+        """Get sample YAML configurations"""
+        try:
+            # Use unified JobManager for sample configs
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Job manager not available'
+                }), 500
+            
+            samples = job_manager.get_sample_configs()
+            
+            return jsonify({
+                'success': True,
+                'samples': samples
+            })
+                
+        except Exception as e:
+            logger.error(f"[API_V2_JOBS] Error getting sample configs: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
 
 
 def generate_openapi_spec():

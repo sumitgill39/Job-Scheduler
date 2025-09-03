@@ -1,7 +1,0 @@
-{
-  "name": "Test Connection API",
-  "server": "DESKTOP-4ADGDVE\\SQLEXPRESS",
-  "database": "sreutil",
-  "trusted_connection": true,
-  "description": "Test connection created via API"
-}

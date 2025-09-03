@@ -1,3 +1,28 @@
+010802b4-9b05-4de2-876f-ffc915aa7ba3:
+  connection_name: default
+  connection_string: null
+  created_date: '2025-09-02T09:48:26.834869'
+  current_status: pending
+  database_name: null
+  description: ''
+  enabled: true
+  fetch_size: 1000
+  is_running: false
+  job_id: 010802b4-9b05-4de2-876f-ffc915aa7ba3
+  job_type: sql
+  last_run_time: null
+  max_retries: 3
+  max_rows: 10000
+  metadata: {}
+  modified_date: '2025-09-02T09:48:26.834869'
+  name: System Test SQL Job
+  next_run_time: null
+  query_timeout: 300
+  retry_count: 0
+  retry_delay: 60
+  run_as: null
+  sql_query: SELECT 'System test successful' as message
+  timeout: 300
 1c8069de-a80b-4f69-a00f-e91453e32034:
   connection_name: default
   connection_string: null
@@ -15,6 +40,31 @@
   max_rows: 10000
   metadata: {}
   modified_date: '2025-08-30T23:04:24.500088'
+  name: System Test SQL Job
+  next_run_time: null
+  query_timeout: 300
+  retry_count: 0
+  retry_delay: 60
+  run_as: null
+  sql_query: SELECT 'System test successful' as message
+  timeout: 300
+25489a05-0141-4644-b038-5a73fae72d93:
+  connection_name: default
+  connection_string: null
+  created_date: '2025-09-02T09:56:28.203743'
+  current_status: pending
+  database_name: null
+  description: ''
+  enabled: true
+  fetch_size: 1000
+  is_running: false
+  job_id: 25489a05-0141-4644-b038-5a73fae72d93
+  job_type: sql
+  last_run_time: null
+  max_retries: 3
+  max_rows: 10000
+  metadata: {}
+  modified_date: '2025-09-02T09:56:28.203743'
   name: System Test SQL Job
   next_run_time: null
   query_timeout: 300

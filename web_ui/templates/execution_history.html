@@ -13,9 +13,27 @@
                     </h4>
                     <small class="text-muted">Complete execution history with detailed timing information</small>
                 </div>
-                <div class="d-flex gap-2">
+                <div class="d-flex gap-2 align-items-center">
+                    <!-- Auto-refresh controls -->
+                    <div class="form-check form-switch me-3">
+                        <input class="form-check-input" type="checkbox" id="autoRefreshToggle" checked onchange="toggleAutoRefresh()">
+                        <label class="form-check-label" for="autoRefreshToggle">
+                            <small>Auto-refresh</small>
+                        </label>
+                    </div>
+                    <div class="me-3">
+                        <select class="form-select form-select-sm" id="refreshInterval" onchange="updateRefreshInterval()" style="width: 80px;">
+                            <option value="5">5s</option>
+                            <option value="10">10s</option>
+                            <option value="15">15s</option>
+                            <option value="20">20s</option>
+                            <option value="25">25s</option>
+                            <option value="30" selected>30s</option>
+                        </select>
+                    </div>
+                    <span id="refreshCountdown" class="badge bg-secondary me-2" style="min-width: 40px;">30s</span>
                     <button class="btn btn-outline-primary btn-sm" onclick="refreshHistory()">
-                        <i class="fas fa-sync-alt me-1"></i>Refresh
+                        <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Refresh
                     </button>
                     <button class="btn btn-outline-success btn-sm" onclick="exportHistory()">
                         <i class="fas fa-download me-1"></i>Export
@@ -35,7 +53,7 @@
                             <option value="running">Running</option>
                             <option value="timeout">Timeout</option>
                             <option value="cancelled">Cancelled</option>
-                            <option value="retry">Retry</option>
+                            <option value="partial_success">Partial Success</option>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -316,13 +334,18 @@
     let sortDirection = 'desc';
     let allExecutions = [];
     let filteredExecutions = [];
+    
+    // Auto-refresh variables
+    let autoRefreshEnabled = true;
+    let refreshInterval = 30; // seconds
+    let refreshTimer = null;
+    let countdownTimer = null;
+    let remainingSeconds = 30;
 
     // Initialize page
     document.addEventListener('DOMContentLoaded', function() {
         loadExecutionHistory();
-        
-        // Auto-refresh every 30 seconds
-        setInterval(loadExecutionHistory, 30000);
+        startAutoRefresh();
     });
 
     // Load execution history from API
@@ -357,8 +380,8 @@
         const searchQuery = document.getElementById('searchInput').value.toLowerCase();
 
         filteredExecutions = allExecutions.filter(execution => {
-            // Status filter
-            if (statusFilter && execution.status !== statusFilter) return false;
+            // Status filter (case-insensitive comparison)
+            if (statusFilter && execution.status.toLowerCase() !== statusFilter) return false;
             
             // Job type filter (extract from metadata or job_name)
             if (jobTypeFilter) {
@@ -488,7 +511,7 @@
                             <button class="btn btn-outline-primary btn-sm" onclick="viewJobDetails('${execution.job_id}')" title="View Job">
                                 <i class="fas fa-briefcase"></i>
                             </button>
-                            ${execution.status === 'failed' ? `
+                            ${execution.status.toLowerCase() === 'failed' ? `
                             <button class="btn btn-outline-warning btn-sm" onclick="retryJob('${execution.job_id}')" title="Retry Job">
                                 <i class="fas fa-redo"></i>
                             </button>
@@ -876,9 +899,10 @@
             'pending': 'status-pending',
             'cancelled': 'status-cancelled',
             'timeout': 'status-timeout',
-            'retry': 'status-retry'
+            'retry': 'status-retry',
+            'partial_success': 'status-success'
         };
-        return statusClasses[status] || 'status-pending';
+        return statusClasses[status.toLowerCase()] || 'status-pending';
     }
 
     function getJobTypeIcon(type) {
@@ -890,8 +914,96 @@
         document.getElementById('historyLoading').style.display = show ? 'block' : 'none';
     }
 
+    // Auto-refresh functionality
+    function startAutoRefresh() {
+        if (!autoRefreshEnabled) return;
+        
+        // Clear existing timers
+        if (refreshTimer) clearInterval(refreshTimer);
+        if (countdownTimer) clearInterval(countdownTimer);
+        
+        // Reset countdown
+        remainingSeconds = refreshInterval;
+        updateCountdownDisplay();
+        
+        // Start refresh timer
+        refreshTimer = setInterval(() => {
+            loadExecutionHistory();
+            remainingSeconds = refreshInterval;
+        }, refreshInterval * 1000);
+        
+        // Start countdown timer (updates every second)
+        countdownTimer = setInterval(() => {
+            remainingSeconds--;
+            updateCountdownDisplay();
+            
+            if (remainingSeconds <= 0) {
+                remainingSeconds = refreshInterval;
+            }
+        }, 1000);
+    }
+
+    function stopAutoRefresh() {
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+        if (countdownTimer) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+        }
+        document.getElementById('refreshCountdown').textContent = '--';
+    }
+
+    function updateCountdownDisplay() {
+        const countdownElement = document.getElementById('refreshCountdown');
+        if (autoRefreshEnabled) {
+            countdownElement.textContent = remainingSeconds + 's';
+            countdownElement.className = 'badge bg-secondary me-2';
+        } else {
+            countdownElement.textContent = 'OFF';
+            countdownElement.className = 'badge bg-danger me-2';
+        }
+    }
+
+    function toggleAutoRefresh() {
+        autoRefreshEnabled = document.getElementById('autoRefreshToggle').checked;
+        
+        if (autoRefreshEnabled) {
+            startAutoRefresh();
+        } else {
+            stopAutoRefresh();
+        }
+        
+        updateCountdownDisplay();
+    }
+
+    function updateRefreshInterval() {
+        refreshInterval = parseInt(document.getElementById('refreshInterval').value);
+        remainingSeconds = refreshInterval;
+        
+        if (autoRefreshEnabled) {
+            startAutoRefresh();
+        }
+        
+        updateCountdownDisplay();
+    }
+
     function refreshHistory() {
+        // Manual refresh - also reset auto-refresh countdown
         loadExecutionHistory();
+        
+        if (autoRefreshEnabled) {
+            remainingSeconds = refreshInterval;
+            updateCountdownDisplay();
+        }
+        
+        // Add visual feedback
+        const icon = document.getElementById('refreshIcon');
+        icon.classList.add('fa-spin');
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+        }, 1000);
     }
 
     function exportHistory() {

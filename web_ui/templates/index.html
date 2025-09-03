@@ -113,7 +113,7 @@
                                 <tr>
                                     <td>
                                         <a href="{{ url_for('job_details', job_id=job.job_id) }}" class="text-decoration-none">
-                                            {{ job.job_name[:20] }}{% if job.job_name|length > 20 %}...{% endif %}
+                                            {{ (job.job_name or job.name)[:20] }}{% if (job.job_name or job.name)|length > 20 %}...{% endif %}
                                         </a>
                                     </td>
                                     <td>
@@ -172,8 +172,10 @@
                                     <a href="{{ url_for('job_details', job_id=job.job_id) }}" class="text-decoration-none">
                                         <strong>{{ job.name }}</strong>
                                     </a>
-                                    {% if job.description %}
+                                    {% if job.get('description') %}
                                     <br><small class="text-muted">{{ job.description[:50] }}{% if job.description|length > 50 %}...{% endif %}</small>
+                                    {% elif job.get('configuration') and job.configuration.get('description') %}
+                                    <br><small class="text-muted">{{ job.configuration.description[:50] }}{% if job.configuration.description|length > 50 %}...{% endif %}</small>
                                     {% endif %}
                                 </td>
                                 <td>
