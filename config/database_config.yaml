@@ -1,0 +1,37 @@
+# Database Configuration for Windows SQL Server
+# System database connection for storing user connections
+
+databases:
+  # Default database connection
+  default:
+    driver: "{ODBC Driver 17 for SQL Server}"
+    server: "localhost\\MSSQLSERVER01"
+    database: "master"
+    trusted_connection: true
+    connection_timeout: 30
+    command_timeout: 300
+    description: "Default SQL Server connection"
+
+# Connection pool settings
+connection_pool:
+  max_connections: 10
+  min_connections: 2
+  connection_lifetime: 3600  # 1 hour
+  
+# Retry settings for database connections
+retry_settings:
+  max_retries: 3
+  retry_delay: 5  # seconds
+  backoff_factor: 2
+  
+# SQL Query settings
+query_settings:
+  default_timeout: 300  # 5 minutes
+  long_running_timeout: 1800  # 30 minutes
+  batch_size: 1000
+  
+# Connection validation settings
+validation:
+  test_query: "SELECT 1"
+  validate_on_borrow: true
+  validation_timeout: 5

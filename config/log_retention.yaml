@@ -1,0 +1,229 @@
+# Log Retention Policy Configuration
+# Defines retention periods, cleanup schedules, and archival policies
+
+retention_policies:
+  # Timezone-specific daily logs
+  timezone_daily_logs:
+    retention_days: 90
+    archive_after_days: 30
+    compression: gzip
+    max_file_size_mb: 100
+    cleanup_priority: medium
+    
+  # Individual job detail logs  
+  job_detail_logs:
+    retention_days: 180
+    archive_after_days: 60
+    compression: gzip
+    max_file_size_mb: 50
+    cleanup_priority: low
+    
+  # System performance logs
+  performance_logs:
+    retention_days: 365
+    archive_after_days: 90
+    compression: gzip
+    max_file_size_mb: 200
+    cleanup_priority: high
+    
+  # Audit and compliance logs
+  audit_logs:
+    retention_days: 2555  # 7 years for compliance
+    archive_after_days: 365
+    compression: gzip
+    max_file_size_mb: 500
+    cleanup_priority: critical
+    backup_to_external: true
+    encryption_required: false
+    
+  # System logs (scheduler, api, errors)
+  system_logs:
+    retention_days: 120
+    archive_after_days: 30
+    compression: gzip
+    max_file_size_mb: 100
+    cleanup_priority: medium
+    
+  # Temporary logs (debug, test)
+  temporary_logs:
+    retention_days: 7
+    archive_after_days: 1
+    compression: gzip
+    max_file_size_mb: 25
+    cleanup_priority: low
+
+# Cleanup schedules
+cleanup_schedules:
+  # Daily cleanup - remove old files, compress recent ones
+  daily_cleanup:
+    cron: "0 1 * * *"  # 1 AM daily
+    enabled: true
+    tasks:
+      - compress_old_files
+      - remove_expired_files
+      - update_log_index
+      - check_disk_space
+      
+  # Weekly maintenance - archive and reorganize
+  weekly_archive:
+    cron: "0 2 * * 0"  # 2 AM every Sunday
+    enabled: true
+    tasks:
+      - archive_old_logs
+      - generate_weekly_report
+      - optimize_log_directories
+      - validate_retention_compliance
+      
+  # Monthly purge - remove very old files
+  monthly_purge:
+    cron: "0 3 1 * *"   # 3 AM first day of month
+    enabled: true
+    tasks:
+      - purge_expired_archives
+      - cleanup_empty_directories
+      - generate_monthly_summary
+      - backup_audit_logs
+
+# Disk space management
+disk_space:
+  # Thresholds for cleanup actions
+  warning_threshold_percent: 80
+  critical_threshold_percent: 90
+  emergency_threshold_percent: 95
+  
+  # Emergency cleanup actions
+  emergency_actions:
+    - remove_oldest_job_logs
+    - compress_all_uncompressed_logs
+    - purge_temporary_logs
+    - archive_performance_logs
+    
+  # Minimum free space requirements
+  minimum_free_space_gb: 5
+  
+  # Log directory paths to monitor
+  monitored_paths:
+    - logs/timezones
+    - logs/performance
+    - logs/audit
+    - logs/system
+
+# Archive configuration
+archive:
+  # Archive storage location
+  archive_path: logs/archived
+  
+  # Archive format and compression
+  format: tar.gz
+  compression_level: 6
+  
+  # Archive naming convention
+  naming_pattern: "{log_type}_{timezone}_{start_date}_{end_date}.tar.gz"
+  
+  # Maximum archive size before splitting
+  max_archive_size_mb: 1000
+  
+  # External backup configuration
+  external_backup:
+    enabled: false
+    provider: "local"  # local, s3, azure, gcp
+    destination: "/backup/job-scheduler-logs"
+    encryption: false
+    retention_policy: "same_as_source"
+
+# Monitoring and alerting
+monitoring:
+  # Disk space alerts
+  disk_space_alerts:
+    enabled: true
+    check_interval_minutes: 15
+    alert_channels:
+      - email
+      - log
+    recipients:
+      - admin@company.com
+      
+  # Log rotation alerts
+  rotation_alerts:
+    enabled: true
+    alert_on_failure: true
+    alert_channels:
+      - email
+      - log
+      
+  # Retention compliance alerts
+  compliance_alerts:
+    enabled: true
+    check_interval_hours: 24
+    alert_on_violation: true
+    alert_channels:
+      - email
+      - log
+
+# Performance optimization
+performance:
+  # Parallel processing for log operations
+  max_concurrent_operations: 4
+  
+  # Batch processing settings
+  batch_size: 100
+  batch_timeout_seconds: 300
+  
+  # I/O optimization
+  buffer_size_kb: 1024
+  use_async_io: true
+  
+  # Compression optimization
+  compression_threads: 2
+  compression_memory_limit_mb: 512
+
+# Compliance and security
+compliance:
+  # Data classification
+  data_classification: "internal"
+  
+  # Retention requirements
+  minimum_retention_days: 30
+  maximum_retention_days: 2555  # 7 years
+  
+  # Audit requirements
+  audit_log_immutability: false
+  audit_trail_required: true
+  
+  # Encryption requirements
+  encryption_at_rest: false
+  encryption_in_transit: false
+  
+  # Access control
+  log_file_permissions: "640"
+  log_directory_permissions: "750"
+  
+  # Data sanitization
+  sanitize_sensitive_data: true
+  sensitive_data_patterns:
+    - password
+    - secret
+    - key
+    - token
+    - credential
+
+# Custom log types
+custom_log_types:
+  integration_logs:
+    retention_days: 60
+    archive_after_days: 14
+    compression: gzip
+    priority: medium
+    
+  migration_logs:
+    retention_days: 180
+    archive_after_days: 30
+    compression: gzip
+    priority: high
+    
+  security_logs:
+    retention_days: 365
+    archive_after_days: 90
+    compression: gzip
+    priority: critical
+    backup_required: true

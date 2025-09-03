@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+
+{% block title %}Job Queue - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="fas fa-stream me-2"></i>Job Queue Monitor</h1>
+    <div class="d-flex gap-2 align-items-center">
+        <!-- Auto-refresh controls -->
+        <div class="form-check form-switch me-3">
+            <input class="form-check-input" type="checkbox" id="autoRefreshToggle" checked onchange="toggleAutoRefresh()">
+            <label class="form-check-label" for="autoRefreshToggle">
+                <small>Auto-refresh</small>
+            </label>
+        </div>
+        <div class="me-3">
+            <select class="form-select form-select-sm" id="refreshInterval" onchange="updateRefreshInterval()" style="width: 80px;">
+                <option value="5">5s</option>
+                <option value="10">10s</option>
+                <option value="15" selected>15s</option>
+                <option value="20">20s</option>
+                <option value="30">30s</option>
+            </select>
+        </div>
+        <span id="refreshCountdown" class="badge bg-secondary me-2" style="min-width: 40px;">15s</span>
+        <button class="btn btn-outline-primary btn-sm" onclick="refreshQueueStatus()">
+            <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Refresh
+        </button>
+        <a href="/admin" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>Back to Admin
+        </a>
+    </div>
+</div>
+
+<!-- Queue Status Summary -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-clock fa-2x text-warning mb-2"></i>
+                <h5 class="card-title" id="totalQueued">-</h5>
+                <p class="card-text">Queued Jobs</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-play-circle fa-2x text-success mb-2"></i>
+                <h5 class="card-title" id="totalActive">-</h5>
+                <p class="card-text">Running Jobs</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-check-circle fa-2x text-info mb-2"></i>
+                <h5 class="card-title" id="totalProcessed">-</h5>
+                <p class="card-text">Total Processed</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-cogs fa-2x" id="engineStatusIcon"></i>
+                <h5 class="card-title" id="engineStatus">-</h5>
+                <p class="card-text">Engine Status</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Timezone Queues -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-globe-americas me-2"></i>Timezone Queue Status
+        </h5>
+    </div>
+    <div class="card-body">
+        <div id="timezoneQueues" class="row">
+            <!-- Timezone cards will be populated by JavaScript -->
+        </div>
+    </div>
+</div>
+
+<!-- Active Jobs -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="fas fa-running me-2"></i>Currently Running Jobs
+        </h5>
+        <span class="badge bg-primary" id="activeJobsCount">0</span>
+    </div>
+    <div class="card-body">
+        <div id="activeJobsContainer">
+            <!-- Active jobs will be populated by JavaScript -->
+        </div>
+    </div>
+</div>
+
+<!-- Queue Metrics -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-chart-line me-2"></i>Queue Metrics
+        </h5>
+    </div>
+    <div class="card-body">
+        <div id="queueMetrics">
+            <!-- Metrics will be populated by JavaScript -->
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="d-none position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background-color: rgba(0,0,0,0.5); z-index: 1050;">
+    <div class="text-center text-white">
+        <div class="spinner-border mb-3" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div>Loading queue status...</div>
+    </div>
+</div>
+
+<script>
+let autoRefresh = true;
+let refreshInterval = 15; // seconds
+let refreshTimer = null;
+let countdownTimer = null;
+let countdown = 15;
+
+document.addEventListener('DOMContentLoaded', function() {
+    refreshQueueStatus();
+    startAutoRefresh();
+});
+
+function toggleAutoRefresh() {
+    autoRefresh = document.getElementById('autoRefreshToggle').checked;
+    if (autoRefresh) {
+        startAutoRefresh();
+    } else {
+        stopAutoRefresh();
+    }
+}
+
+function updateRefreshInterval() {
+    refreshInterval = parseInt(document.getElementById('refreshInterval').value);
+    countdown = refreshInterval;
+    if (autoRefresh) {
+        stopAutoRefresh();
+        startAutoRefresh();
+    }
+}
+
+function startAutoRefresh() {
+    if (refreshTimer) {
+        clearInterval(refreshTimer);
+    }
+    if (countdownTimer) {
+        clearInterval(countdownTimer);
+    }
+
+    countdown = refreshInterval;
+    updateCountdown();
+
+    countdownTimer = setInterval(function() {
+        countdown--;
+        updateCountdown();
+        if (countdown <= 0) {
+            countdown = refreshInterval;
+            refreshQueueStatus();
+        }
+    }, 1000);
+}
+
+function stopAutoRefresh() {
+    if (refreshTimer) {
+        clearInterval(refreshTimer);
+    }
+    if (countdownTimer) {
+        clearInterval(countdownTimer);
+    }
+    document.getElementById('refreshCountdown').textContent = '--';
+}
+
+function updateCountdown() {
+    document.getElementById('refreshCountdown').textContent = countdown + 's';
+}
+
+function refreshQueueStatus() {
+    const refreshIcon = document.getElementById('refreshIcon');
+    refreshIcon.classList.add('fa-spin');
+
+    Promise.all([
+        fetch('/api/admin/job-queue/status').then(r => r.json()),
+        fetch('/api/admin/job-queue/metrics').then(r => r.json())
+    ])
+    .then(([statusData, metricsData]) => {
+        if (statusData.success) {
+            updateQueueStatus(statusData);
+        } else {
+            console.error('Queue status error:', statusData.error);
+        }
+
+        if (metricsData.success) {
+            updateQueueMetrics(metricsData);
+        } else {
+            console.error('Queue metrics error:', metricsData.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching queue data:', error);
+        showError('Failed to fetch queue data: ' + error.message);
+    })
+    .finally(() => {
+        refreshIcon.classList.remove('fa-spin');
+    });
+}
+
+function updateQueueStatus(data) {
+    const summary = data.summary;
+    const timezoneQueues = data.timezone_queues;
+    const activeJobs = data.active_jobs;
+
+    // Update summary cards
+    document.getElementById('totalQueued').textContent = summary.total_queued;
+    document.getElementById('totalActive').textContent = summary.total_active;
+    document.getElementById('totalProcessed').textContent = summary.total_processed;
+    
+    const engineStatus = document.getElementById('engineStatus');
+    const engineIcon = document.getElementById('engineStatusIcon');
+    engineStatus.textContent = summary.engine_status.toUpperCase();
+    
+    if (summary.engine_status === 'running') {
+        engineIcon.className = 'fas fa-cogs fa-2x text-success mb-2';
+    } else {
+        engineIcon.className = 'fas fa-cogs fa-2x text-danger mb-2';
+    }
+
+    // Update timezone queues
+    updateTimezoneQueues(timezoneQueues);
+    
+    // Update active jobs
+    updateActiveJobs(activeJobs);
+}
+
+function updateTimezoneQueues(queues) {
+    const container = document.getElementById('timezoneQueues');
+    container.innerHTML = '';
+
+    Object.entries(queues).forEach(([timezone, status]) => {
+        const col = document.createElement('div');
+        col.className = 'col-md-4 mb-3';
+
+        const statusClass = status.status === 'running' ? 'success' : 'danger';
+        const queueSizeClass = status.queue_size > 10 ? 'warning' : status.queue_size > 0 ? 'info' : 'secondary';
+
+        col.innerHTML = `
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">${timezone}</h6>
+                    <span class="badge bg-${statusClass}">${status.status}</span>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="fw-bold text-${queueSizeClass}">${status.queue_size}</div>
+                            <small class="text-muted">Queued</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="fw-bold text-success">${status.active_executions}</div>
+                            <small class="text-muted">Running</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="fw-bold text-info">${status.total_processed || 0}</div>
+                            <small class="text-muted">Total</small>
+                        </div>
+                    </div>
+                    ${status.success_rate !== undefined ? `
+                    <div class="mt-2">
+                        <small class="text-muted">Success Rate: </small>
+                        <span class="fw-bold text-success">${(status.success_rate * 100).toFixed(1)}%</span>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+        container.appendChild(col);
+    });
+}
+
+function updateActiveJobs(activeJobsByTimezone) {
+    const container = document.getElementById('activeJobsContainer');
+    const countBadge = document.getElementById('activeJobsCount');
+    
+    let totalActiveJobs = 0;
+    container.innerHTML = '';
+
+    Object.entries(activeJobsByTimezone).forEach(([timezone, jobs]) => {
+        totalActiveJobs += jobs.length;
+
+        if (jobs.length === 0) return;
+
+        const timezoneSection = document.createElement('div');
+        timezoneSection.className = 'mb-4';
+        
+        timezoneSection.innerHTML = `
+            <h6 class="text-muted mb-2">${timezone} (${jobs.length} jobs)</h6>
+        `;
+
+        jobs.forEach(job => {
+            const jobCard = document.createElement('div');
+            jobCard.className = 'card mb-2';
+            
+            const startTime = job.start_time ? new Date(job.start_time).toLocaleString() : 'Unknown';
+            const duration = job.start_time ? Math.floor((Date.now() - new Date(job.start_time)) / 1000) : 0;
+            
+            jobCard.innerHTML = `
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="fw-bold">${job.job_name || 'Unknown Job'}</span>
+                            <small class="text-muted ms-2">${job.job_id}</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-success me-2">Running</span>
+                            <small class="text-muted">Started: ${startTime}</small>
+                            <small class="text-muted ms-2">(${duration}s ago)</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+            timezoneSection.appendChild(jobCard);
+        });
+
+        container.appendChild(timezoneSection);
+    });
+
+    countBadge.textContent = totalActiveJobs;
+
+    if (totalActiveJobs === 0) {
+        container.innerHTML = '<div class="text-center text-muted py-4">No jobs currently running</div>';
+    }
+}
+
+function updateQueueMetrics(data) {
+    const container = document.getElementById('queueMetrics');
+    const metrics = data.metrics;
+
+    if (!metrics) {
+        container.innerHTML = '<div class="text-center text-muted">No metrics available</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Performance Metrics</h6>
+                <ul class="list-unstyled">
+                    <li><strong>Jobs/Hour:</strong> ${metrics.jobs_per_hour?.toFixed(1) || 'N/A'}</li>
+                    <li><strong>Success Rate:</strong> ${metrics.success_rate ? (metrics.success_rate * 100).toFixed(1) + '%' : 'N/A'}</li>
+                    <li><strong>Avg Duration:</strong> ${metrics.average_duration?.toFixed(2) || 'N/A'}s</li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h6>System Health</h6>
+                <ul class="list-unstyled">
+                    <li><strong>Memory Usage:</strong> ${metrics.memory_usage || 'N/A'}MB</li>
+                    <li><strong>Uptime:</strong> ${metrics.uptime || 'N/A'}</li>
+                    <li><strong>Last Update:</strong> ${new Date().toLocaleTimeString()}</li>
+                </ul>
+            </div>
+        </div>
+    `;
+}
+
+function showError(message) {
+    // You could implement a toast notification or alert here
+    console.error(message);
+}
+</script>
+
+{% endblock %}

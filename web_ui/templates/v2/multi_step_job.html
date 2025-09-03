@@ -1,0 +1,920 @@
+{% extends "base.html" %}
+
+{% block title %}Create Multi-Step Job - Job Scheduler V2{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4><i class="fas fa-plus-circle"></i> Create Multi-Step Job (V2)</h4>
+                </div>
+                <div class="card-body">
+                    <form id="multiStepJobForm">
+                        <!-- Job Basic Information -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="jobName" class="form-label">Job Name *</label>
+                                    <input type="text" class="form-control" id="jobName" name="job_name" required
+                                           placeholder="e.g. Daily Data Pipeline">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="timezone" class="form-label">Timezone *</label>
+                                    <select class="form-select" id="timezone" name="timezone" required>
+                                        <option value="">Select timezone...</option>
+                                        <option value="UTC" selected>UTC</option>
+                                        <option value="America/New_York">America/New_York (EST/EDT)</option>
+                                        <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+                                        <option value="Europe/London">Europe/London (GMT/BST)</option>
+                                        <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group mb-4">
+                            <label for="description" class="form-label">Description *</label>
+                            <textarea class="form-control" id="description" name="description" rows="2" required
+                                      placeholder="Describe what this job does..."></textarea>
+                        </div>
+
+                        <!-- Job Settings -->
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="priority" class="form-label">Priority</label>
+                                    <select class="form-select" id="priority" name="priority">
+                                        <option value="0" selected>Normal (0)</option>
+                                        <option value="5">High (5)</option>
+                                        <option value="10">Critical (10)</option>
+                                        <option value="-5">Low (-5)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="timeoutSeconds" class="form-label">Timeout (seconds)</label>
+                                    <input type="number" class="form-control" id="timeoutSeconds" name="timeout_seconds" 
+                                           value="3600" min="60" max="86400">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="maxRetries" class="form-label">Max Retries</label>
+                                    <input type="number" class="form-control" id="maxRetries" name="max_retries" 
+                                           value="0" min="0" max="5">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Steps Section -->
+                        <div class="card mb-4">
+                            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                                <h5><i class="fas fa-list-ol"></i> Execution Steps</h5>
+                                <button type="button" class="btn btn-outline-light btn-sm" id="addStepBtn">
+                                    <i class="fas fa-plus"></i> Add Step
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="stepsContainer" class="sortable-steps">
+                                    <!-- Steps will be added here dynamically -->
+                                </div>
+                                <div id="noStepsMessage" class="text-muted text-center py-4">
+                                    <i class="fas fa-info-circle"></i> No steps added yet. Click "Add Step" to get started.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="d-flex gap-3">
+                            <button type="button" class="btn btn-success" id="validateJobBtn">
+                                <i class="fas fa-check-circle"></i> Validate Job
+                            </button>
+                            <button type="button" class="btn btn-primary" id="executeJobBtn">
+                                <i class="fas fa-play"></i> Execute Now
+                            </button>
+                            <button type="button" class="btn btn-warning" id="scheduleJobBtn">
+                                <i class="fas fa-clock"></i> Schedule Job
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="saveJobBtn">
+                                <i class="fas fa-save"></i> Save Draft
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Job Preview Panel -->
+        <div class="col-md-4">
+            <div class="card sticky-top">
+                <div class="card-header bg-info text-white">
+                    <h5><i class="fas fa-eye"></i> Job Preview</h5>
+                </div>
+                <div class="card-body">
+                    <div id="jobPreview">
+                        <p class="text-muted">Fill in job details to see preview...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step Configuration Modal -->
+<div class="modal fade" id="stepModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="stepModalTitle">Configure Step</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="stepForm">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="stepName" class="form-label">Step Name *</label>
+                            <input type="text" class="form-control" id="stepName" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="stepType" class="form-label">Step Type *</label>
+                            <select class="form-select" id="stepType" required>
+                                <option value="">Select type...</option>
+                                <option value="sql">SQL Query</option>
+                                <option value="powershell">PowerShell Script</option>
+                                <option value="http">HTTP Request</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- SQL Step Configuration -->
+                    <div id="sqlStepConfig" class="step-config" style="display: none;">
+                        <div class="form-group mb-3">
+                            <label for="sqlQuery" class="form-label">SQL Query *</label>
+                            <textarea class="form-control" id="sqlQuery" rows="8" 
+                                      placeholder="Enter your SQL query here..."></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="connectionName" class="form-label">Connection</label>
+                                <select class="form-select" id="connectionName">
+                                    <option value="default" selected>Default</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="sqlTimeout" class="form-label">Timeout (seconds)</label>
+                                <input type="number" class="form-control" id="sqlTimeout" value="300" min="30">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PowerShell Step Configuration -->
+                    <div id="powershellStepConfig" class="step-config" style="display: none;">
+                        <div class="form-group mb-3">
+                            <label class="form-label">Script Source</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scriptSource" id="inlineScript" value="inline" checked>
+                                <label class="form-check-label" for="inlineScript">Inline Script</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scriptSource" id="scriptFile" value="file">
+                                <label class="form-check-label" for="scriptFile">Script File</label>
+                            </div>
+                        </div>
+                        
+                        <div id="inlineScriptConfig">
+                            <div class="form-group mb-3">
+                                <label for="powershellScript" class="form-label">PowerShell Script *</label>
+                                <textarea class="form-control" id="powershellScript" rows="8" 
+                                          placeholder="Enter your PowerShell script here..."></textarea>
+                            </div>
+                        </div>
+                        
+                        <div id="scriptFileConfig" style="display: none;">
+                            <div class="form-group mb-3">
+                                <label for="scriptPath" class="form-label">Script Path *</label>
+                                <input type="text" class="form-control" id="scriptPath" 
+                                       placeholder="e.g. ./scripts/backup.ps1">
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="executionPolicy" class="form-label">Execution Policy</label>
+                                <select class="form-select" id="executionPolicy">
+                                    <option value="RemoteSigned" selected>RemoteSigned</option>
+                                    <option value="Unrestricted">Unrestricted</option>
+                                    <option value="Bypass">Bypass</option>
+                                    <option value="AllSigned">AllSigned</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="psTimeout" class="form-label">Timeout (seconds)</label>
+                                <input type="number" class="form-control" id="psTimeout" value="300" min="30">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- HTTP Step Configuration -->
+                    <div id="httpStepConfig" class="step-config" style="display: none;">
+                        <div class="row mb-3">
+                            <div class="col-md-8">
+                                <label for="httpUrl" class="form-label">URL *</label>
+                                <input type="url" class="form-control" id="httpUrl" placeholder="https://api.example.com/webhook">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="httpMethod" class="form-label">Method</label>
+                                <select class="form-select" id="httpMethod">
+                                    <option value="GET" selected>GET</option>
+                                    <option value="POST">POST</option>
+                                    <option value="PUT">PUT</option>
+                                    <option value="DELETE">DELETE</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label for="httpHeaders" class="form-label">Headers (JSON)</label>
+                            <textarea class="form-control" id="httpHeaders" rows="3" 
+                                      placeholder='{"Content-Type": "application/json"}'></textarea>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label for="httpBody" class="form-label">Request Body</label>
+                            <textarea class="form-control" id="httpBody" rows="4" 
+                                      placeholder="Request body content..."></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="httpTimeout" class="form-label">Timeout (seconds)</label>
+                            <input type="number" class="form-control" id="httpTimeout" value="30" min="10">
+                        </div>
+                    </div>
+
+                    <!-- Common Step Settings -->
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="continueOnFailure">
+                                <label class="form-check-label" for="continueOnFailure">
+                                    Continue on Failure
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="retryCount" class="form-label">Retry Count</label>
+                            <input type="number" class="form-control" id="retryCount" value="0" min="0" max="5">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="retryDelay" class="form-label">Retry Delay (sec)</label>
+                            <input type="number" class="form-control" id="retryDelay" value="5" min="1">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveStepBtn">Save Step</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Schedule Job Modal -->
+<div class="modal fade" id="scheduleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Schedule Job</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group mb-3">
+                    <label for="scheduledTime" class="form-label">Scheduled Time *</label>
+                    <input type="datetime-local" class="form-control" id="scheduledTime" required>
+                </div>
+                <div class="form-group mb-3">
+                    <label for="schedulePriority" class="form-label">Priority</label>
+                    <select class="form-select" id="schedulePriority">
+                        <option value="0" selected>Normal</option>
+                        <option value="5">High</option>
+                        <option value="10">Critical</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" id="confirmScheduleBtn">Schedule Job</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Multi-Step Job Creation JavaScript
+class MultiStepJobCreator {
+    constructor() {
+        this.steps = [];
+        this.currentStepIndex = -1;
+        this.init();
+    }
+
+    init() {
+        this.bindEvents();
+        this.loadTimezones();
+        this.updatePreview();
+    }
+
+    bindEvents() {
+        // Main form events
+        $('#addStepBtn').on('click', () => this.addStep());
+        $('#validateJobBtn').on('click', () => this.validateJob());
+        $('#executeJobBtn').on('click', () => this.executeJob());
+        $('#scheduleJobBtn').on('click', () => this.showScheduleModal());
+        $('#saveJobBtn').on('click', () => this.saveJobDraft());
+
+        // Step modal events
+        $('#stepType').on('change', () => this.updateStepConfig());
+        $('input[name="scriptSource"]').on('change', () => this.updateScriptConfig());
+        $('#saveStepBtn').on('click', () => this.saveStep());
+
+        // Schedule modal events
+        $('#confirmScheduleBtn').on('click', () => this.scheduleJob());
+
+        // Form change events for preview
+        $('#multiStepJobForm input, #multiStepJobForm select, #multiStepJobForm textarea').on('input change', () => {
+            this.updatePreview();
+        });
+
+        // Make steps sortable
+        this.initSortable();
+    }
+
+    async loadTimezones() {
+        try {
+            const response = await fetch('/api/v2/timezones');
+            const data = await response.json();
+            
+            if (data.success) {
+                const select = $('#timezone');
+                select.empty();
+                select.append('<option value="">Select timezone...</option>');
+                
+                // Add common timezones first
+                const common = ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Tokyo'];
+                common.forEach(tz => {
+                    select.append(`<option value="${tz}">${tz}</option>`);
+                });
+                
+                select.append('<option disabled>──────────</option>');
+                
+                // Add all other timezones grouped
+                Object.keys(data.grouped_timezones).sort().forEach(region => {
+                    if (region !== 'Other') {
+                        const group = $(`<optgroup label="${region}"></optgroup>`);
+                        data.grouped_timezones[region].forEach(tz => {
+                            if (!common.includes(tz)) {
+                                group.append(`<option value="${tz}">${tz}</option>`);
+                            }
+                        });
+                        select.append(group);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load timezones:', error);
+        }
+    }
+
+    initSortable() {
+        $('#stepsContainer').sortable({
+            handle: '.step-handle',
+            update: (event, ui) => {
+                this.reorderSteps();
+            }
+        });
+    }
+
+    addStep() {
+        this.currentStepIndex = -1; // New step
+        this.resetStepForm();
+        $('#stepModalTitle').text('Add New Step');
+        $('#stepModal').modal('show');
+    }
+
+    editStep(index) {
+        this.currentStepIndex = index;
+        this.loadStepToForm(this.steps[index]);
+        $('#stepModalTitle').text('Edit Step');
+        $('#stepModal').modal('show');
+    }
+
+    deleteStep(index) {
+        if (confirm('Are you sure you want to delete this step?')) {
+            this.steps.splice(index, 1);
+            this.renderSteps();
+            this.updatePreview();
+        }
+    }
+
+    moveStep(index, direction) {
+        if (direction === 'up' && index > 0) {
+            [this.steps[index], this.steps[index-1]] = [this.steps[index-1], this.steps[index]];
+        } else if (direction === 'down' && index < this.steps.length - 1) {
+            [this.steps[index], this.steps[index+1]] = [this.steps[index+1], this.steps[index]];
+        }
+        this.renderSteps();
+        this.updatePreview();
+    }
+
+    updateStepConfig() {
+        const stepType = $('#stepType').val();
+        
+        // Hide all step configs
+        $('.step-config').hide();
+        
+        // Show relevant config
+        switch(stepType) {
+            case 'sql':
+                $('#sqlStepConfig').show();
+                break;
+            case 'powershell':
+                $('#powershellStepConfig').show();
+                this.updateScriptConfig();
+                break;
+            case 'http':
+                $('#httpStepConfig').show();
+                break;
+        }
+    }
+
+    updateScriptConfig() {
+        const source = $('input[name="scriptSource"]:checked').val();
+        if (source === 'inline') {
+            $('#inlineScriptConfig').show();
+            $('#scriptFileConfig').hide();
+        } else {
+            $('#inlineScriptConfig').hide();
+            $('#scriptFileConfig').show();
+        }
+    }
+
+    resetStepForm() {
+        $('#stepForm')[0].reset();
+        $('.step-config').hide();
+        $('input[name="scriptSource"][value="inline"]').prop('checked', true);
+    }
+
+    loadStepToForm(step) {
+        $('#stepName').val(step.step_name);
+        $('#stepType').val(step.step_type);
+        $('#continueOnFailure').prop('checked', step.continue_on_failure);
+        $('#retryCount').val(step.retry_count);
+        $('#retryDelay').val(step.retry_delay);
+
+        this.updateStepConfig();
+
+        // Load type-specific config
+        switch(step.step_type) {
+            case 'sql':
+                $('#sqlQuery').val(step.config.query || '');
+                $('#connectionName').val(step.config.connection_name || 'default');
+                $('#sqlTimeout').val(step.config.timeout || 300);
+                break;
+            case 'powershell':
+                if (step.config.script) {
+                    $('input[name="scriptSource"][value="inline"]').prop('checked', true);
+                    $('#powershellScript').val(step.config.script);
+                } else if (step.config.script_path) {
+                    $('input[name="scriptSource"][value="file"]').prop('checked', true);
+                    $('#scriptPath').val(step.config.script_path);
+                }
+                $('#executionPolicy').val(step.config.execution_policy || 'RemoteSigned');
+                $('#psTimeout').val(step.config.timeout || 300);
+                this.updateScriptConfig();
+                break;
+            case 'http':
+                $('#httpUrl').val(step.config.url || '');
+                $('#httpMethod').val(step.config.method || 'GET');
+                $('#httpHeaders').val(JSON.stringify(step.config.headers || {}, null, 2));
+                $('#httpBody').val(step.config.body || '');
+                $('#httpTimeout').val(step.config.timeout || 30);
+                break;
+        }
+    }
+
+    saveStep() {
+        const stepData = this.getStepFromForm();
+        if (!stepData) return;
+
+        if (this.currentStepIndex === -1) {
+            // New step
+            this.steps.push(stepData);
+        } else {
+            // Edit existing step
+            this.steps[this.currentStepIndex] = stepData;
+        }
+
+        this.renderSteps();
+        this.updatePreview();
+        $('#stepModal').modal('hide');
+    }
+
+    getStepFromForm() {
+        const stepName = $('#stepName').val().trim();
+        const stepType = $('#stepType').val();
+
+        if (!stepName || !stepType) {
+            alert('Please fill in step name and type');
+            return null;
+        }
+
+        const stepConfig = {
+            step_id: stepName.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+            step_name: stepName,
+            step_type: stepType,
+            config: {},
+            continue_on_failure: $('#continueOnFailure').prop('checked'),
+            retry_count: parseInt($('#retryCount').val()) || 0,
+            retry_delay: parseInt($('#retryDelay').val()) || 5
+        };
+
+        // Get type-specific config
+        switch(stepType) {
+            case 'sql':
+                stepConfig.config = {
+                    query: $('#sqlQuery').val().trim(),
+                    connection_name: $('#connectionName').val() || 'default',
+                    timeout: parseInt($('#sqlTimeout').val()) || 300
+                };
+                if (!stepConfig.config.query) {
+                    alert('Please enter SQL query');
+                    return null;
+                }
+                break;
+
+            case 'powershell':
+                const scriptSource = $('input[name="scriptSource"]:checked').val();
+                if (scriptSource === 'inline') {
+                    stepConfig.config.script = $('#powershellScript').val().trim();
+                } else {
+                    stepConfig.config.script_path = $('#scriptPath').val().trim();
+                }
+                stepConfig.config.execution_policy = $('#executionPolicy').val();
+                stepConfig.config.timeout = parseInt($('#psTimeout').val()) || 300;
+
+                if (!stepConfig.config.script && !stepConfig.config.script_path) {
+                    alert('Please enter PowerShell script or script path');
+                    return null;
+                }
+                break;
+
+            case 'http':
+                stepConfig.config = {
+                    url: $('#httpUrl').val().trim(),
+                    method: $('#httpMethod').val(),
+                    timeout: parseInt($('#httpTimeout').val()) || 30
+                };
+
+                try {
+                    const headers = $('#httpHeaders').val().trim();
+                    if (headers) {
+                        stepConfig.config.headers = JSON.parse(headers);
+                    }
+                } catch (e) {
+                    alert('Invalid JSON in headers');
+                    return null;
+                }
+
+                const body = $('#httpBody').val().trim();
+                if (body) {
+                    stepConfig.config.body = body;
+                }
+
+                if (!stepConfig.config.url) {
+                    alert('Please enter URL');
+                    return null;
+                }
+                break;
+        }
+
+        return stepConfig;
+    }
+
+    renderSteps() {
+        const container = $('#stepsContainer');
+        const noStepsMsg = $('#noStepsMessage');
+
+        if (this.steps.length === 0) {
+            container.hide();
+            noStepsMsg.show();
+            return;
+        }
+
+        container.show();
+        noStepsMsg.hide();
+
+        const stepsHtml = this.steps.map((step, index) => `
+            <div class="card mb-2 step-card">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="step-handle me-2" style="cursor: move;">
+                                    <i class="fas fa-grip-vertical text-muted"></i>
+                                </span>
+                                <span class="badge bg-primary me-2">${index + 1}</span>
+                                <strong>${step.step_name}</strong>
+                                <span class="badge bg-secondary ms-2">${step.step_type}</span>
+                                ${step.continue_on_failure ? '<span class="badge bg-warning ms-1">Continue on Failure</span>' : ''}
+                            </div>
+                            <div class="text-muted small">
+                                ${this.getStepDescription(step)}
+                            </div>
+                        </div>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="jobCreator.editStep(${index})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="jobCreator.deleteStep(${index})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        container.html(stepsHtml);
+    }
+
+    getStepDescription(step) {
+        switch(step.step_type) {
+            case 'sql':
+                return `Execute SQL query (${step.config.connection_name || 'default'})`;
+            case 'powershell':
+                return step.config.script ? 'Execute inline PowerShell script' : `Execute script: ${step.config.script_path}`;
+            case 'http':
+                return `${step.config.method || 'GET'} ${step.config.url || 'URL'}`;
+            default:
+                return step.step_type;
+        }
+    }
+
+    reorderSteps() {
+        const newOrder = [];
+        $('#stepsContainer .step-card').each((index, element) => {
+            const stepIndex = $(element).find('.btn-outline-primary').attr('onclick').match(/editStep\((\d+)\)/)[1];
+            newOrder.push(this.steps[parseInt(stepIndex)]);
+        });
+        this.steps = newOrder;
+        this.renderSteps();
+        this.updatePreview();
+    }
+
+    updatePreview() {
+        const jobData = this.getJobData();
+        if (!jobData) {
+            $('#jobPreview').html('<p class="text-muted">Fill in job details to see preview...</p>');
+            return;
+        }
+
+        const preview = `
+            <div class="job-preview">
+                <h6><i class="fas fa-info-circle"></i> Job Summary</h6>
+                <ul class="list-unstyled">
+                    <li><strong>Name:</strong> ${jobData.job_name || 'Untitled'}</li>
+                    <li><strong>Timezone:</strong> ${jobData.timezone || 'Not selected'}</li>
+                    <li><strong>Steps:</strong> ${this.steps.length}</li>
+                    <li><strong>Priority:</strong> ${jobData.priority || 0}</li>
+                    <li><strong>Timeout:</strong> ${jobData.timeout_seconds || 3600}s</li>
+                </ul>
+                
+                ${this.steps.length > 0 ? `
+                    <h6><i class="fas fa-list"></i> Steps</h6>
+                    <ol class="small">
+                        ${this.steps.map(step => `
+                            <li>
+                                <strong>${step.step_name}</strong> 
+                                <span class="badge bg-light text-dark">${step.step_type}</span>
+                                <br>
+                                <small class="text-muted">${this.getStepDescription(step)}</small>
+                            </li>
+                        `).join('')}
+                    </ol>
+                ` : ''}
+            </div>
+        `;
+
+        $('#jobPreview').html(preview);
+    }
+
+    getJobData() {
+        const jobName = $('#jobName').val().trim();
+        if (!jobName) return null;
+
+        return {
+            job_name: jobName,
+            description: $('#description').val().trim() || '',
+            timezone: $('#timezone').val() || 'UTC',
+            priority: parseInt($('#priority').val()) || 0,
+            timeout_seconds: parseInt($('#timeoutSeconds').val()) || 3600,
+            max_retries: parseInt($('#maxRetries').val()) || 0,
+            enabled: true,
+            steps: this.steps
+        };
+    }
+
+    async validateJob() {
+        const jobData = this.getJobData();
+        if (!jobData) {
+            alert('Please fill in job name');
+            return;
+        }
+
+        if (this.steps.length === 0) {
+            alert('Please add at least one step');
+            return;
+        }
+
+        const btn = $('#validateJobBtn');
+        const originalText = btn.html();
+        btn.html('<i class="fas fa-spinner fa-spin"></i> Validating...');
+        btn.prop('disabled', true);
+
+        try {
+            const response = await fetch('/api/v2/jobs/validate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({job: jobData})
+            });
+
+            const result = await response.json();
+
+            if (result.valid) {
+                alert('[SUCCESS] Job validation successful! The job is ready to execute.');
+            } else {
+                alert(`[ERROR] Job validation failed:\n\n${result.validation_errors.join('\n')}`);
+            }
+        } catch (error) {
+            alert(`Validation error: ${error.message}`);
+        } finally {
+            btn.html(originalText);
+            btn.prop('disabled', false);
+        }
+    }
+
+    async executeJob() {
+        const jobData = this.getJobData();
+        if (!jobData) {
+            alert('Please fill in job name');
+            return;
+        }
+
+        if (this.steps.length === 0) {
+            alert('Please add at least one step');
+            return;
+        }
+
+        if (!confirm('Execute this job immediately?')) {
+            return;
+        }
+
+        const btn = $('#executeJobBtn');
+        const originalText = btn.html();
+        btn.html('<i class="fas fa-spinner fa-spin"></i> Executing...');
+        btn.prop('disabled', true);
+
+        try {
+            const response = await fetch('/api/v2/jobs/execute', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({job: jobData})
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert(`[SUCCESS] Job executed successfully!\n\nExecution ID: ${result.execution_id}\nStatus: ${result.status}\nDuration: ${result.duration_seconds}s`);
+                
+                // Show detailed results
+                this.showExecutionResults(result);
+            } else {
+                alert(`[ERROR] Job execution failed:\n\n${result.error}`);
+            }
+        } catch (error) {
+            alert(`Execution error: ${error.message}`);
+        } finally {
+            btn.html(originalText);
+            btn.prop('disabled', false);
+        }
+    }
+
+    showExecutionResults(result) {
+        // You could show results in a modal or redirect to a results page
+        console.log('Execution results:', result);
+        
+        // For now, just log to console and show basic info
+        if (result.steps && result.steps.length > 0) {
+            const stepResults = result.steps.map(step => 
+                `${step.step_name}: ${step.status} (${step.duration_seconds}s)`
+            ).join('\n');
+            
+            alert(`Execution completed!\n\nStep Results:\n${stepResults}`);
+        }
+    }
+
+    showScheduleModal() {
+        const jobData = this.getJobData();
+        if (!jobData) {
+            alert('Please fill in job name');
+            return;
+        }
+
+        if (this.steps.length === 0) {
+            alert('Please add at least one step');
+            return;
+        }
+
+        // Set default scheduled time to 1 hour from now
+        const now = new Date();
+        now.setHours(now.getHours() + 1);
+        const defaultTime = now.toISOString().slice(0, 16);
+        $('#scheduledTime').val(defaultTime);
+
+        $('#scheduleModal').modal('show');
+    }
+
+    async scheduleJob() {
+        const jobData = this.getJobData();
+        const scheduledTime = $('#scheduledTime').val();
+        const priority = parseInt($('#schedulePriority').val()) || 0;
+
+        if (!scheduledTime) {
+            alert('Please select scheduled time');
+            return;
+        }
+
+        const btn = $('#confirmScheduleBtn');
+        const originalText = btn.html();
+        btn.html('<i class="fas fa-spinner fa-spin"></i> Scheduling...');
+        btn.prop('disabled', true);
+
+        try {
+            const response = await fetch('/api/v2/jobs/schedule', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    job: jobData,
+                    scheduled_time: new Date(scheduledTime).toISOString(),
+                    priority: priority
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert(`[SUCCESS] Job scheduled successfully!\n\nExecution ID: ${result.execution_id}\nScheduled for: ${new Date(result.scheduled_time).toLocaleString()}`);
+                $('#scheduleModal').modal('hide');
+            } else {
+                alert(`[ERROR] Job scheduling failed:\n\n${result.error}`);
+            }
+        } catch (error) {
+            alert(`Scheduling error: ${error.message}`);
+        } finally {
+            btn.html(originalText);
+            btn.prop('disabled', false);
+        }
+    }
+
+    saveJobDraft() {
+        const jobData = this.getJobData();
+        if (!jobData) {
+            alert('Please fill in job name');
+            return;
+        }
+
+        // Save to localStorage for now
+        const drafts = JSON.parse(localStorage.getItem('jobDrafts') || '[]');
+        const draft = {
+            ...jobData,
+            saved_at: new Date().toISOString(),
+            id: Date.now()
+        };
+
+        drafts.push(draft);
+        localStorage.setItem('jobDrafts', JSON.stringify(drafts));
+
+        alert('[SUCCESS] Job draft saved successfully!');
+    }
+}
+
+// Initialize when document is ready
+$(document).ready(function() {
+    window.jobCreator = new MultiStepJobCreator();
+});
+</script>
+{% endblock %}
