@@ -146,12 +146,29 @@ def create_routes(app):
             # Transform jobs data to match template expectations (without expensive execution history lookup)
             jobs = []
             for job in jobs_raw:
+                # Extract job_type from different sources based on version
+                job_type = 'unknown'
+                if job.get('_version') == 'v2' and job.get('parsed_config'):
+                    job_type = job['parsed_config'].get('type', 'unknown').lower()
+                elif job.get('job_type'):  # V1 jobs
+                    job_type = job['job_type'].lower()
+                elif job.get('configuration'):  # V1 fallback
+                    try:
+                        import json
+                        config = json.loads(job['configuration']) if isinstance(job['configuration'], str) else job['configuration']
+                        if 'sql' in str(config).lower():
+                            job_type = 'sql'
+                        elif 'powershell' in str(config).lower():
+                            job_type = 'powershell'
+                    except:
+                        pass
+                
                 # Don't load execution history on every page load - it's too expensive
                 # Use basic status based on job enabled state
                 job_transformed = {
                     'id': job['job_id'],  # Template expects 'id', not 'job_id'
                     'name': job['name'],
-                    'type': job['job_type'],  # Changed from job['type'] to job['job_type'] for consistency
+                    'type': job_type,  # Use the detected job_type
                     'enabled': job['enabled'],
                     'created_date': job['created_date'],
                     'modified_date': job['modified_date'],
