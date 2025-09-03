@@ -66,6 +66,12 @@
                             <a href="#system-management" class="list-group-item list-group-item-action active" onclick="showSection('system-management')">
                                 <i class="fas fa-server me-2"></i>System Management
                             </a>
+                            <a href="/admin/job-queue" class="list-group-item list-group-item-action">
+                                <i class="fas fa-stream me-2"></i>Job Queue Monitor
+                            </a>
+                            <a href="/executions/history" class="list-group-item list-group-item-action">
+                                <i class="fas fa-history me-2"></i>Execution History
+                            </a>
                             <a href="#system-workflow" class="list-group-item list-group-item-action" onclick="showSection('system-workflow')">
                                 <i class="fas fa-project-diagram me-2"></i>System Workflow
                             </a>
@@ -791,13 +797,13 @@ function cleanupConnectionPool() {
 }
 
 function killAllRunningJobs() {
-    if (confirm('⚠️ CAUTION: This will forcibly terminate all running jobs. Are you sure?')) {
+    if (confirm('[WARNING] CAUTION: This will forcibly terminate all running jobs. Are you sure?')) {
         executeAdminCommand('/api/admin/kill-all-jobs', 'Terminating all running jobs...');
     }
 }
 
 function emergencyShutdown() {
-    if (confirm('⚠️ EMERGENCY SHUTDOWN: This will immediately stop the entire application. Are you sure?')) {
+    if (confirm('[WARNING] EMERGENCY SHUTDOWN: This will immediately stop the entire application. Are you sure?')) {
         if (confirm('This action cannot be undone and may cause data loss. Proceed?')) {
             executeAdminCommand('/api/admin/emergency-shutdown', 'Initiating emergency shutdown...');
         }

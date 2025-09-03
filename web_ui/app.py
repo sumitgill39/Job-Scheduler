@@ -22,7 +22,7 @@ def create_app(scheduler_manager=None):
     
     # Initialize logger
     logger = get_logger(__name__)
-    logger.info("🚀 Creating Flask application with SQLAlchemy")
+    logger.info("[FLASK] Creating Flask application with SQLAlchemy")
     
     # Track application start time for uptime calculation
     app._start_time = time.time()
@@ -30,31 +30,31 @@ def create_app(scheduler_manager=None):
     # Always attach scheduler manager first (outside SQLAlchemy try/catch)
     if scheduler_manager:
         app.scheduler_manager = scheduler_manager
-        logger.info("✅ Scheduler manager attached to Flask app")
+        logger.info("[SUCCESS] Scheduler manager attached to Flask app")
     else:
         app.scheduler_manager = None
-        logger.info("ℹ️ No scheduler manager provided")
+        logger.info("[INFO] No scheduler manager provided")
     
     # Initialize SQLAlchemy database and components
-    logger.info("🔧 Initializing SQLAlchemy components...")
+    logger.info("[INIT] Initializing SQLAlchemy components...")
     try:
         # Initialize SQLAlchemy database
-        logger.info("💾 Initializing SQLAlchemy database...")
+        logger.info("[DATABASE] Initializing SQLAlchemy database...")
         from database.sqlalchemy_models import init_database, database_engine
         
         # Test database connection and create tables if needed
         db_test = init_database()
         if db_test['success']:
-            logger.info("✅ SQLAlchemy database initialized successfully")
+            logger.info("[SUCCESS] SQLAlchemy database initialized successfully")
         else:
-            logger.error(f"❌ SQLAlchemy database initialization failed: {db_test['error']}")
+            logger.error(f"[ERROR] SQLAlchemy database initialization failed: {db_test['error']}")
             # Continue anyway - let the app start but log the issue
         
         # Store database engine in app context for routes
         app.database_engine = database_engine
         
         # Initialize job manager with SQLAlchemy
-        logger.info("📋 Creating SQLAlchemy job manager...")
+        logger.info("[MANAGER] Creating SQLAlchemy job manager...")
         from core.job_manager import JobManager
         from simple_connection_manager import simple_connection_manager
         
@@ -62,37 +62,37 @@ def create_app(scheduler_manager=None):
         
         # Add simple connection manager for routes compatibility
         app.db_manager = simple_connection_manager
-        logger.info("✅ SQLAlchemy job manager created successfully")
+        logger.info("[SUCCESS] SQLAlchemy job manager created successfully")
         
         # Initialize job executor
-        logger.info("⚡ Creating SQLAlchemy job executor...")
+        logger.info("[EXECUTOR] Creating SQLAlchemy job executor...")
         from core.job_executor import JobExecutor
         app.job_executor = JobExecutor(job_manager=app.job_manager)
-        logger.info("✅ SQLAlchemy job executor created successfully")
+        logger.info("[SUCCESS] SQLAlchemy job executor created successfully")
         
         # Try to create integrated scheduler if no scheduler manager provided
         if not scheduler_manager:
             try:
-                logger.info("⏰ Creating integrated scheduler...")
+                logger.info("[SCHEDULER] Creating integrated scheduler...")
                 from core.integrated_scheduler import IntegratedScheduler
                 app.integrated_scheduler = IntegratedScheduler()
                 
                 # Start the scheduler
                 app.integrated_scheduler.start()
-                logger.info("✅ Integrated scheduler initialized and started successfully")
+                logger.info("[SUCCESS] Integrated scheduler initialized and started successfully")
             except Exception as e:
-                logger.error(f"💥 Integrated scheduler initialization failed: {e}")
-                logger.info("📝 Continuing without integrated scheduler")
+                logger.error(f"[ERROR] Integrated scheduler initialization failed: {e}")
+                logger.info("[INFO] Continuing without integrated scheduler")
                 app.integrated_scheduler = None
         else:
             app.integrated_scheduler = None
         
-        logger.info("✅ All SQLAlchemy components initialized successfully")
+        logger.info("[SUCCESS] All SQLAlchemy components initialized successfully")
         
     except Exception as e:
-        logger.error(f"💥 CRITICAL: Failed to initialize SQLAlchemy components: {e}")
+        logger.error(f"[CRITICAL] Failed to initialize SQLAlchemy components: {e}")
         import traceback
-        logger.error(f"🔍 Stack trace: {traceback.format_exc()}")
+        logger.error(f"[TRACE] Stack trace: {traceback.format_exc()}")
         
         # Set minimal components so app can still start (but keep scheduler_manager)
         app.database_engine = None
@@ -103,12 +103,12 @@ def create_app(scheduler_manager=None):
     
     # Register blueprints/routes
     try:
-        logger.info("📝 Registering application routes...")
+        logger.info("[ROUTES] Registering application routes...")
         from .routes import create_routes
         create_routes(app)
-        logger.info("✅ Routes registered successfully")
+        logger.info("[SUCCESS] Routes registered successfully")
     except Exception as e:
-        logger.error(f"💥 Failed to register routes: {e}")
+        logger.error(f"[ERROR] Failed to register routes: {e}")
         raise
     
     # Error handlers
@@ -131,37 +131,37 @@ def create_app(scheduler_manager=None):
     # App shutdown handler
     def shutdown_handler():
         """Clean up resources when app shuts down"""
-        logger.info("🛑 APPLICATION SHUTDOWN INITIATED")
+        logger.info("[SHUTDOWN] APPLICATION SHUTDOWN INITIATED")
         logger.info("=" * 60)
         
         try:
             # Stop integrated scheduler first
             if hasattr(app, 'integrated_scheduler') and app.integrated_scheduler:
-                logger.info("⏰ Stopping integrated scheduler...")
+                logger.info("[SCHEDULER] Stopping integrated scheduler...")
                 app.integrated_scheduler.stop(wait=True)
-                logger.info("✅ Integrated scheduler stopped successfully")
+                logger.info("[SUCCESS] Integrated scheduler stopped successfully")
             else:
-                logger.debug("ℹ️ No integrated scheduler to stop")
+                logger.debug("[DEBUG] No integrated scheduler to stop")
         except Exception as e:
-            logger.error(f"💥 Error stopping integrated scheduler: {e}")
+            logger.error(f"[ERROR] Error stopping integrated scheduler: {e}")
         
         try:
             # SQLAlchemy cleanup
             if hasattr(app, 'database_engine') and app.database_engine:
-                logger.info("💾 Closing SQLAlchemy database engine...")
+                logger.info("[DATABASE] Closing SQLAlchemy database engine...")
                 app.database_engine.engine.dispose()
-                logger.info("✅ SQLAlchemy database engine closed successfully")
+                logger.info("[SUCCESS] SQLAlchemy database engine closed successfully")
             else:
-                logger.debug("ℹ️ No database engine to close")
+                logger.debug("[DEBUG] No database engine to close")
         except Exception as e:
-            logger.error(f"💥 Error during SQLAlchemy cleanup: {e}")
+            logger.error(f"[ERROR] Error during SQLAlchemy cleanup: {e}")
         
-        logger.info("🏁 APPLICATION SHUTDOWN COMPLETED")
+        logger.info("[SHUTDOWN] APPLICATION SHUTDOWN COMPLETED")
         logger.info("=" * 60)
     
     # Register shutdown handler
     import atexit
     atexit.register(shutdown_handler)
     
-    logger.info("🎉 Flask application created successfully with SQLAlchemy")
+    logger.info("[SUCCESS] Flask application created successfully with SQLAlchemy")
     return app

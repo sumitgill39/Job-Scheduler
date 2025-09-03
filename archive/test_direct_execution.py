@@ -34,17 +34,17 @@ def test_sql_job_direct():
             max_rows=1000
         )
         
-        print("✅ SQL job instance created successfully")
+        print("[SUCCESS] SQL job instance created successfully")
         print(f"   Job ID: {sql_job.job_id}")
         print(f"   Job Name: {sql_job.name}")
         print(f"   Job Type: {sql_job.job_type}")
         print(f"   SQL Query: {sql_job.sql_query[:50]}...")
         
         # Execute the job directly
-        print("\n🚀 Executing SQL job directly...")
+        print("\n[EXECUTE] Executing SQL job directly...")
         result = sql_job.run()
         
-        print(f"\n📊 SQL Job Execution Results:")
+        print(f"\n[RESULTS] SQL Job Execution Results:")
         print(f"  Status: {result.status.value}")
         print(f"  Duration: {result.duration_seconds:.2f} seconds")
         print(f"  Return Code: {result.return_code}")
@@ -63,7 +63,7 @@ def test_sql_job_direct():
         return result.status.value == 'SUCCESS'
         
     except Exception as e:
-        print(f"❌ SQL job test failed: {e}")
+        print(f"[ERROR] SQL job test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -99,7 +99,7 @@ def test_powershell_job_direct():
             parameters=[]
         )
         
-        print("✅ PowerShell job instance created successfully")
+        print("[SUCCESS] PowerShell job instance created successfully")
         print(f"   Job ID: {ps_job.job_id}")
         print(f"   Job Name: {ps_job.name}")
         print(f"   Job Type: {ps_job.job_type}")
@@ -107,10 +107,10 @@ def test_powershell_job_direct():
         print(f"   Execution Policy: {ps_job.execution_policy}")
         
         # Execute the job directly
-        print("\n🚀 Executing PowerShell job directly...")
+        print("\n[EXECUTE] Executing PowerShell job directly...")
         result = ps_job.run()
         
-        print(f"\n📊 PowerShell Job Execution Results:")
+        print(f"\n[RESULTS] PowerShell Job Execution Results:")
         print(f"  Status: {result.status.value}")
         print(f"  Duration: {result.duration_seconds:.2f} seconds")
         print(f"  Return Code: {result.return_code}")
@@ -129,7 +129,7 @@ def test_powershell_job_direct():
         return result.status.value == 'SUCCESS'
         
     except Exception as e:
-        print(f"❌ PowerShell job test failed: {e}")
+        print(f"[ERROR] PowerShell job test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -156,30 +156,30 @@ def test_job_base_functionality():
         
         # Test to_dict
         job_dict = sql_job.to_dict()
-        print("✅ Job serialized to dictionary")
+        print("[SUCCESS] Job serialized to dictionary")
         print(f"   Dictionary keys: {list(job_dict.keys())}")
         
         # Test from_dict
         recreated_job = SqlJob.from_dict(job_dict)
-        print("✅ Job recreated from dictionary")
+        print("[SUCCESS] Job recreated from dictionary")
         print(f"   Recreated job ID: {recreated_job.job_id}")
         print(f"   Recreated job name: {recreated_job.name}")
         
         # Test job cloning
         cloned_job = sql_job.clone("Cloned Job")
-        print("✅ Job cloned successfully")
+        print("[SUCCESS] Job cloned successfully")
         print(f"   Clone ID: {cloned_job.job_id}")
         print(f"   Clone name: {cloned_job.name}")
         
         # Test job status enum
-        print(f"✅ Job status constants available:")
+        print(f"[SUCCESS] Job status constants available:")
         for status in JobStatus:
             print(f"   - {status.name}: {status.value}")
         
         return True
         
     except Exception as e:
-        print(f"❌ Base functionality test failed: {e}")
+        print(f"[ERROR] Base functionality test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -197,15 +197,15 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("Direct Execution Test Summary")
     print("=" * 60)
-    print(f"SQL Job Direct Execution: {'✅ PASSED' if sql_success else '❌ FAILED'}")
-    print(f"PowerShell Job Direct Execution: {'✅ PASSED' if ps_success else '❌ FAILED'}")
-    print(f"Job Base Functionality: {'✅ PASSED' if base_success else '❌ FAILED'}")
+    print(f"SQL Job Direct Execution: {'[PASSED]' if sql_success else '[FAILED]'}")
+    print(f"PowerShell Job Direct Execution: {'[PASSED]' if ps_success else '[FAILED]'}")
+    print(f"Job Base Functionality: {'[PASSED]' if base_success else '[FAILED]'}")
     
     if sql_success and ps_success and base_success:
         print("\n🎉 All direct execution tests passed!")
-        print("✅ SQL job execution pipeline is working correctly")
-        print("✅ PowerShell job execution pipeline is working correctly")
-        print("✅ Job base class functionality is working correctly")
+        print("[SUCCESS] SQL job execution pipeline is working correctly")
+        print("[SUCCESS] PowerShell job execution pipeline is working correctly")
+        print("[SUCCESS] Job base class functionality is working correctly")
         print("\nThe core job execution engine is ready for use!")
     else:
-        print("\n⚠️  Some tests failed. Check the output above for details.")
+        print("\n[WARNING] Some tests failed. Check the output above for details.")

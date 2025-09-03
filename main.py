@@ -57,16 +57,16 @@ class JobSchedulerApp:
             # Use DEBUG level for comprehensive logging during crash investigation
             self.logger = setup_logger("JobScheduler", "DEBUG")
             self.logger.info("=" * 80)
-            self.logger.info("🚀 WINDOWS JOB SCHEDULER STARTING - ENHANCED LOGGING MODE")
+            self.logger.info("[STARTUP] WINDOWS JOB SCHEDULER STARTING - ENHANCED LOGGING MODE")
             self.logger.info("=" * 80)
             self.logger.debug(f"Python version: {sys.version}")
             self.logger.debug(f"Platform: {sys.platform}")
             self.logger.debug(f"Process ID: {os.getpid()}")
             self.logger.debug(f"Working directory: {os.getcwd()}")
             self.logger.debug(f"Command line args: {sys.argv}")
-            self.logger.info("📋 Logging system initialized successfully")
+            self.logger.info("[INIT] Logging system initialized successfully")
         except Exception as e:
-            print(f"💥 CRITICAL: Failed to initialize logging: {e}")
+            print(f"[CRITICAL] Failed to initialize logging: {e}")
             import traceback
             traceback.print_exc()
             sys.exit(1)
@@ -96,26 +96,26 @@ class JobSchedulerApp:
     def _init_scheduler(self):
         """Initialize scheduler manager with SQLAlchemy"""
         try:
-            self.logger.info("⏰ Initializing Scheduler Manager with SQLAlchemy...")
+            self.logger.info("[SCHEDULER] Initializing Scheduler Manager with SQLAlchemy...")
             
             # Use database-based scheduler manager (integrated with SQLAlchemy job manager)
-            self.logger.info("📊 Using database-based scheduler with SQLAlchemy job storage")
+            self.logger.info("[SCHEDULER] Using database-based scheduler with SQLAlchemy job storage")
             storage_type = "database"
             storage_config = {
                 "connection_name": "default"  # Use default database connection
             }
             
-            self.logger.debug(f"📁 Storage type: {storage_type}")
-            self.logger.debug(f"📁 Storage config: {storage_config}")
+            self.logger.debug(f"[STORAGE] Storage type: {storage_type}")
+            self.logger.debug(f"[STORAGE] Storage config: {storage_config}")
             
             self.scheduler_manager = SchedulerManager(storage_type, storage_config)
             
-            self.logger.info("✅ SQLAlchemy scheduler manager initialized successfully")
+            self.logger.info("[SUCCESS] SQLAlchemy scheduler manager initialized successfully")
             
         except Exception as e:
-            self.logger.error(f"💥 CRITICAL: Failed to initialize scheduler: {e}")
+            self.logger.error(f"[CRITICAL] Failed to initialize scheduler: {e}")
             import traceback
-            self.logger.error(f"🔍 Stack trace: {traceback.format_exc()}")
+            self.logger.error(f"[TRACE] Stack trace: {traceback.format_exc()}")
             sys.exit(1)
     
     def _init_cli(self):
@@ -156,40 +156,40 @@ class JobSchedulerApp:
     def start(self):
         """Start the application with comprehensive crash detection"""
         try:
-            self.logger.info("🚀 STARTING APPLICATION...")
-            self.logger.info(f"📋 Mode: {self.mode}")
+            self.logger.info("[STARTUP] STARTING APPLICATION...")
+            self.logger.info(f"[CONFIG] Mode: {self.mode}")
             
             # Setup signal handlers
-            self.logger.debug("🔧 Setting up signal handlers...")
+            self.logger.debug("[SETUP] Setting up signal handlers...")
             self.setup_signal_handlers()
-            self.logger.debug("✅ Signal handlers configured")
+            self.logger.debug("[SUCCESS] Signal handlers configured")
             
             # Start scheduler
-            self.logger.info("⏰ Starting scheduler manager...")
+            self.logger.info("[SCHEDULER] Starting scheduler manager...")
             self.scheduler_manager.start()
-            self.logger.info("✅ Scheduler started successfully")
+            self.logger.info("[SUCCESS] Scheduler started successfully")
             
             if self.mode == "cli":
-                self.logger.info("💻 Running in CLI mode")
+                self.logger.info("[MODE] Running in CLI mode")
                 self._run_cli_mode()
             elif self.mode == "web":
-                self.logger.info("🌐 Running in WEB mode")
+                self.logger.info("[MODE] Running in WEB mode")
                 self._run_web_mode()
             elif self.mode == "both":
-                self.logger.info("🔄 Running in BOTH CLI+WEB mode")
+                self.logger.info("[MODE] Running in BOTH CLI+WEB mode")
                 self._run_both_modes()
             else:
-                self.logger.error(f"💥 CRITICAL: Unknown mode: {self.mode}")
+                self.logger.error(f"[CRITICAL] Unknown mode: {self.mode}")
                 sys.exit(1)
                 
         except KeyboardInterrupt:
-            self.logger.info("⌨️  Keyboard interrupt received - graceful shutdown")
+            self.logger.info("[INTERRUPT] Keyboard interrupt received - graceful shutdown")
             self.shutdown()
         except Exception as e:
-            self.logger.error(f"💥 CRITICAL ERROR starting application: {e}")
+            self.logger.error(f"[CRITICAL] ERROR starting application: {e}")
             import traceback
-            self.logger.error(f"🔍 Full stack trace: {traceback.format_exc()}")
-            self.logger.error("🛑 APPLICATION WILL EXIT")
+            self.logger.error(f"[TRACE] Full stack trace: {traceback.format_exc()}")
+            self.logger.error("[EXIT] APPLICATION WILL EXIT")
             sys.exit(1)
     
     def _run_cli_mode(self):
@@ -199,7 +199,7 @@ class JobSchedulerApp:
     
     def _run_web_mode(self):
         """Run in web-only mode with enhanced logging"""
-        self.logger.info("🌐 Starting web interface...")
+        self.logger.info("[WEB] Starting web interface...")
         
         # Get configuration
         host = "127.0.0.1"
@@ -209,31 +209,31 @@ class JobSchedulerApp:
         try:
             import yaml
             config_path = Path("config/config.yaml")
-            self.logger.debug(f"📁 Looking for config at: {config_path}")
+            self.logger.debug(f"[CONFIG] Looking for config at: {config_path}")
             
             if config_path.exists():
-                self.logger.debug("📄 Loading web configuration from file")
+                self.logger.debug("[CONFIG] Loading web configuration from file")
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config = yaml.safe_load(f)
                     web_config = config.get('web', {})
                     host = web_config.get('host', host)
                     port = web_config.get('port', port)
                     debug = web_config.get('debug', debug)
-                    self.logger.debug(f"⚙️  Loaded config: host={host}, port={port}, debug={debug}")
+                    self.logger.debug(f"[CONFIG] Loaded config: host={host}, port={port}, debug={debug}")
             else:
-                self.logger.debug("📄 Using default web configuration")
+                self.logger.debug("[CONFIG] Using default web configuration")
         except Exception as e:
-            self.logger.warning(f"⚠️  Could not load web config: {e}")
+            self.logger.warning(f"[WARNING] Could not load web config: {e}")
         
-        self.logger.info(f"🌍 Web server starting on http://{host}:{port}")
-        self.logger.info(f"🔧 Debug mode: {debug}")
+        self.logger.info(f"[WEB] Web server starting on http://{host}:{port}")
+        self.logger.info(f"[CONFIG] Debug mode: {debug}")
         
         try:
             # Auto-open browser to API documentation as requested
             self._auto_open_browser(host, port)
             
             # Start web server
-            self.logger.info("🚀 Starting Flask web server...")
+            self.logger.info("[WEB] Starting Flask web server...")
             self.web_app.run(
                 host=host,
                 port=port,
@@ -242,9 +242,9 @@ class JobSchedulerApp:
                 threaded=True
             )
         except Exception as e:
-            self.logger.error(f"💥 CRITICAL: Web server failed to start: {e}")
+            self.logger.error(f"[CRITICAL] Web server failed to start: {e}")
             import traceback
-            self.logger.error(f"🔍 Stack trace: {traceback.format_exc()}")
+            self.logger.error(f"[TRACE] Stack trace: {traceback.format_exc()}")
             raise
     
     def _auto_open_browser(self, host, port):
@@ -255,23 +255,23 @@ class JobSchedulerApp:
             import time
             
             url = f"http://{host}:{port}/"
-            self.logger.info(f"🌐 Auto-opening browser to main dashboard: {url}")
+            self.logger.info(f"[BROWSER] Auto-opening browser to main dashboard: {url}")
             
             def open_browser():
                 # Wait a moment for the server to start
                 time.sleep(2)
                 try:
                     webbrowser.open_new_tab(url)
-                    self.logger.info("✅ Browser opened successfully")
+                    self.logger.info("[SUCCESS] Browser opened successfully")
                 except Exception as e:
-                    self.logger.warning(f"⚠️  Could not auto-open browser: {e}")
+                    self.logger.warning(f"[WARNING] Could not auto-open browser: {e}")
             
             # Open browser in background thread to avoid blocking server startup
             browser_thread = threading.Thread(target=open_browser, daemon=True)
             browser_thread.start()
             
         except Exception as e:
-            self.logger.warning(f"⚠️  Auto-open browser failed: {e}")
+            self.logger.warning(f"[WARNING] Auto-open browser failed: {e}")
     
     def _run_both_modes(self):
         """Run both CLI and web modes"""
@@ -296,7 +296,7 @@ class JobSchedulerApp:
     
     def shutdown(self):
         """Graceful shutdown with comprehensive logging"""
-        self.logger.info("🛑 INITIATING GRACEFUL SHUTDOWN...")
+        self.logger.info("[SHUTDOWN] INITIATING GRACEFUL SHUTDOWN...")
         self.logger.info("=" * 60)
         
         try:
@@ -306,29 +306,29 @@ class JobSchedulerApp:
             
             # Stop scheduler
             if self.scheduler_manager:
-                self.logger.info("⏰ Stopping scheduler manager...")
+                self.logger.info("[SCHEDULER] Stopping scheduler manager...")
                 self.scheduler_manager.stop(wait=True)
-                self.logger.info("✅ Scheduler stopped")
+                self.logger.info("[SUCCESS] Scheduler stopped")
             else:
-                self.logger.debug("ℹ️  No scheduler manager to stop")
+                self.logger.debug("[INFO] No scheduler manager to stop")
             
             # Stop CLI if running
             if self.cli_manager:
-                self.logger.info("💻 Stopping CLI manager...")
+                self.logger.info("[CLI] Stopping CLI manager...")
                 self.cli_manager.stop()
-                self.logger.info("✅ CLI stopped")
+                self.logger.info("[SUCCESS] CLI stopped")
             else:
-                self.logger.debug("ℹ️  No CLI manager to stop")
+                self.logger.debug("[INFO] No CLI manager to stop")
             
-            self.logger.info("🏁 SHUTDOWN COMPLETED SUCCESSFULLY")
+            self.logger.info("[SHUTDOWN] COMPLETED SUCCESSFULLY")
             
         except Exception as e:
-            self.logger.error(f"💥 Error during shutdown: {e}")
+            self.logger.error(f"[ERROR] Error during shutdown: {e}")
             import traceback
-            self.logger.error(f"🔍 Stack trace: {traceback.format_exc()}")
+            self.logger.error(f"[TRACE] Stack trace: {traceback.format_exc()}")
         
         finally:
-            self.logger.info("🔚 PROCESS EXITING...")
+            self.logger.info("[EXIT] PROCESS EXITING...")
             sys.exit(0)
 
 
