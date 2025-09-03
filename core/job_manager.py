@@ -567,103 +567,53 @@ class JobManager:
             return {'success': True}
     
     def get_execution_history(self, job_id: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """Get execution history for a job (searches both V1 and V2 tables)"""
+        """Get execution history for a job from V2 table only"""
         try:
-            self.logger.info(f"[JOB_MANAGER] Getting execution history for job: {job_id} (limit: {limit})")
+            self.logger.info(f"[JOB_MANAGER] Getting execution history for job: {job_id} from V2 table (limit: {limit})")
             
-            v1_history = []
-            v2_history = []
-            
-            # Get V1 execution history
-            try:
-                with get_db_session() as session:
-                    query = session.query(JobExecutionHistory).filter(
-                        JobExecutionHistory.job_id == job_id
-                    ).order_by(JobExecutionHistory.start_time.desc()).limit(limit)
-                    
-                    executions = query.all()
-                    v1_history = [execution.to_dict() for execution in executions]
-                    for record in v1_history:
-                        record['_version'] = 'v1'
-            except Exception as e:
-                self.logger.warning(f"[JOB_MANAGER] Error getting V1 execution history: {e}")
-            
-            # Get V2 execution history
-            try:
-                with get_db_session() as session:
-                    query = session.query(JobExecutionHistoryV2).filter(
-                        JobExecutionHistoryV2.job_id == job_id
-                    ).order_by(JobExecutionHistoryV2.start_time.desc()).limit(limit)
-                    
-                    executions = query.all()
-                    v2_history = [execution.to_dict() for execution in executions]
-                    for record in v2_history:
-                        record['_version'] = 'v2'
-            except Exception as e:
-                self.logger.warning(f"[JOB_MANAGER] Error getting V2 execution history: {e}")
-            
-            # Combine and sort by start_time
-            combined_history = v1_history + v2_history
-            combined_history.sort(key=lambda x: x.get('start_time', ''), reverse=True)
-            
-            # Apply limit to combined results
-            result = combined_history[:limit]
-            
-            self.logger.info(f"[JOB_MANAGER] Found {len(result)} execution records for job {job_id}")
-            return result
+            # Get V2 execution history only
+            with get_db_session() as session:
+                query = session.query(JobExecutionHistoryV2).filter(
+                    JobExecutionHistoryV2.job_id == job_id
+                ).order_by(JobExecutionHistoryV2.start_time.desc()).limit(limit)
+                
+                executions = query.all()
+                v2_history = [execution.to_dict() for execution in executions]
+                
+                # Add version tag for consistency
+                for record in v2_history:
+                    record['_version'] = 'v2'
+                
+                self.logger.info(f"[JOB_MANAGER] Found {len(v2_history)} V2 execution records for job {job_id}")
+                return v2_history
             
         except Exception as e:
-            self.logger.error(f"[JOB_MANAGER] Error getting execution history for job {job_id}: {e}")
+            self.logger.error(f"[JOB_MANAGER] Error getting V2 execution history for job {job_id}: {e}")
             return []
     
     def get_all_execution_history(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get execution history for all jobs from both V1 and V2 tables"""
+        """Get execution history for all jobs from V2 table only"""
         try:
-            self.logger.info(f"[JOB_MANAGER] Getting all execution history (limit: {limit})")
+            self.logger.info(f"[JOB_MANAGER] Getting all execution history from V2 table (limit: {limit})")
             
-            v1_history = []
-            v2_history = []
-            
-            # Get V1 execution history
-            try:
-                with get_db_session() as session:
-                    query = session.query(JobExecutionHistory).order_by(
-                        JobExecutionHistory.start_time.desc()
-                    ).limit(limit)
-                    
-                    executions = query.all()
-                    v1_history = [execution.to_dict() for execution in executions]
-                    for record in v1_history:
-                        record['_version'] = 'v1'
-            except Exception as e:
-                self.logger.warning(f"[JOB_MANAGER] Error getting V1 execution history: {e}")
-            
-            # Get V2 execution history
-            try:
-                with get_db_session() as session:
-                    query = session.query(JobExecutionHistoryV2).order_by(
-                        JobExecutionHistoryV2.start_time.desc()
-                    ).limit(limit)
-                    
-                    executions = query.all()
-                    v2_history = [execution.to_dict() for execution in executions]
-                    for record in v2_history:
-                        record['_version'] = 'v2'
-            except Exception as e:
-                self.logger.warning(f"[JOB_MANAGER] Error getting V2 execution history: {e}")
-            
-            # Combine and sort by start_time
-            combined_history = v1_history + v2_history
-            combined_history.sort(key=lambda x: x.get('start_time', ''), reverse=True)
-            
-            # Apply limit to combined results
-            result = combined_history[:limit]
-            
-            self.logger.info(f"[JOB_MANAGER] Found {len(result)} total execution records")
-            return result
+            # Get V2 execution history only
+            with get_db_session() as session:
+                query = session.query(JobExecutionHistoryV2).order_by(
+                    JobExecutionHistoryV2.start_time.desc()
+                ).limit(limit)
+                
+                executions = query.all()
+                v2_history = [execution.to_dict() for execution in executions]
+                
+                # Add version tag for consistency
+                for record in v2_history:
+                    record['_version'] = 'v2'
+                
+                self.logger.info(f"[JOB_MANAGER] Found {len(v2_history)} execution records from V2 table")
+                return v2_history
             
         except Exception as e:
-            self.logger.error(f"[JOB_MANAGER] Error getting all execution history: {e}")
+            self.logger.error(f"[JOB_MANAGER] Error getting V2 execution history: {e}")
             return []
     
     def toggle_job(self, job_id: str, enabled: bool = None) -> Dict[str, Any]:

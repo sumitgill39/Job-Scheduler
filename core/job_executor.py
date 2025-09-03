@@ -65,6 +65,7 @@ class JobExecutor:
         Returns:
             Dict with execution result information
         """
+        print(f"**** JobExecutor.execute_job() called with job_id: {job_id} ****")
         self.logger.info(f"[JOB_EXECUTOR] Starting execution of job: {job_id}")
         
         if not self.job_manager:
@@ -96,11 +97,14 @@ class JobExecutor:
         
         # Determine job version and execute accordingly
         job_version = job_config.get('_version', 'v1')
+        self.logger.info(f"[JOB_EXECUTOR] Job {job_id} detected as version: {job_version}")
         
         try:
             if job_version == 'v2':
+                self.logger.info(f"[JOB_EXECUTOR] Executing job {job_id} via V2 path")
                 return self._execute_v2_job(job_config)
             else:
+                self.logger.info(f"[JOB_EXECUTOR] Executing job {job_id} via V1 path")
                 return self._execute_v1_job(job_config)
                 
         except Exception as e:
@@ -136,8 +140,32 @@ class JobExecutor:
             
             self.logger.info(f"[JOB_EXECUTOR] V1 job completed with status: {result.status.value}")
             
-            # Generate execution_id for API compatibility
-            execution_id = f"{job_id}_{int(start_time.timestamp() * 1000)}"
+            # Generate execution_id for API compatibility (use UUID to avoid database truncation)
+            import uuid
+            execution_id = str(uuid.uuid4())
+            
+            # Record execution in database for V1 jobs
+            try:
+                execution_data = {
+                    'execution_id': execution_id,
+                    'job_id': job_id,
+                    'job_name': job_config.get('name', 'Unknown Job'),
+                    'status': 'SUCCESS' if result.status == JobStatus.SUCCESS else 'FAILED',
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'duration_seconds': result.duration_seconds,
+                    'output_log': result.output if result.output else '',
+                    'error_message': result.error_message if result.error_message else None,
+                    'return_code': 0 if result.status == JobStatus.SUCCESS else 1,
+                    'execution_mode': 'manual',
+                    'executed_by': 'api',
+                    'execution_timezone': 'UTC'
+                }
+                
+                self.job_manager.record_execution(execution_data)
+                self.logger.info(f"[JOB_EXECUTOR] V1 execution recorded to database: {execution_id}")
+            except Exception as e:
+                self.logger.warning(f"[JOB_EXECUTOR] Failed to record V1 execution: {e}")
             
             return {
                 'success': result.status == JobStatus.SUCCESS,
@@ -154,6 +182,33 @@ class JobExecutor:
         except Exception as e:
             error_msg = f"Error executing V1 job {job_id}: {str(e)}"
             self.logger.exception(f"[JOB_EXECUTOR] {error_msg}")
+            
+            # Record failed execution for V1 jobs
+            try:
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds() if 'start_time' in locals() else 0
+                execution_id = f"{job_id}_{int(time.time() * 1000)}"
+                
+                execution_data = {
+                    'execution_id': execution_id,
+                    'job_id': job_id,
+                    'job_name': job_config.get('name', 'Unknown Job'),
+                    'status': 'FAILED',
+                    'start_time': locals().get('start_time', datetime.now()),
+                    'end_time': end_time,
+                    'duration_seconds': duration,
+                    'output_log': '',
+                    'error_message': error_msg,
+                    'return_code': -1,
+                    'execution_mode': 'manual',
+                    'executed_by': 'api',
+                    'execution_timezone': 'UTC'
+                }
+                
+                self.job_manager.record_execution(execution_data)
+                self.logger.info(f"[JOB_EXECUTOR] V1 failed execution recorded to database: {execution_id}")
+            except Exception as db_error:
+                self.logger.warning(f"[JOB_EXECUTOR] Failed to record V1 failed execution: {db_error}")
             
             return {
                 'success': False,
@@ -189,13 +244,15 @@ class JobExecutor:
                     
             except RuntimeError:
                 # No event loop running, safe to create new one
-                loop = asyncio.new_event_loop()
                 try:
-                    return loop.run_until_complete(
-                        self._execute_v2_job_async(job_config, 'manual', 'system')
-                    )
-                finally:
-                    loop.close()
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                return loop.run_until_complete(
+                    self._execute_v2_job_async(job_config, 'manual', 'system')
+                )
             
         except Exception as e:
             error_msg = f"Error executing V2 job {job_id}: {str(e)}"

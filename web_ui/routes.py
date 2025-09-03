@@ -683,6 +683,41 @@ def create_routes(app):
                 'error': f'Unexpected error: {str(e)}'
             }), 500
     
+    @app.route('/api/executions/history/v2-only-test', methods=['GET'])
+    def api_execution_history_v2_only_test():
+        """TEST API endpoint to verify V2-only data"""
+        logger.info("[API_EXECUTION_HISTORY_V2_TEST] *** NEW ENDPOINT V2-ONLY TEST ***")
+        
+        try:
+            # Get query parameters
+            limit = request.args.get('limit', 10, type=int)
+            
+            # Use global JobManager instance
+            job_manager = getattr(app, 'job_manager', None)
+            if not job_manager:
+                return jsonify({
+                    'success': False,
+                    'error': 'Database not available'
+                }), 500
+            
+            # Get execution history from database - V2-only method
+            history = job_manager.get_all_execution_history(limit)
+            
+            return jsonify({
+                'success': True,
+                'test_endpoint': 'v2-only-verification',
+                'total_count': len(history),
+                'executions': history,
+                'message': 'This endpoint only exists in the new V2-only process'
+            })
+            
+        except Exception as e:
+            logger.error(f"[API_EXECUTION_HISTORY_V2_TEST] Error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
     @app.route('/api/executions/history', methods=['GET'])
     def api_execution_history():
         """API endpoint to get complete execution history"""
@@ -702,7 +737,7 @@ def create_routes(app):
                     'error': 'Database not available'
                 }), 500
             
-            # Get execution history from database
+            # Get execution history from database - V2-only method
             history = job_manager.get_all_execution_history(limit)
             
             # Apply filters if provided
@@ -735,6 +770,7 @@ def create_routes(app):
     @app.route('/api/jobs/<job_id>/run', methods=['POST'])
     def api_run_job(job_id):
         """API endpoint to run a job immediately - NEW MODERN EXECUTION"""
+        print(f"**** ROUTE api_run_job() called with job_id: {job_id} ****")
         logger.info(f"[API_RUN_JOB_V2] Received request to run job: {job_id}")
         
         try:
@@ -1875,35 +1911,50 @@ def create_routes(app):
     
     @app.route('/api/jobs/<job_id>/history/<execution_id>')
     def api_execution_details(job_id, execution_id):
-        """API endpoint to get individual execution details"""
+        """V2-FIXED API endpoint to get individual execution details from job_execution_history_v2"""
+        print(f"[V2_ENDPOINT_CONFIRMED] *** EXECUTION DETAILS REQUEST RECEIVED ***")
+        print(f"[V2_ENDPOINT_CONFIRMED] job_id={job_id}, execution_id={execution_id}")
+        print(f"[V2_ENDPOINT_CONFIRMED] Using JobExecutionHistoryV2 table ONLY")
+        
         try:
-            # Get execution details from database
-            from database.sqlalchemy_models import JobExecutionHistory, get_db_session
+            from database.sqlalchemy_models import JobExecutionHistoryV2, get_db_session
+            print(f"[V2_ENDPOINT_CONFIRMED] Imported JobExecutionHistoryV2 successfully")
             
             with get_db_session() as session:
-                execution = session.query(JobExecutionHistory).filter(
-                    JobExecutionHistory.job_id == job_id,
-                    JobExecutionHistory.execution_id == execution_id
+                print(f"[V2_ENDPOINT_CONFIRMED] Querying JobExecutionHistoryV2 table...")
+                execution = session.query(JobExecutionHistoryV2).filter(
+                    JobExecutionHistoryV2.job_id == job_id,
+                    JobExecutionHistoryV2.execution_id == execution_id
                 ).first()
                 
                 if execution:
-                    logger.info(f"[API_EXECUTION_DETAILS] Found execution {execution_id} for job {job_id}")
-                    return jsonify({
+                    print(f"[V2_ENDPOINT_CONFIRMED] SUCCESS: Found execution in V2 table")
+                    result = {
                         'success': True,
-                        'execution': execution.to_dict()
-                    })
+                        'execution': execution.to_dict(),
+                        'table_used': 'job_execution_history_v2',
+                        'endpoint_version': 'V2_FIXED'
+                    }
+                    print(f"[V2_ENDPOINT_CONFIRMED] Returning V2 execution data")
+                    return jsonify(result)
                 else:
-                    logger.warning(f"[API_EXECUTION_DETAILS] Execution {execution_id} not found for job {job_id}")
+                    print(f"[V2_ENDPOINT_CONFIRMED] NOT FOUND: Execution not found in V2 table")
                     return jsonify({
                         'success': False,
-                        'error': f'Execution {execution_id} not found for job {job_id}'
+                        'error': f'V2 Execution {execution_id} not found for job {job_id}',
+                        'table_used': 'job_execution_history_v2',
+                        'endpoint_version': 'V2_FIXED'
                     }), 404
         
         except Exception as e:
-            logger.error(f"[API_EXECUTION_DETAILS] Error getting execution details: {e}")
+            print(f"[V2_ENDPOINT_CONFIRMED] ERROR: {str(e)}")
+            import traceback
+            print(f"[V2_ENDPOINT_CONFIRMED] TRACEBACK: {traceback.format_exc()}")
             return jsonify({
                 'success': False,
-                'error': f'Failed to get execution details: {str(e)}'
+                'error': f'V2 Failed to get execution details: {str(e)}',
+                'table_used': 'job_execution_history_v2',
+                'endpoint_version': 'V2_FIXED'
             }), 500
     
     @app.route('/api/jobs/<job_id>/status')
@@ -2963,11 +3014,13 @@ def create_routes(app):
     @app.route('/api/v2/jobs/<job_id>/run', methods=['POST'])
     def api_v2_run_job(job_id):
         """Execute a V2 job immediately"""
+        print(f"**** ROUTE api_v2_run_job() called with job_id: {job_id} ****")
         try:
             # Use unified execution system
             try:
                 from core.job_executor import JobExecutor
-                executor = JobExecutor()
+                job_manager = getattr(app, 'job_manager', None)
+                executor = JobExecutor(job_manager=job_manager)
                 result = executor.execute_job(job_id)
             except ImportError:
                 # Fallback: Job execution not available

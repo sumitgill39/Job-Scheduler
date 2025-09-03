@@ -335,8 +335,48 @@ class SchedulerManager:
                 return None
             
             self.logger.info(f"Running job once: {job.name} ({job_id})")
+            
+            # Execute job
+            start_time = datetime.now(timezone.utc)
             result = job.run()
+            end_time = datetime.now(timezone.utc)
+            
+            # Save to old storage system
             self.storage.save_execution_result(result)
+            
+            # Also save to V2 execution history table
+            try:
+                from database.sqlalchemy_models import get_db_session, JobExecutionHistoryV2
+                from datetime import datetime, timezone
+                import uuid
+                
+                execution_id = str(uuid.uuid4())
+                duration = (end_time - start_time).total_seconds()
+                
+                execution_data = JobExecutionHistoryV2(
+                    execution_id=execution_id,
+                    job_id=job_id,
+                    job_name=job.name,
+                    status='success' if result.status.value.lower() == 'success' else 'failed',
+                    start_time=start_time,
+                    end_time=end_time,
+                    duration_seconds=duration,
+                    output_log=result.output if result.output else '',
+                    error_message=result.error_message if result.error_message else None,
+                    return_code=0 if result.status.value.lower() == 'success' else 1,
+                    execution_mode='api',
+                    executed_by='scheduler',
+                    execution_timezone='UTC'
+                )
+                
+                with get_db_session() as session:
+                    session.add(execution_data)
+                    session.commit()
+                    
+                self.logger.info(f"[SCHEDULER] Job execution recorded to V2 database: {execution_id}")
+            except Exception as db_error:
+                self.logger.warning(f"[SCHEDULER] Failed to record execution to V2 database: {db_error}")
+            
             return result
             
         except Exception as e:
@@ -389,6 +429,38 @@ class SchedulerManager:
                     
                     self.storage.save_execution_result(result)
                     
+                    # Also save to V2 execution history table
+                    try:
+                        from database.sqlalchemy_models import get_db_session, JobExecutionHistoryV2
+                        from datetime import datetime, timezone
+                        import uuid
+                        
+                        execution_id = str(uuid.uuid4())
+                        
+                        execution_data = JobExecutionHistoryV2(
+                            execution_id=execution_id,
+                            job_id=job_id,
+                            job_name=job.name,
+                            status='success' if result.status.value.lower() == 'success' else 'failed',
+                            start_time=result.start_time if result.start_time else datetime.now(timezone.utc),
+                            end_time=result.end_time if result.end_time else datetime.now(timezone.utc),
+                            duration_seconds=result.duration_seconds if result.duration_seconds else 0,
+                            output_log=result.output if result.output else '',
+                            error_message=result.error_message if result.error_message else None,
+                            return_code=0 if result.status.value.lower() == 'success' else 1,
+                            execution_mode='scheduled',
+                            executed_by='scheduler',
+                            execution_timezone=job_timezone
+                        )
+                        
+                        with get_db_session() as session:
+                            session.add(execution_data)
+                            session.commit()
+                            
+                        self.logger.info(f"[SCHEDULER] Scheduled job execution recorded to V2 database: {execution_id}")
+                    except Exception as db_error:
+                        self.logger.warning(f"[SCHEDULER] Failed to record scheduled execution to V2 database: {db_error}")
+                    
                     if result.status == JobStatus.RETRY:
                         self._schedule_retry(job_id, job.retry_delay)
                 else:
@@ -411,6 +483,39 @@ class SchedulerManager:
                         duration_seconds=0
                     )
                     self.storage.save_execution_result(failure_result)
+                    
+                    # Also save failure to V2 execution history table
+                    try:
+                        from database.sqlalchemy_models import get_db_session, JobExecutionHistoryV2
+                        from datetime import datetime, timezone
+                        import uuid
+                        
+                        execution_id = str(uuid.uuid4())
+                        
+                        execution_data = JobExecutionHistoryV2(
+                            execution_id=execution_id,
+                            job_id=job_id,
+                            job_name=job.name if hasattr(job, 'name') else job_id,
+                            status='failed',
+                            start_time=failure_result.start_time,
+                            end_time=failure_result.end_time,
+                            duration_seconds=failure_result.duration_seconds,
+                            output_log='',
+                            error_message=failure_result.error_message,
+                            return_code=1,
+                            execution_mode='scheduled',
+                            executed_by='scheduler',
+                            execution_timezone=job_timezone
+                        )
+                        
+                        with get_db_session() as session:
+                            session.add(execution_data)
+                            session.commit()
+                            
+                        self.logger.info(f"[SCHEDULER] Scheduled job failure recorded to V2 database: {execution_id}")
+                    except Exception as db_error:
+                        self.logger.warning(f"[SCHEDULER] Failed to record scheduled failure to V2 database: {db_error}")
+                        
                 except Exception as save_error:
                     self.logger.error(f"Failed to save crash result for {job_id}: {save_error}")
             
