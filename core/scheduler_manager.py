@@ -112,8 +112,8 @@ class SchedulerManager:
         """Get all jobs"""
         return self.jobs.copy()
     
-    def get_job(self, job_id: str) -> Optional[JobBase]:
-        """Get job by ID"""
+    def get_job(self, job_id: str, job_version: str = None) -> Optional[JobBase]:
+        """Get job by ID (job_version parameter for compatibility)"""
         return self.jobs.get(job_id)
     
     def add_job(self, job: JobBase, schedule: Dict[str, Any] = None, start_immediately: bool = False) -> bool:

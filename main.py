@@ -8,6 +8,9 @@ import argparse
 import signal
 import threading
 import time
+import psutil
+import subprocess
+import shutil
 from pathlib import Path
 
 # Add project root to Python path
@@ -39,9 +42,13 @@ class JobSchedulerApp:
         self.cli_manager = None
         self.web_app = None
         self.shutdown_event = threading.Event()
+        self.child_processes = []  # Track child processes
+        self.flask_process = None  # Track Flask process
+        self.main_pid = os.getpid()  # Track main process PID
         
         # Initialize components
         self._init_logging()
+        self._validate_clean_startup()
         self._init_windows_utils()
         self._init_scheduler()
         
@@ -294,10 +301,225 @@ class JobSchedulerApp:
         except KeyboardInterrupt:
             self.logger.info("CLI interrupted, shutting down")
     
+    def _validate_clean_startup(self):
+        """Check for existing related processes and clean them if needed"""
+        try:
+            if not self.logger:
+                # Early startup, create temporary logger
+                temp_logger = setup_logger('startup_validator', 'logs/startup.log')
+            else:
+                temp_logger = self.logger
+            
+            temp_logger.info("[STARTUP] Validating clean startup environment...")
+            
+            # Get current process info
+            current_pid = os.getpid()
+            current_script = os.path.abspath(__file__)
+            
+            # Look for existing Job Scheduler processes
+            existing_processes = []
+            
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    proc_info = proc.info
+                    if proc_info['pid'] == current_pid:
+                        continue  # Skip current process
+                    
+                    # Check if it's a Python process running our script
+                    if (proc_info['name'] and 'python' in proc_info['name'].lower() and 
+                        proc_info['cmdline'] and len(proc_info['cmdline']) > 1):
+                        
+                        cmd_str = ' '.join(proc_info['cmdline'])
+                        
+                        # Check for Job Scheduler related processes
+                        if (current_script in cmd_str or 
+                            'main.py' in cmd_str or
+                            'job_scheduler' in cmd_str.lower() or
+                            'flask' in cmd_str.lower() and '5000' in cmd_str):
+                            
+                            existing_processes.append({
+                                'pid': proc_info['pid'],
+                                'cmd': cmd_str[:100] + '...' if len(cmd_str) > 100 else cmd_str
+                            })
+                
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+            
+            if existing_processes:
+                temp_logger.warning(f"[STARTUP] Found {len(existing_processes)} existing related processes:")
+                
+                for proc_info in existing_processes:
+                    temp_logger.warning(f"[STARTUP]   PID {proc_info['pid']}: {proc_info['cmd']}")
+                
+                # Ask user if we should clean them (in production, this could be automated)
+                temp_logger.info("[STARTUP] Attempting to clean existing processes for fresh start...")
+                
+                cleaned_count = 0
+                for proc_info in existing_processes:
+                    try:
+                        proc = psutil.Process(proc_info['pid'])
+                        proc.terminate()  # Try graceful termination first
+                        
+                        # Wait a moment for graceful shutdown
+                        try:
+                            proc.wait(timeout=2)
+                        except psutil.TimeoutExpired:
+                            # Force kill if graceful didn't work
+                            proc.kill()
+                            proc.wait(timeout=1)
+                        
+                        cleaned_count += 1
+                        temp_logger.info(f"[STARTUP] Cleaned process PID {proc_info['pid']}")
+                        
+                    except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                        temp_logger.debug(f"[STARTUP] Process {proc_info['pid']} already gone or access denied: {e}")
+                    except Exception as e:
+                        temp_logger.warning(f"[STARTUP] Failed to clean process {proc_info['pid']}: {e}")
+                
+                if cleaned_count > 0:
+                    temp_logger.info(f"[STARTUP] Successfully cleaned {cleaned_count} existing processes")
+                    # Give a moment for cleanup to complete
+                    time.sleep(1)
+                
+            else:
+                temp_logger.debug("[STARTUP] No existing related processes found - clean startup")
+                
+        except Exception as e:
+            # Use print as fallback if logger isn't available
+            print(f"[STARTUP ERROR] Failed to validate clean startup: {e}")
+    
+    def _clear_development_cache(self):
+        """Clear Python cache for development (when debug mode is on)"""
+        try:
+            self.logger.info("[CACHE] Clearing development cache...")
+            
+            # Clear __pycache__ directories
+            cache_dirs_found = 0
+            for root, dirs, files in os.walk('.'):
+                if '__pycache__' in dirs:
+                    cache_dir = os.path.join(root, '__pycache__')
+                    try:
+                        shutil.rmtree(cache_dir)
+                        cache_dirs_found += 1
+                        self.logger.debug(f"[CACHE] Removed: {cache_dir}")
+                    except Exception as e:
+                        self.logger.warning(f"[CACHE] Failed to remove {cache_dir}: {e}")
+            
+            # Clear .pyc files
+            pyc_files_found = 0
+            for root, dirs, files in os.walk('.'):
+                for file in files:
+                    if file.endswith('.pyc'):
+                        pyc_file = os.path.join(root, file)
+                        try:
+                            os.remove(pyc_file)
+                            pyc_files_found += 1
+                        except Exception as e:
+                            self.logger.warning(f"[CACHE] Failed to remove {pyc_file}: {e}")
+            
+            if cache_dirs_found > 0 or pyc_files_found > 0:
+                self.logger.info(f"[CACHE] Cleared {cache_dirs_found} cache dirs, {pyc_files_found} .pyc files")
+            else:
+                self.logger.debug("[CACHE] No cache files found")
+                
+        except Exception as e:
+            self.logger.warning(f"[CACHE] Error clearing cache: {e}")
+    
+    def _kill_child_processes(self):
+        """Kill all child processes spawned by this application"""
+        try:
+            self.logger.info("[CLEANUP] Terminating child processes...")
+            
+            current_process = psutil.Process(self.main_pid)
+            children = current_process.children(recursive=True)
+            
+            if children:
+                self.logger.info(f"[CLEANUP] Found {len(children)} child processes")
+                for child in children:
+                    try:
+                        child_info = f"PID:{child.pid} ({child.name()})"
+                        self.logger.debug(f"[CLEANUP] Terminating {child_info}")
+                        child.terminate()
+                    except psutil.NoSuchProcess:
+                        pass
+                    except Exception as e:
+                        self.logger.warning(f"[CLEANUP] Failed to terminate child {child.pid}: {e}")
+                
+                # Wait for children to terminate
+                psutil.wait_procs(children, timeout=5)
+                
+                # Force kill any remaining processes
+                for child in children:
+                    try:
+                        if child.is_running():
+                            self.logger.warning(f"[CLEANUP] Force killing PID:{child.pid}")
+                            child.kill()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                
+                self.logger.info("[CLEANUP] Child processes terminated")
+            else:
+                self.logger.debug("[CLEANUP] No child processes found")
+                
+        except Exception as e:
+            self.logger.error(f"[CLEANUP] Error killing child processes: {e}")
+    
+    def _kill_related_python_processes(self):
+        """Kill any Python processes that might be related to this application"""
+        try:
+            self.logger.info("[CLEANUP] Checking for related Python processes...")
+            
+            # Get current script name for identification
+            script_name = os.path.basename(__file__)
+            project_dir = str(Path(__file__).parent)
+            
+            killed_processes = 0
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cwd']):
+                try:
+                    # Skip current process
+                    if proc.info['pid'] == self.main_pid:
+                        continue
+                    
+                    # Look for Python processes
+                    if proc.info['name'] and 'python' in proc.info['name'].lower():
+                        cmdline = proc.info.get('cmdline', [])
+                        cwd = proc.info.get('cwd', '')
+                        
+                        # Check if this process is related to our project
+                        is_related = (
+                            any(script_name in cmd for cmd in cmdline if cmd) or
+                            any('Job-Scheduler' in cmd for cmd in cmdline if cmd) or
+                            (cwd and project_dir in cwd) or
+                            any('flask' in cmd.lower() for cmd in cmdline if cmd) or
+                            any('main.py' in cmd for cmd in cmdline if cmd)
+                        )
+                        
+                        if is_related:
+                            self.logger.warning(f"[CLEANUP] Killing related process PID:{proc.info['pid']} - {cmdline}")
+                            try:
+                                process = psutil.Process(proc.info['pid'])
+                                process.terminate()
+                                killed_processes += 1
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+                
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            if killed_processes > 0:
+                self.logger.info(f"[CLEANUP] Killed {killed_processes} related Python processes")
+                # Wait a moment for processes to die
+                time.sleep(2)
+            else:
+                self.logger.debug("[CLEANUP] No related Python processes found")
+                
+        except Exception as e:
+            self.logger.error(f"[CLEANUP] Error killing related processes: {e}")
+
     def shutdown(self):
-        """Graceful shutdown with comprehensive logging"""
-        self.logger.info("[SHUTDOWN] INITIATING GRACEFUL SHUTDOWN...")
-        self.logger.info("=" * 60)
+        """Enhanced graceful shutdown with comprehensive cleanup"""
+        self.logger.info("[SHUTDOWN] INITIATING ENHANCED GRACEFUL SHUTDOWN...")
+        self.logger.info("=" * 80)
         
         try:
             # Signal shutdown
@@ -320,7 +542,20 @@ class JobSchedulerApp:
             else:
                 self.logger.debug("[INFO] No CLI manager to stop")
             
-            self.logger.info("[SHUTDOWN] COMPLETED SUCCESSFULLY")
+            # Enhanced cleanup for development
+            self.logger.info("[CLEANUP] Performing enhanced cleanup...")
+            
+            # Kill child processes
+            self._kill_child_processes()
+            
+            # Clear development cache (helps with module reloading issues)
+            self._clear_development_cache()
+            
+            # Kill any related Python processes (aggressive cleanup)
+            self._kill_related_python_processes()
+            
+            self.logger.info("[SHUTDOWN] ENHANCED CLEANUP COMPLETED SUCCESSFULLY")
+            self.logger.info("=" * 80)
             
         except Exception as e:
             self.logger.error(f"[ERROR] Error during shutdown: {e}")
@@ -328,7 +563,7 @@ class JobSchedulerApp:
             self.logger.error(f"[TRACE] Stack trace: {traceback.format_exc()}")
         
         finally:
-            self.logger.info("[EXIT] PROCESS EXITING...")
+            self.logger.info("[EXIT] MAIN PROCESS EXITING...")
             sys.exit(0)
 
 

@@ -37,8 +37,8 @@ BEGIN
     )
     
     -- Create indexes for better performance
-    CREATE INDEX IX_user_connections_name ON [dbo].[user_connections]([name])
-    CREATE INDEX IX_user_connections_active ON [dbo].[user_connections]([is_active])
+    CREATE INDEX IX_user_connections_name ON [dbo].[user_connections_V2]([name])
+    CREATE INDEX IX_user_connections_active ON [dbo].[user_connections_V2]([is_active])
     
     PRINT 'Table user_connections created successfully with indexes'
 END
@@ -49,7 +49,7 @@ END
 GO
 
 -- Step 4: Create job_configurations table (for job storage)
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='job_configurations' AND xtype='U')
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='job_configurations_V2' AND xtype='U')
 BEGIN
     CREATE TABLE [dbo].[job_configurations] (
         [job_id] NVARCHAR(50) PRIMARY KEY,
@@ -63,8 +63,8 @@ BEGIN
     )
     
     -- Create indexes
-    CREATE INDEX IX_job_configurations_name ON [dbo].[job_configurations]([name])
-    CREATE INDEX IX_job_configurations_type ON [dbo].[job_configurations]([job_type])
+    CREATE INDEX IX_job_configurations_name ON [dbo].[job_configurations_V2]([name])
+    CREATE INDEX IX_job_configurations_type ON [dbo].[job_configurations_V2]([job_type])
     
     PRINT 'Table job_configurations created successfully'
 END
@@ -75,9 +75,9 @@ END
 GO
 
 -- Step 5: Create job_execution_history table (for execution tracking)
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='job_execution_history' AND xtype='U')
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='job_execution_history_V2' AND xtype='U')
 BEGIN
-    CREATE TABLE [dbo].[job_execution_history] (
+    CREATE TABLE [dbo].[job_execution_history_V2] (
         [execution_id] BIGINT IDENTITY(1,1) PRIMARY KEY,
         [job_id] NVARCHAR(50) NOT NULL,
         [job_name] NVARCHAR(255) NOT NULL,
@@ -94,9 +94,9 @@ BEGIN
     )
     
     -- Create indexes
-    CREATE INDEX IX_job_history_job_id ON [dbo].[job_execution_history]([job_id])
-    CREATE INDEX IX_job_history_start_time ON [dbo].[job_execution_history]([start_time])
-    CREATE INDEX IX_job_history_status ON [dbo].[job_execution_history]([status])
+    CREATE INDEX IX_job_history_job_id ON [dbo].[job_execution_history_V2]([job_id])
+    CREATE INDEX IX_job_history_start_time ON [dbo].[job_execution_history_V2]([start_time])
+    CREATE INDEX IX_job_history_status ON [dbo].[job_execution_history_V2]([status])
     
     PRINT 'Table job_execution_history created successfully'
 END

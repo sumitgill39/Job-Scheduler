@@ -1,329 +1,248 @@
 {% extends "base.html" %}
 
-{% block title %}Edit Job - {{ job.name }}{% endblock %}
+{% block title %}Edit Job - Windows Job Scheduler{% endblock %}
 
 {% block content %}
 <div class="row">
-    <div class="col-lg-10 mx-auto">
+    <div class="col-lg-8 mx-auto">
         <div class="card">
-            <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h4 class="mb-0"><i class="fas fa-edit me-2"></i>Edit Job</h4>
-                        <small class="text-muted">{{ job.name }} ({{ job.job_type | upper }})</small>
-                    </div>
-                    <div>
-                        <a href="{{ url_for('job_details', job_id=job.job_id) }}" class="btn btn-outline-secondary">
-                            <i class="fas fa-arrow-left me-1"></i>Back to Job
-                        </a>
-                    </div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-0">
+                        <i class="fas fa-edit me-2"></i>Edit Job
+                    </h4>
+                    <small class="text-muted">Modify existing job configuration</small>
+                </div>
+                <div>
+                    <a href="{{ url_for('job_list') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Back to Jobs
+                    </a>
                 </div>
             </div>
             
             <div class="card-body">
                 <form id="editJobForm">
-                    <input type="hidden" id="jobId" value="{{ job.job_id }}">
+                    <input type="hidden" id="jobId" name="job_id" value="">
                     
-                    <!-- Basic Job Information -->
+                    <!-- Job Information Section -->
                     <div class="mb-4">
-                        <h5><i class="fas fa-info-circle me-2"></i>Basic Information</h5>
+                        <h5 class="border-bottom pb-2">
+                            <i class="fas fa-info-circle me-2"></i>Job Information
+                        </h5>
                         
                         <div class="row">
-                            <div class="col-md-8">
+                            <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="jobName" class="form-label">Job Name *</label>
-                                    <input type="text" class="form-control" id="jobName" value="{{ job.name }}" required>
+                                    <input type="text" class="form-control" id="jobName" name="name" required>
                                 </div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="jobType" class="form-label">Job Type</label>
-                                    <input type="text" class="form-control" id="jobType" value="{{ job.job_type }}" readonly>
+                                    <input type="text" class="form-control" id="jobType" name="job_type" readonly>
                                 </div>
                             </div>
                         </div>
                         
                         <div class="mb-3">
                             <label for="jobDescription" class="form-label">Description</label>
-                            <textarea class="form-control" id="jobDescription" rows="3">{{ job.description or '' }}</textarea>
+                            <textarea class="form-control" id="jobDescription" name="description" rows="3"></textarea>
                         </div>
-                        
-                        <div class="mb-3">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="jobEnabled" {{ 'checked' if job.enabled else '' }}>
-                                <label class="form-check-label" for="jobEnabled">
-                                    <strong>Job Enabled</strong>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Job Configuration -->
-                    {% if job.job_type == 'sql' %}
-                    <div class="mb-4">
-                        <h5><i class="fas fa-database me-2"></i>SQL Configuration</h5>
-                        
-                        <div class="mb-3">
-                            <label for="connectionName" class="form-label">Connection Name *</label>
-                            <input type="text" class="form-control" id="connectionName" 
-                                   value="{{ job.configuration.connection_name or '' }}" readonly>
-                            <div class="form-text">Database connection (cannot be changed during edit)</div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="sqlQuery" class="form-label">SQL Query *</label>
-                            <textarea class="form-control font-monospace" id="sqlQuery" rows="10" required>{{ job.configuration.sql_query or '' }}</textarea>
-                        </div>
-                    </div>
-                    
-                    {% elif job.job_type == 'powershell' %}
-                    <div class="mb-4">
-                        <h5><i class="fab fa-microsoft me-2"></i>PowerShell Configuration</h5>
-                        
-                        {% if job.configuration.script_content %}
-                        <div class="mb-3">
-                            <label for="scriptContent" class="form-label">Script Content *</label>
-                            <textarea class="form-control font-monospace" id="scriptContent" rows="15" required>{{ job.configuration.script_content }}</textarea>
-                        </div>
-                        {% endif %}
-                        
-                        {% if job.configuration.script_path %}
-                        <div class="mb-3">
-                            <label for="scriptPath" class="form-label">Script Path *</label>
-                            <input type="text" class="form-control" id="scriptPath" 
-                                   value="{{ job.configuration.script_path }}" required>
-                        </div>
-                        {% endif %}
                         
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="executionPolicy" class="form-label">Execution Policy</label>
-                                    <select class="form-select" id="executionPolicy">
-                                        <option value="RemoteSigned" {{ 'selected' if job.configuration.execution_policy == 'RemoteSigned' else '' }}>RemoteSigned</option>
-                                        <option value="Unrestricted" {{ 'selected' if job.configuration.execution_policy == 'Unrestricted' else '' }}>Unrestricted</option>
-                                        <option value="Bypass" {{ 'selected' if job.configuration.execution_policy == 'Bypass' else '' }}>Bypass</option>
-                                    </select>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="jobEnabled" name="enabled">
+                                        <label class="form-check-label" for="jobEnabled">
+                                            <strong>Job Enabled</strong>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SQL Job Configuration -->
+                    <div id="sqlJobConfig" style="display: none;">
+                        <h5 class="border-bottom pb-2">
+                            <i class="fas fa-database me-2"></i>SQL Configuration
+                        </h5>
+                        
+                        <div class="mb-3">
+                            <label for="connectionName" class="form-label">Database Connection *</label>
+                            <input type="text" class="form-control" id="connectionName" name="connection_name" 
+                                   placeholder="Connection name" readonly>
+                            <div class="form-text">Connection name used by this job (cannot be changed during edit)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="sqlQuery" class="form-label">SQL Query *</label>
+                            <textarea class="form-control" id="sqlQuery" name="sql_query" rows="8" 
+                                      placeholder="Enter your SQL query here..."></textarea>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="queryTimeout" class="form-label">Query Timeout (seconds)</label>
+                                    <input type="number" class="form-control" id="queryTimeout" name="query_timeout" value="300" min="1">
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="workingDirectory" class="form-label">Working Directory</label>
-                                    <input type="text" class="form-control" id="workingDirectory" 
-                                           value="{{ job.configuration.working_directory or '' }}"
-                                           placeholder="C:\Scripts (optional)">
+                                    <label for="maxRows" class="form-label">Max Rows</label>
+                                    <input type="number" class="form-control" id="maxRows" name="max_rows" value="1000" min="1">
                                 </div>
                             </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="parameters" class="form-label">Parameters</label>
-                            <input type="text" class="form-control" id="parameters" 
-                                   value="{{ job.configuration.parameters | join(' ') if job.configuration.parameters else '' }}"
-                                   placeholder="-Verbose -Force">
                         </div>
                     </div>
-                    {% endif %}
 
-                    <!-- Schedule Configuration -->
-                    <div class="mb-4">
-                        <h5><i class="fas fa-calendar-alt me-2"></i>Schedule Configuration</h5>
+                    <!-- PowerShell Job Configuration -->
+                    <div id="powershellJobConfig" style="display: none;">
+                        <h5 class="border-bottom pb-2">
+                            <i class="fab fa-microsoft me-2"></i>PowerShell Configuration
+                        </h5>
                         
                         <div class="mb-3">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="enableSchedule" 
-                                       {{ 'checked' if job.schedule_enabled else '' }}>
-                                <label class="form-check-label" for="enableSchedule">
-                                    <strong>Enable Scheduling</strong>
+                            <label class="form-label">Script Type</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="scriptType" id="scriptTypeInline" value="inline" checked>
+                                <label class="btn btn-outline-primary" for="scriptTypeInline">
+                                    <i class="fas fa-edit me-1"></i>Inline Script
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="scriptType" id="scriptTypeFile" value="file">
+                                <label class="btn btn-outline-primary" for="scriptTypeFile">
+                                    <i class="fas fa-file me-1"></i>Script File
                                 </label>
                             </div>
                         </div>
 
-                        <div id="scheduleSection" style="{{ 'display: block;' if job.schedule_enabled else 'display: none;' }}">
-                            <!-- Schedule Type -->
+                        <div id="inlineScriptSection">
                             <div class="mb-3">
-                                <label class="form-label">Schedule Type</label>
-                                <div class="btn-group w-100" role="group">
-                                    <input type="radio" class="btn-check" name="scheduleType" id="scheduleTypeCron" value="cron" 
-                                           {{ 'checked' if job.schedule_type == 'cron' else '' }}>
-                                    <label class="btn btn-outline-secondary" for="scheduleTypeCron">
-                                        <i class="fas fa-clock me-1"></i>Cron Expression
-                                    </label>
-                                    
-                                    <input type="radio" class="btn-check" name="scheduleType" id="scheduleTypeInterval" value="interval"
-                                           {{ 'checked' if job.schedule_type == 'interval' else '' }}>
-                                    <label class="btn btn-outline-secondary" for="scheduleTypeInterval">
-                                        <i class="fas fa-redo me-1"></i>Interval
-                                    </label>
-                                    
-                                    <input type="radio" class="btn-check" name="scheduleType" id="scheduleTypeOnce" value="once"
-                                           {{ 'checked' if job.schedule_type == 'once' else '' }}>
-                                    <label class="btn btn-outline-secondary" for="scheduleTypeOnce">
-                                        <i class="fas fa-calendar-day me-1"></i>One Time
-                                    </label>
-                                </div>
+                                <label for="scriptContent" class="form-label">PowerShell Script *</label>
+                                <textarea class="form-control" id="scriptContent" name="script_content" rows="8" 
+                                          placeholder="Enter your PowerShell script here..."></textarea>
                             </div>
+                        </div>
 
-                            <!-- Timezone Selection -->
+                        <div id="fileScriptSection" style="display: none;">
                             <div class="mb-3">
-                                <label for="scheduleTimezone" class="form-label">
-                                    <i class="fas fa-globe me-1"></i>Schedule Timezone
-                                </label>
-                                <select class="form-select" id="scheduleTimezone">
-                                    <option value="UTC" {{ 'selected' if job.timezone == 'UTC' else '' }}>UTC (Coordinated Universal Time)</option>
-                                    <optgroup label="America">
-                                        <option value="America/New_York" {{ 'selected' if job.timezone == 'America/New_York' else '' }}>America/New_York (Eastern Time)</option>
-                                        <option value="America/Chicago" {{ 'selected' if job.timezone == 'America/Chicago' else '' }}>America/Chicago (Central Time)</option>
-                                        <option value="America/Denver" {{ 'selected' if job.timezone == 'America/Denver' else '' }}>America/Denver (Mountain Time)</option>
-                                        <option value="America/Los_Angeles" {{ 'selected' if job.timezone == 'America/Los_Angeles' else '' }}>America/Los_Angeles (Pacific Time)</option>
-                                        <option value="America/Phoenix" {{ 'selected' if job.timezone == 'America/Phoenix' else '' }}>America/Phoenix (MST - No DST)</option>
-                                        <option value="America/Anchorage" {{ 'selected' if job.timezone == 'America/Anchorage' else '' }}>America/Anchorage (Alaska Time)</option>
-                                        <option value="America/Toronto" {{ 'selected' if job.timezone == 'America/Toronto' else '' }}>America/Toronto (Eastern Canada)</option>
-                                        <option value="America/Vancouver" {{ 'selected' if job.timezone == 'America/Vancouver' else '' }}>America/Vancouver (Pacific Canada)</option>
-                                        <option value="America/Mexico_City" {{ 'selected' if job.timezone == 'America/Mexico_City' else '' }}>America/Mexico_City (CST)</option>
-                                        <option value="America/Sao_Paulo" {{ 'selected' if job.timezone == 'America/Sao_Paulo' else '' }}>America/Sao_Paulo (Brazil)</option>
-                                    </optgroup>
-                                    <optgroup label="Europe">
-                                        <option value="Europe/London" {{ 'selected' if job.timezone == 'Europe/London' else '' }}>Europe/London (GMT/BST)</option>
-                                        <option value="Europe/Paris" {{ 'selected' if job.timezone == 'Europe/Paris' else '' }}>Europe/Paris (CET/CEST)</option>
-                                        <option value="Europe/Berlin" {{ 'selected' if job.timezone == 'Europe/Berlin' else '' }}>Europe/Berlin (CET/CEST)</option>
-                                        <option value="Europe/Rome" {{ 'selected' if job.timezone == 'Europe/Rome' else '' }}>Europe/Rome (CET/CEST)</option>
-                                        <option value="Europe/Madrid" {{ 'selected' if job.timezone == 'Europe/Madrid' else '' }}>Europe/Madrid (CET/CEST)</option>
-                                        <option value="Europe/Amsterdam" {{ 'selected' if job.timezone == 'Europe/Amsterdam' else '' }}>Europe/Amsterdam (CET/CEST)</option>
-                                        <option value="Europe/Stockholm" {{ 'selected' if job.timezone == 'Europe/Stockholm' else '' }}>Europe/Stockholm (CET/CEST)</option>
-                                        <option value="Europe/Moscow" {{ 'selected' if job.timezone == 'Europe/Moscow' else '' }}>Europe/Moscow (MSK)</option>
-                                    </optgroup>
-                                    <optgroup label="Asia">
-                                        <option value="Asia/Tokyo" {{ 'selected' if job.timezone == 'Asia/Tokyo' else '' }}>Asia/Tokyo (JST)</option>
-                                        <option value="Asia/Shanghai" {{ 'selected' if job.timezone == 'Asia/Shanghai' else '' }}>Asia/Shanghai (CST)</option>
-                                        <option value="Asia/Hong_Kong" {{ 'selected' if job.timezone == 'Asia/Hong_Kong' else '' }}>Asia/Hong_Kong (HKT)</option>
-                                        <option value="Asia/Singapore" {{ 'selected' if job.timezone == 'Asia/Singapore' else '' }}>Asia/Singapore (SGT)</option>
-                                        <option value="Asia/Kolkata" {{ 'selected' if job.timezone == 'Asia/Kolkata' else '' }}>Asia/Kolkata (IST)</option>
-                                        <option value="Asia/Dubai" {{ 'selected' if job.timezone == 'Asia/Dubai' else '' }}>Asia/Dubai (GST)</option>
-                                        <option value="Asia/Seoul" {{ 'selected' if job.timezone == 'Asia/Seoul' else '' }}>Asia/Seoul (KST)</option>
-                                        <option value="Asia/Bangkok" {{ 'selected' if job.timezone == 'Asia/Bangkok' else '' }}>Asia/Bangkok (ICT)</option>
-                                    </optgroup>
-                                    <optgroup label="Pacific">
-                                        <option value="Australia/Sydney" {{ 'selected' if job.timezone == 'Australia/Sydney' else '' }}>Australia/Sydney (AEST/AEDT)</option>
-                                        <option value="Australia/Melbourne" {{ 'selected' if job.timezone == 'Australia/Melbourne' else '' }}>Australia/Melbourne (AEST/AEDT)</option>
-                                        <option value="Australia/Perth" {{ 'selected' if job.timezone == 'Australia/Perth' else '' }}>Australia/Perth (AWST)</option>
-                                        <option value="Pacific/Auckland" {{ 'selected' if job.timezone == 'Pacific/Auckland' else '' }}>Pacific/Auckland (NZST/NZDT)</option>
-                                        <option value="Pacific/Honolulu" {{ 'selected' if job.timezone == 'Pacific/Honolulu' else '' }}>Pacific/Honolulu (HST)</option>
-                                    </optgroup>
+                                <label for="scriptPath" class="form-label">Script File Path *</label>
+                                <input type="text" class="form-control" id="scriptPath" name="script_path" 
+                                       placeholder="C:\Scripts\MyScript.ps1">
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="executionPolicy" class="form-label">Execution Policy</label>
+                                <select class="form-select" id="executionPolicy" name="execution_policy">
+                                    <option value="RemoteSigned">RemoteSigned</option>
+                                    <option value="Unrestricted">Unrestricted</option>
+                                    <option value="Bypass">Bypass</option>
                                 </select>
-                                <div class="form-text">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    All schedules are stored in UTC. Local times are converted automatically with DST handling.
-                                    <div id="timezoneInfo" class="mt-1 text-primary"></div>
-                                </div>
                             </div>
+                            <div class="col-md-6">
+                                <label for="workingDirectory" class="form-label">Working Directory</label>
+                                <input type="text" class="form-control" id="workingDirectory" name="working_directory" 
+                                       placeholder="C:\Scripts (optional)">
+                            </div>
+                        </div>
 
-                            <!-- Cron Expression -->
-                            <div id="cronSection" style="{{ 'display: block;' if job.schedule_type == 'cron' else 'display: none;' }}">
-                                <div class="mb-3">
-                                    <label for="cronExpression" class="form-label">Cron Expression</label>
-                                    <input type="text" class="form-control" id="cronExpression" 
-                                           value="{{ job.schedule_expression or '' }}"
-                                           placeholder="0 0 12 * * ? (daily at noon)">
-                                    <div class="form-text">Format: second minute hour day month day_of_week</div>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <label class="form-label">Quick Presets</label>
-                                    <div class="btn-group-vertical w-100">
-                                        <button type="button" class="btn btn-outline-info btn-sm" onclick="setCronPreset('0 0 9 * * 1-5')">
-                                            <i class="fas fa-business-time me-1"></i>Daily at 9 AM (Weekdays)
-                                        </button>
-                                        <button type="button" class="btn btn-outline-info btn-sm" onclick="setCronPreset('0 0 0 * * 0')">
-                                            <i class="fas fa-calendar-week me-1"></i>Weekly (Sunday Midnight)
-                                        </button>
-                                        <button type="button" class="btn btn-outline-info btn-sm" onclick="setCronPreset('0 0 0 1 * ?')">
-                                            <i class="fas fa-calendar me-1"></i>Monthly (1st of Month)
-                                        </button>
-                                        <button type="button" class="btn btn-outline-info btn-sm" onclick="setCronPreset('0 */15 * * * ?')">
-                                            <i class="fas fa-clock me-1"></i>Every 15 Minutes
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Interval Schedule -->
-                            <div id="intervalSection" style="{{ 'display: block;' if job.schedule_type == 'interval' else 'display: none;' }}">
-                                <div class="row">
-                                    <div class="col-md-3">
-                                        <label for="intervalDays" class="form-label">Days</label>
-                                        <input type="number" class="form-control" id="intervalDays" min="0" value="0">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label for="intervalHours" class="form-label">Hours</label>
-                                        <input type="number" class="form-control" id="intervalHours" min="0" max="23" value="0">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label for="intervalMinutes" class="form-label">Minutes</label>
-                                        <input type="number" class="form-control" id="intervalMinutes" min="0" max="59" value="30">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label for="intervalSeconds" class="form-label">Seconds</label>
-                                        <input type="number" class="form-control" id="intervalSeconds" min="0" max="59" value="0">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- One Time Schedule -->
-                            <div id="onceSection" style="{{ 'display: block;' if job.schedule_type == 'once' else 'display: none;' }}">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <label for="runDate" class="form-label">Run Date</label>
-                                        <input type="date" class="form-control" id="runDate">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label for="runTime" class="form-label">Run Time</label>
-                                        <input type="time" class="form-control" id="runTime">
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="mb-3">
+                            <label for="scriptParameters" class="form-label">Parameters</label>
+                            <input type="text" class="form-control" id="scriptParameters" name="parameters" 
+                                   placeholder="-Message 'Hello World' -Verbose">
                         </div>
                     </div>
 
                     <!-- Advanced Settings -->
                     <div class="mb-4">
-                        <h5><i class="fas fa-cog me-2"></i>Advanced Settings</h5>
+                        <h5 class="border-bottom pb-2">
+                            <i class="fas fa-cog me-2"></i>Advanced Settings
+                        </h5>
                         
                         <div class="row">
                             <div class="col-md-4">
                                 <div class="mb-3">
-                                    <label for="timeout" class="form-label">Timeout (seconds)</label>
-                                    <input type="number" class="form-control" id="timeout" 
-                                           value="{{ job.timeout or 300 }}" min="1" max="3600">
+                                    <label for="jobTimeout" class="form-label">Timeout (seconds)</label>
+                                    <input type="number" class="form-control" id="jobTimeout" name="timeout" value="300" min="1">
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="mb-3">
                                     <label for="maxRetries" class="form-label">Max Retries</label>
-                                    <input type="number" class="form-control" id="maxRetries" 
-                                           value="{{ job.max_retries or 3 }}" min="0" max="10">
+                                    <input type="number" class="form-control" id="maxRetries" name="max_retries" value="3" min="0">
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="mb-3">
                                     <label for="retryDelay" class="form-label">Retry Delay (seconds)</label>
-                                    <input type="number" class="form-control" id="retryDelay" 
-                                           value="{{ job.retry_delay or 60 }}" min="1" max="3600">
+                                    <input type="number" class="form-control" id="retryDelay" name="retry_delay" value="60" min="1">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="runAs" class="form-label">Run As (optional)</label>
+                            <input type="text" class="form-control" id="runAs" name="run_as" 
+                                   placeholder="domain\username (leave empty for current user)">
+                        </div>
+                    </div>
+
+                    <!-- Schedule Configuration (Read-Only) -->
+                    <div class="mb-4">
+                        <h5 class="border-bottom pb-2">
+                            <i class="fas fa-clock me-2"></i>Schedule Configuration
+                            <small class="text-muted ms-2">(Read-Only)</small>
+                        </h5>
+                        
+                        <!-- Security Notice -->
+                        <div class="alert alert-warning" role="alert">
+                            <i class="fas fa-shield-alt me-2"></i>
+                            <strong>Security Notice:</strong> Due to security and audit purposes, it is not recommended to update existing schedules. 
+                            If you need to modify the schedule, please <strong>create a fresh job</strong> with the new schedule configuration.
+                        </div>
+                        
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="enableSchedule" name="enable_schedule" disabled>
+                            <label class="form-check-label" for="enableSchedule">
+                                <strong>Enable Scheduling</strong> 
+                                <span class="text-muted">(Cannot be modified)</span>
+                            </label>
+                        </div>
+                        
+                        <!-- Schedule Information (Read-Only Display) -->
+                        <div id="scheduleSection">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-info-circle me-2"></i>Current Schedule Configuration
+                                    </h6>
+                                    <div id="scheduleDisplayInfo" class="text-muted">
+                                        <p class="mb-1"><strong>Status:</strong> <span id="scheduleStatusDisplay">Not scheduled</span></p>
+                                        <p class="mb-1"><strong>Type:</strong> <span id="scheduleTypeDisplay">-</span></p>
+                                        <p class="mb-1"><strong>Configuration:</strong> <span id="scheduleConfigDisplay">-</span></p>
+                                        <p class="mb-0"><strong>Timezone:</strong> <span id="scheduleTimezoneDisplay">-</span></p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Action Buttons -->
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex justify-content-between">
                         <div>
-                            <a href="{{ url_for('job_details', job_id=job.job_id) }}" class="btn btn-secondary">
+                            <a href="{{ url_for('job_list') }}" class="btn btn-secondary">
                                 <i class="fas fa-times me-1"></i>Cancel
                             </a>
                         </div>
                         <div>
-                            <button type="button" class="btn btn-outline-primary me-2" onclick="validateChanges()">
-                                <i class="fas fa-check me-1"></i>Validate
+                            <button type="button" class="btn btn-outline-info me-2" onclick="previewChanges()">
+                                <i class="fas fa-eye me-1"></i>Preview Changes
                             </button>
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save me-1"></i>Save Changes
@@ -335,287 +254,312 @@
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-    document.getElementById('editJobForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        saveJob();
-    });
-
-    function validateChanges() {
-        const jobName = document.getElementById('jobName').value.trim();
-        
-        if (!jobName) {
-            showError('Job name is required');
-            return false;
-        }
-        
-        // Job-specific validation
-        const jobType = document.getElementById('jobType').value;
-        if (jobType === 'sql') {
-            const sqlQuery = document.getElementById('sqlQuery').value.trim();
-            if (!sqlQuery) {
-                showError('SQL query is required');
-                return false;
-            }
-        } else if (jobType === 'powershell') {
-            const scriptContent = document.getElementById('scriptContent');
-            const scriptPath = document.getElementById('scriptPath');
-            
-            if (scriptContent && !scriptContent.value.trim()) {
-                showError('PowerShell script content is required');
-                return false;
-            } else if (scriptPath && !scriptPath.value.trim()) {
-                showError('PowerShell script path is required');
-                return false;
-            }
-        }
-        
-        showSuccess('Validation passed!');
-        return true;
-    }
-
-    function saveJob() {
-        if (!validateChanges()) {
-            return;
-        }
-        
-        showLoading();
-        
-        const jobId = document.getElementById('jobId').value;
-        const jobType = document.getElementById('jobType').value;
-        
-        // Collect form data
-        const jobData = {
-            name: document.getElementById('jobName').value.trim(),
-            description: document.getElementById('jobDescription').value.trim(),
-            enabled: document.getElementById('jobEnabled').checked,
-            timeout: parseInt(document.getElementById('timeout').value),
-            max_retries: parseInt(document.getElementById('maxRetries').value),
-            retry_delay: parseInt(document.getElementById('retryDelay').value)
-        };
-
-        // Add job-specific fields
-        if (jobType === 'sql') {
-            jobData.sql_query = document.getElementById('sqlQuery').value;
-            jobData.connection_name = document.getElementById('connectionName').value;
-        } else if (jobType === 'powershell') {
-            const scriptContent = document.getElementById('scriptContent');
-            const scriptPath = document.getElementById('scriptPath');
-            
-            if (scriptContent) {
-                jobData.script_content = scriptContent.value;
-            }
-            if (scriptPath) {
-                jobData.script_path = scriptPath.value;
-            }
-            
-            jobData.execution_policy = document.getElementById('executionPolicy').value;
-            jobData.working_directory = document.getElementById('workingDirectory').value;
-            
-            const params = document.getElementById('parameters').value.trim();
-            if (params) {
-                jobData.parameters = params.split(' ').filter(p => p.trim());
-            }
-        }
-
-        // Add schedule configuration
-        const scheduleEnabled = document.getElementById('enableSchedule').checked;
-        if (scheduleEnabled) {
-            const scheduleType = document.querySelector('input[name="scheduleType"]:checked')?.value;
-            const timezone = document.getElementById('scheduleTimezone').value;
-            
-            jobData.schedule_enabled = true;
-            jobData.schedule_type = scheduleType;
-            jobData.timezone = timezone;
-            
-            if (scheduleType === 'cron') {
-                jobData.schedule_expression = document.getElementById('cronExpression').value;
-            } else if (scheduleType === 'interval') {
-                // For interval, we might need to format it differently
-                const days = parseInt(document.getElementById('intervalDays').value) || 0;
-                const hours = parseInt(document.getElementById('intervalHours').value) || 0;
-                const minutes = parseInt(document.getElementById('intervalMinutes').value) || 0;
-                const seconds = parseInt(document.getElementById('intervalSeconds').value) || 0;
-                
-                // Store interval as expression for now
-                jobData.schedule_expression = `${days}d ${hours}h ${minutes}m ${seconds}s`;
-            } else if (scheduleType === 'once') {
-                const date = document.getElementById('runDate').value;
-                const time = document.getElementById('runTime').value;
-                if (date && time) {
-                    jobData.schedule_expression = `${date}T${time}:00`;
-                }
-            }
-        } else {
-            jobData.schedule_enabled = false;
-            jobData.schedule_type = null;
-            jobData.schedule_expression = null;
-            jobData.timezone = 'UTC';
-        }
-
-        // Save via API
-        fetch(`/api/jobs/${jobId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(jobData)
-        })
-        .then(response => response.json())
-        .then(data => {
-            hideLoading();
-            if (data.success) {
-                showSuccess('Job updated successfully!');
-                setTimeout(() => {
-                    window.location.href = `/jobs/${jobId}`;
-                }, 2000);
-            } else {
-                showError(data.error || 'Failed to update job');
-            }
-        })
-        .catch(error => {
-            hideLoading();
-            showError('Error updating job: ' + error.message);
-        });
-    }
-
-    function showLoading() {
-        // Disable form and show loading state
-        document.getElementById('editJobForm').style.opacity = '0.6';
-        document.querySelectorAll('button, input, textarea, select').forEach(el => {
-            el.disabled = true;
-        });
-    }
-
-    function hideLoading() {
-        // Re-enable form
-        document.getElementById('editJobForm').style.opacity = '1';
-        document.querySelectorAll('button, input, textarea, select').forEach(el => {
-            el.disabled = false;
-        });
-    }
-
-    function showSuccess(message) {
-        alert('[SUCCESS] ' + message);
-    }
-
-    function showError(message) {
-        alert('[ERROR] ' + message);
-    }
-
-    // Schedule handling functions
+    let currentJobData = {};
+    
+    // Initialize page
     document.addEventListener('DOMContentLoaded', function() {
-        // Populate schedule fields with correct values
-        populateScheduleFields();
-        
-        // Schedule toggle
-        document.getElementById('enableSchedule').addEventListener('change', function() {
-            const scheduleSection = document.getElementById('scheduleSection');
-            scheduleSection.style.display = this.checked ? 'block' : 'none';
-        });
-
-        // Schedule type radios
-        document.querySelectorAll('input[name="scheduleType"]').forEach(radio => {
-            radio.addEventListener('change', function() {
-                const cronSection = document.getElementById('cronSection');
-                const intervalSection = document.getElementById('intervalSection');
-                const onceSection = document.getElementById('onceSection');
-                
-                // Hide all sections
-                cronSection.style.display = 'none';
-                intervalSection.style.display = 'none';
-                onceSection.style.display = 'none';
-                
-                // Show selected section
-                if (this.value === 'cron') {
-                    cronSection.style.display = 'block';
-                } else if (this.value === 'interval') {
-                    intervalSection.style.display = 'block';
-                } else if (this.value === 'once') {
-                    onceSection.style.display = 'block';
-                }
+        const jobId = getJobIdFromURL();
+        if (jobId) {
+            // Just load job data since connection is now a text field
+            loadJobData(jobId).then(() => {
+                setupEventListeners();
+            }).catch(error => {
+                console.error('Error loading data:', error);
+                showError('Failed to load job data');
             });
-        });
-
-        // Timezone change handler
-        document.getElementById('scheduleTimezone').addEventListener('change', updateTimezoneInfo);
-        
-        // Initialize timezone info
-        updateTimezoneInfo();
+        } else {
+            showError('No job ID provided');
+            setTimeout(() => window.location.href = '/jobs', 2000);
+        }
     });
 
-    function populateScheduleFields() {
-        // Get job schedule data from the server-side template
-        const scheduleType = '{{ job.schedule_type or "" }}';
-        const scheduleExpression = '{{ job.schedule_expression or "" }}';
+    function getJobIdFromURL() {
+        const pathParts = window.location.pathname.split('/');
+        return pathParts[pathParts.length - 2]; // Assuming URL is /jobs/{id}/edit
+    }
+
+    function loadJobData(jobId) {
+        console.log('Loading job data for:', jobId); // Debug log
         
-        console.log('Populating schedule fields:', { scheduleType, scheduleExpression });
+        return fetch(`/api/jobs/${jobId}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log('API Response:', data); // Debug log
+                if (data.success && data.job) {
+                    currentJobData = data.job;
+                    console.log('Job Data:', data.job); // Debug log
+                    populateForm(data.job);
+                    return data.job;
+                } else {
+                    throw new Error(data.error || 'Failed to load job data');
+                }
+            })
+            .catch(error => {
+                showError('Error loading job: ' + error.message);
+                throw error;
+            });
+    }
+
+    function populateForm(job) {
+        console.log('=================== POPULATE FORM DEBUG ===================');
+        console.log('Full job object:', JSON.stringify(job, null, 2));
+        console.log('Job type:', job.job_type);
+        console.log('Configuration object:', JSON.stringify(job.configuration, null, 2));
         
-        if (scheduleType === 'interval' && scheduleExpression) {
-            // Parse interval expression like "1d 2h 30m 15s"
-            const parts = scheduleExpression.split(' ');
+        // Basic job information
+        document.getElementById('jobId').value = job.job_id;
+        document.getElementById('jobName').value = job.name || '';
+        document.getElementById('jobType').value = job.job_type || '';
+        document.getElementById('jobDescription').value = job.description || '';
+        document.getElementById('jobEnabled').checked = job.enabled;
+
+        // Parse configuration
+        const config = job.configuration || {};
+        const basic = config.basic || {};
+        
+        console.log('Basic config:', basic); // Debug log
+        
+        // Advanced settings
+        document.getElementById('jobTimeout').value = basic.timeout || 300;
+        document.getElementById('maxRetries').value = basic.max_retries || 3;
+        document.getElementById('retryDelay').value = basic.retry_delay || 60;
+        document.getElementById('runAs').value = basic.run_as || '';
+
+        // Job-specific configuration
+        if (job.job_type === 'sql') {
+            console.log('Loading SQL job configuration'); // Debug log
+            showSQLConfig();
+            const sqlConfig = config.sql || {};
+            console.log('SQL config:', sqlConfig); // Debug log
             
-            for (const part of parts) {
-                if (part.endsWith('d')) {
-                    document.getElementById('intervalDays').value = parseInt(part.replace('d', '')) || 0;
-                } else if (part.endsWith('h')) {
-                    document.getElementById('intervalHours').value = parseInt(part.replace('h', '')) || 0;
-                } else if (part.endsWith('m')) {
-                    document.getElementById('intervalMinutes').value = parseInt(part.replace('m', '')) || 0;
-                } else if (part.endsWith('s')) {
-                    document.getElementById('intervalSeconds').value = parseInt(part.replace('s', '')) || 0;
+            // Set the connection name directly in the text field
+            document.getElementById('connectionName').value = sqlConfig.connection_name || '';
+            document.getElementById('sqlQuery').value = sqlConfig.query || '';
+            document.getElementById('queryTimeout').value = sqlConfig.query_timeout || 300;
+            document.getElementById('maxRows').value = sqlConfig.max_rows || 1000;
+        } else if (job.job_type === 'powershell') {
+            console.log('Loading PowerShell job configuration'); // Debug log
+            showPowerShellConfig();
+            
+            console.log('Job script_content:', job.script_content); // Debug log
+            console.log('Job script_path:', job.script_path); // Debug log
+            console.log('Job execution_policy:', job.execution_policy); // Debug log
+            
+            // Determine script type - use direct job fields
+            if (job.script_content && job.script_content.trim() !== '') {
+                document.getElementById('scriptTypeInline').checked = true;
+                document.getElementById('scriptContent').value = job.script_content;
+                showInlineScriptSection();
+                console.log('Set inline script content'); // Debug log
+            } else if (job.script_path && job.script_path.trim() !== '') {
+                document.getElementById('scriptTypeFile').checked = true;
+                document.getElementById('scriptPath').value = job.script_path;
+                showFileScriptSection();
+                console.log('Set script file path'); // Debug log
+            } else {
+                // Default to inline if neither is set
+                document.getElementById('scriptTypeInline').checked = true;
+                showInlineScriptSection();
+                console.log('Defaulted to inline script (no content found)'); // Debug log
+            }
+            
+            document.getElementById('executionPolicy').value = job.execution_policy || 'RemoteSigned';
+            document.getElementById('workingDirectory').value = job.working_directory || '';
+            
+            // Handle parameters - use direct job field
+            if (job.parameters) {
+                if (Array.isArray(job.parameters)) {
+                    document.getElementById('scriptParameters').value = job.parameters.join(' ');
+                } else if (typeof job.parameters === 'string') {
+                    document.getElementById('scriptParameters').value = job.parameters;
                 }
             }
-        } else if (scheduleType === 'once' && scheduleExpression) {
-            // Parse datetime expression like "2024-01-15T14:30:00"
-            if (scheduleExpression.includes('T')) {
-                const [date, timeWithSeconds] = scheduleExpression.split('T');
-                const time = timeWithSeconds.split(':').slice(0, 2).join(':'); // Remove seconds
-                
-                document.getElementById('runDate').value = date;
-                document.getElementById('runTime').value = time;
-            }
         }
-    }
 
-    function setCronPreset(expression) {
-        document.getElementById('cronExpression').value = expression;
-    }
-
-    function updateTimezoneInfo() {
-        const timezone = document.getElementById('scheduleTimezone').value;
-        const infoDiv = document.getElementById('timezoneInfo');
+        // Schedule configuration
+        console.log('=================== SCHEDULE DEBUG ===================');
+        console.log('Full config object for schedule lookup:', JSON.stringify(config, null, 2));
+        console.log('config.schedule:', JSON.stringify(config.schedule, null, 2));
+        console.log('Direct job schedule fields:', {
+            schedule_enabled: job.schedule_enabled,
+            schedule_type: job.schedule_type,
+            cron_expression: job.cron_expression,
+            schedule_timezone: job.schedule_timezone
+        });
         
-        try {
-            const now = new Date();
-            const localTime = now.toLocaleString('en-US', { 
-                timeZone: timezone,
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-            });
+        // Check for schedule in config first, then fall back to direct job fields
+        const scheduleFromConfig = config.schedule;
+        const scheduleFromJob = job.schedule_enabled;
+        
+        if (scheduleFromConfig || scheduleFromJob) {
+            console.log('✅ Schedule found, displaying schedule information');
+            document.getElementById('enableSchedule').checked = true;
             
-            // Calculate UTC offset
-            const localDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
-            const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-            const offsetMs = localDate.getTime() - utcDate.getTime();
-            const offsetHours = offsetMs / (1000 * 60 * 60);
-            const offsetSign = offsetHours >= 0 ? '+' : '';
+            // Use config.schedule if available, otherwise use direct job fields
+            const schedule = scheduleFromConfig || {};
+            const scheduleType = schedule.type || job.schedule_type || 'cron';
+            const timezoneValue = schedule.timezone || job.schedule_timezone || 'UTC';
             
-            infoDiv.innerHTML = `
-                <small>
-                    <strong>Current time:</strong> ${localTime} (UTC${offsetSign}${offsetHours})
-                </small>
-            `;
-        } catch (error) {
-            infoDiv.innerHTML = `<small class="text-warning">Timezone information not available</small>`;
+            console.log('Schedule object:', JSON.stringify(schedule, null, 2));
+            console.log('Schedule type detected:', scheduleType);
+            
+            // Populate read-only display
+            document.getElementById('scheduleStatusDisplay').textContent = 'Scheduled';
+            document.getElementById('scheduleTypeDisplay').textContent = scheduleType.charAt(0).toUpperCase() + scheduleType.slice(1);
+            document.getElementById('scheduleTimezoneDisplay').textContent = timezoneValue;
+            
+            let configDisplay = '';
+            if (scheduleType === 'cron') {
+                const cronExpression = schedule.cron || schedule.expression || job.cron_expression || '0 0 * * *';
+                configDisplay = `Cron: ${cronExpression}`;
+                console.log('Displaying cron schedule:', cronExpression);
+            } else if (scheduleType === 'interval') {
+                const interval = schedule.interval || {};
+                const days = interval.days || 0;
+                const hours = interval.hours || 0;
+                const minutes = interval.minutes || 0;
+                const seconds = interval.seconds || 0;
+                configDisplay = `Every ${days}d ${hours}h ${minutes}m ${seconds}s`;
+                console.log('Displaying interval schedule:', interval);
+            } else if (scheduleType === 'date') {
+                const runDate = schedule.run_date || 'Not set';
+                configDisplay = `Run once at: ${runDate}`;
+                console.log('Displaying date schedule:', runDate);
+            }
+            
+            document.getElementById('scheduleConfigDisplay').textContent = configDisplay;
+            
+        } else {
+            console.log('❌ No schedule configuration found');
+            document.getElementById('scheduleStatusDisplay').textContent = 'Not scheduled';
+            document.getElementById('scheduleTypeDisplay').textContent = '-';
+            document.getElementById('scheduleConfigDisplay').textContent = '-';
+            document.getElementById('scheduleTimezoneDisplay').textContent = '-';
         }
     }
+
+    // Connection loading functions removed since connection is now a text field
+
+    function setupEventListeners() {
+        // Script type radios
+        document.querySelectorAll('input[name="scriptType"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                if (this.value === 'inline') {
+                    showInlineScriptSection();
+                } else {
+                    showFileScriptSection();
+                }
+            });
+        });
+
+        // Form submission
+        document.getElementById('editJobForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveJobChanges();
+        });
+    }
+
+    function showSQLConfig() {
+        document.getElementById('sqlJobConfig').style.display = 'block';
+        document.getElementById('powershellJobConfig').style.display = 'none';
+    }
+
+    function showPowerShellConfig() {
+        document.getElementById('sqlJobConfig').style.display = 'none';
+        document.getElementById('powershellJobConfig').style.display = 'block';
+    }
+
+
+    function showInlineScriptSection() {
+        document.getElementById('inlineScriptSection').style.display = 'block';
+        document.getElementById('fileScriptSection').style.display = 'none';
+    }
+
+    function showFileScriptSection() {
+        document.getElementById('inlineScriptSection').style.display = 'none';
+        document.getElementById('fileScriptSection').style.display = 'block';
+    }
+
+    function previewChanges() {
+        if (confirm('Do you want to save the changes to this job?')) {
+            saveJobChanges();
+        }
+    }
+
+
+    function saveJobChanges() {
+        try {
+            // Get required job data
+            const jobId = document.getElementById('jobId').value;
+            const jobName = document.getElementById('jobName').value;
+            const jobType = document.getElementById('jobType').value;
+            
+            // Build job data object
+            const jobData = {
+                job_id: jobId,
+                name: jobName,
+                job_type: jobType,
+                description: document.getElementById('jobDescription').value,
+                enabled: document.getElementById('jobEnabled').checked
+            };
+            
+            // Add type-specific fields
+            if (jobType === 'powershell') {
+                const scriptType = document.querySelector('input[name="scriptType"]:checked')?.value || 'inline';
+                if (scriptType === 'inline') {
+                    jobData.script_content = document.getElementById('scriptContent').value;
+                } else {
+                    jobData.script_path = document.getElementById('scriptPath').value;
+                }
+                jobData.execution_policy = document.getElementById('executionPolicy').value;
+                jobData.working_directory = document.getElementById('workingDirectory').value;
+            } else if (jobType === 'sql') {
+                jobData.sql_query = document.getElementById('sqlQuery').value;
+                jobData.connection_name = document.getElementById('connectionName').value;
+            }
+            
+            fetch(`/api/jobs/${jobId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(jobData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSuccess('Job updated successfully!');
+                    setTimeout(() => {
+                        window.location.href = `/jobs/${jobId}`;
+                    }, 2000);
+                } else {
+                    showError(data.error || 'Failed to update job');
+                }
+            })
+            .catch(error => {
+                showError('Error updating job: ' + error.message);
+            });
+        } catch (error) {
+            console.error('Error in saveJobChanges:', error);
+            showError('JavaScript error: ' + error.message);
+        }
+    }
+    
+    function showSuccess(message) {
+        // Create a simple alert for now - can be enhanced with toast notifications
+        alert('✅ ' + message);
+    }
+    
+    function showError(message) {
+        // Create a simple alert for now - can be enhanced with toast notifications  
+        alert('❌ ' + message);
+    }
+    
+
 </script>
 {% endblock %}

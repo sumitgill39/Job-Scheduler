@@ -1,359 +1,312 @@
-# Windows Job Scheduler
+# Job Scheduler V2 - Modern Multi-Timezone Execution Architecture
 
-A comprehensive Python-based job scheduling system designed specifically for Windows environments, supporting both SQL Server and PowerShell script automation with multi-threading capabilities.
+## Overview
 
-## Features
+Job Scheduler V2 is a complete redesign of the job execution system, featuring timezone-based queuing, multi-step job workflows, and an extensible architecture for different job types. This system replaces the legacy single-execution model with a modern, scalable approach designed for enterprise requirements.
 
-### 🎯 Core Functionality
-- **Multi-threaded job execution** using APScheduler
-- **SQL Server job scheduling** with Windows Authentication support
-- **PowerShell script automation** (both file and inline scripts)
-- **Web-based UI** for easy job management
-- **Command-line interface** for advanced users
-- **Windows domain account support** for job execution
-- **YAML and database storage** options for job configurations
+## Key Features
 
-### 🔧 Job Types
-1. **SQL Jobs**
-   - Execute SQL queries on SQL Server
-   - Support for Windows Authentication and SQL Authentication
-   - Query result handling and logging
-   - Connection pooling and retry logic
+- **🌍 Timezone-Based Queuing**: Separate execution queues for different timezones
+- **📋 Multi-Step Jobs**: Jobs can contain sequential execution steps
+- **🔌 Extensible Architecture**: Plugin-based system for new job types
+- **⚡ Async Execution Engine**: Modern async/await architecture for performance
+- **🔄 Backward Compatibility**: Maintains existing API compatibility
+- **📊 Real-time Monitoring**: Comprehensive execution status tracking
 
-2. **PowerShell Jobs**
-   - Execute .ps1 script files
-   - Run inline PowerShell commands
-   - Parameter passing support
-   - Execution policy configuration
+## Architecture Overview
 
-### 📅 Scheduling Options
-- **Cron expressions** for complex scheduling
-- **Interval scheduling** (minutes, hours, days)
-- **One-time execution** with specific date/time
-- **Immediate execution** for testing
+### Core Components
 
-### 🖥️ Windows Integration
-- **Windows Authentication** support
-- **Domain account validation**
-- **Windows Event Log** integration
-- **PowerShell execution policy** handling
-- **Windows service** installation capabilities
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Job Scheduler V2 Architecture                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────┐    ┌──────────────────┐    ┌─────────────┐ │
+│  │   Web UI/API    │    │  Modern Job API  │    │   Legacy    │ │
+│  │   (Flask)       │◄──►│   (V2 Routes)    │◄──►│  API Bridge │ │
+│  └─────────────────┘    └──────────────────┘    └─────────────┘ │
+│           │                       │                       │     │
+│           ▼                       ▼                       ▼     │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │              New Execution Engine                           │ │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐ │ │
+│  │  │ Timezone Queue  │  │ Timezone Queue  │  │ Timezone    │ │ │
+│  │  │     (UTC)       │  │     (EST)       │  │   Queue     │ │ │
+│  │  │                 │  │                 │  │   (PST)     │ │ │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────┘ │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│           │                       │                       │     │
+│           ▼                       ▼                       ▼     │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │                Step Factory & Executors                     │ │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │ │
+│  │  │   SQL Step  │  │PowerShell   │  │  Azure DevOps Step  │ │ │
+│  │  │  Executor   │  │   Step      │  │      (Future)       │ │ │
+│  │  │             │  │  Executor   │  │                     │ │ │
+│  │  └─────────────┘  └─────────────┘  └─────────────────────┘ │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-## Installation
+### Execution Flow
+
+1. **Job Submission**: Jobs submitted through Web UI or API
+2. **Timezone Routing**: Jobs routed to appropriate timezone queue
+3. **Multi-Step Processing**: Each job's steps executed sequentially
+4. **Result Aggregation**: Step results combined into final job result
+5. **Status Reporting**: Real-time status updates available via API
+
+## Job Structure
+
+### Multi-Step Job Definition
+
+```json
+{
+  "id": "job_001",
+  "name": "Database Maintenance Job",
+  "description": "Daily database cleanup and reporting",
+  "timezone": "America/New_York",
+  "enabled": true,
+  "max_retries": 2,
+  "timeout_seconds": 3600,
+  "steps": [
+    {
+      "id": "cleanup_step",
+      "name": "Database Cleanup",
+      "type": "sql",
+      "query": "DELETE FROM logs WHERE created_at < DATEADD(day, -30, GETDATE())",
+      "connection_name": "prod_db",
+      "timeout": 300
+    },
+    {
+      "id": "report_step", 
+      "name": "Generate Report",
+      "type": "powershell",
+      "script_path": "./scripts/generate_report.ps1",
+      "parameters": {"date": "{{today}}"},
+      "timeout": 600
+    }
+  ],
+  "schedule": {
+    "type": "cron",
+    "expression": "0 2 * * *"
+  }
+}
+```
+
+## Available Step Types
+
+### SQL Step
+- **Purpose**: Execute SQL queries against configured databases
+- **Configuration**: Connection name, query, timeout
+- **Features**: Transaction support, parameter binding, result caching
+
+### PowerShell Step  
+- **Purpose**: Execute PowerShell scripts with parameters
+- **Configuration**: Script path or inline script, parameters, execution policy
+- **Features**: Secure parameter passing, output capture, error handling
+
+### Azure DevOps Step (Future)
+- **Purpose**: Trigger Azure DevOps pipelines and workflows
+- **Configuration**: Organization, project, pipeline ID, variables
+- **Features**: Build triggering, release management, artifact handling
+
+## API Endpoints
+
+### V2 API Endpoints
+
+- `POST /api/v2/jobs/execute` - Execute job immediately
+- `POST /api/v2/jobs/schedule` - Schedule job for future execution
+- `GET /api/v2/execution/status` - Get execution engine status
+- `GET /api/v2/steps/types` - Get available step types
+
+### Legacy Compatibility
+- All existing V1 endpoints remain functional
+- Automatic conversion from legacy format to V2 format
+- Gradual migration path for existing jobs
+
+## Timezone Management
+
+### Supported Timezones
+The system automatically creates queues for any timezone specified in job definitions:
+- UTC (default)
+- America/New_York (EST/EDT)
+- America/Los_Angeles (PST/PDT)
+- Europe/London (GMT/BST)
+- Asia/Tokyo (JST)
+- And any other IANA timezone identifier
+
+### Queue Behavior
+- Each timezone maintains its own execution queue
+- Jobs scheduled based on local timezone time
+- Automatic daylight saving time handling
+- Load balancing across timezone queues
+
+## File Structure
+
+### Core Files
+```
+core/
+├── new_execution_engine.py      # Main execution engine
+├── modern_job_api.py           # V2 API implementation  
+├── timezone_job_queue.py       # Timezone-based queuing
+├── job_definition.py           # Job data structures
+├── execution_steps/            # Step implementations
+│   ├── __init__.py
+│   ├── base_step.py           # Abstract base class
+│   ├── sql_step.py            # SQL execution
+│   ├── powershell_step.py     # PowerShell execution
+│   └── azure_devops_step.py   # Azure DevOps (future)
+└── step_factory.py            # Step creation factory
+```
+
+### Database Schema
+```
+database/
+├── v2_models.py               # V2 SQLAlchemy models
+└── migrations/
+    └── v2_schema.sql          # Database migration script
+```
+
+### Web Interface
+```
+web_ui/
+├── v2_routes.py              # V2 Flask routes
+├── templates/v2/             # Modern UI templates
+└── static/v2/                # V2 assets
+```
+
+## Getting Started
 
 ### Prerequisites
-- **Windows 10/11** or **Windows Server 2016+**
-- **Python 3.8+** installed
-- **SQL Server** with ODBC Driver 17+ (if using SQL jobs)
-- **PowerShell 5.1+** (included with Windows)
+- Python 3.8+
+- SQLAlchemy database
+- Existing Job Scheduler V1 installation
 
-### Quick Install
+### Installation
+1. **Database Migration**: Run V2 schema migration
+2. **Dependencies**: Install new Python packages
+3. **Configuration**: Update timezone settings
+4. **Testing**: Validate with sample jobs
 
-1. **Download and extract** the project files
-2. **Run the installer**:
-   ```cmd
-   install.bat
-   ```
+### Creating Your First V2 Job
 
-### Manual Installation
+```python
+# Example: Multi-step database maintenance job
+job_data = {
+    "name": "Daily Maintenance",
+    "timezone": "America/New_York", 
+    "steps": [
+        {
+            "type": "sql",
+            "query": "EXEC sp_cleanup_logs",
+            "connection_name": "main_db"
+        },
+        {
+            "type": "powershell", 
+            "script": "Send-StatusEmail.ps1",
+            "parameters": {"status": "completed"}
+        }
+    ]
+}
 
-1. **Clone or download** the project
-2. **Create virtual environment**:
-   ```cmd
-   py -m venv venv
-   venv\Scripts\activate
-   ```
-3. **Install dependencies**:
-   ```cmd
-   py -m pip install -r requirements.txt
-   ```
+# Execute immediately
+result = modern_job_api.execute_job_immediately(job_data)
 
-## Quick Start
-
-### 1. Test System Components
-```cmd
-py main.py --test-system
+# Or schedule for later
+scheduled_time = datetime(2024, 12, 25, 9, 0, 0)  # 9 AM on Christmas
+result = modern_job_api.schedule_job(job_data, scheduled_time)
 ```
 
-### 2. Start Web Interface
-```cmd
-start_app.bat
-# OR
-py main.py --mode web
+## Migration Guide
+
+### Phase 1: Parallel Operation
+- V2 system runs alongside V1
+- New jobs use V2 architecture
+- Existing jobs continue on V1
+
+### Phase 2: Data Migration  
+- Convert existing job definitions to V2 format
+- Migrate execution history
+- Update scheduled jobs
+
+### Phase 3: Full Cutover
+- Disable V1 endpoints
+- Remove legacy code
+- Complete V2 adoption
+
+## Monitoring & Troubleshooting
+
+### Execution Status
+```bash
+# Get real-time execution status
+curl http://localhost:5000/api/v2/execution/status
+
+# Response includes:
+# - Active timezone queues
+# - Running job counts
+# - Queue depths
+# - System health metrics
 ```
-Open browser to: http://localhost:5000
-
-### 3. Start CLI Interface
-```cmd
-start_cli.bat
-# OR
-py main.py --mode cli
-```
-
-### 4. Start Both Interfaces
-```cmd
-py main.py --mode both
-```
-
-## Configuration
-
-### Database Configuration
-Edit `config/database_config.yaml`:
-
-```yaml
-databases:
-  default:
-    driver: "{ODBC Driver 17 for SQL Server}"
-    server: "localhost"
-    database: "JobScheduler"
-    trusted_connection: true  # Windows Authentication
-    connection_timeout: 30
-```
-
-### Application Configuration
-Edit `config/config.yaml`:
-
-```yaml
-application:
-  name: "Windows Job Scheduler"
-  debug: true
-
-web:
-  host: "127.0.0.1"
-  port: 5000
-
-scheduler:
-  max_workers: 10
-  thread_pool_size: 20
-
-security:
-  allowed_domains: 
-    - "dmz1"
-    - "dmzweb01" 
-    - "MGO"
-    - "Mercury"
-```
-
-## Usage Examples
-
-### Creating a SQL Job (CLI)
-```cmd
-JobScheduler> create sql
-Job name: Daily Sales Report
-Description: Generate daily sales report
-Enter SQL query (end with empty line):
-SELECT COUNT(*) as total_orders, SUM(amount) as total_sales 
-FROM orders 
-WHERE date >= DATEADD(day, -1, GETDATE())
-
-Connection name [default]: 
-Schedule this job (yes/no) [no]: yes
-Schedule type (cron/interval/once) [cron]: cron
-Cron expression (sec min hour day month dow): 0 0 8 * * 1-5
-✓ SQL job created successfully: Daily Sales Report
-```
-
-### Creating a PowerShell Job (CLI)
-```cmd
-JobScheduler> create powershell
-Job name: System Cleanup
-Description: Clean temporary files
-Script type (file/inline) [inline]: inline
-Enter PowerShell script (end with empty line):
-Get-ChildItem $env:TEMP -Recurse | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } | Remove-Item -Force -Recurse
-Write-Host "Cleanup completed"
-
-Parameters (space-separated): 
-Schedule this job (yes/no) [no]: yes
-Schedule type (cron/interval/once) [cron]: interval
-Interval in minutes: 60
-✓ PowerShell job created successfully: System Cleanup
-```
-
-### Web Interface Features
-- **Dashboard** with job overview and statistics
-- **Job Creation Wizard** with validation
-- **Real-time job monitoring** and status updates
-- **Execution history** with detailed logs
-- **Schedule management** with visual cron builder
-- **Job import/export** functionality
-
-## CLI Commands Reference
-
-### Job Management
-```cmd
-list                    # List all jobs
-list enabled           # List enabled jobs only
-show <job_id>          # Show job details
-create sql             # Create SQL job
-create powershell      # Create PowerShell job
-run <job_id>           # Run job immediately
-delete <job_id>        # Delete job
-enable <job_id>        # Enable job
-disable <job_id>       # Disable job
-```
-
-### Monitoring
-```cmd
-status                 # Show scheduler status
-history <job_id>       # Show execution history
-```
-
-### System
-```cmd
-clear                  # Clear screen
-quit                   # Exit CLI
-```
-
-## Project Structure
-
-```
-job_scheduler/
-├── config/                 # Configuration files
-│   ├── config.yaml        # Main configuration
-│   └── database_config.yaml # Database connections
-├── core/                  # Core job management
-│   ├── job_base.py       # Base job class
-│   ├── sql_job.py        # SQL job implementation
-│   ├── powershell_job.py # PowerShell job implementation
-│   └── scheduler_manager.py # Main scheduler
-├── database/              # Database connectivity
-│   ├── connection_manager.py # SQL Server connections
-│   └── job_storage.py    # Job persistence
-├── web_ui/               # Web interface
-│   ├── app.py           # Flask application
-│   ├── routes.py        # Web routes
-│   └── templates/       # HTML templates
-├── cli/                  # Command line interface
-│   └── cli_manager.py   # CLI implementation
-├── utils/                # Utilities
-│   ├── logger.py        # Logging system
-│   ├── windows_utils.py # Windows-specific utilities
-│   └── validators.py    # Input validation
-├── logs/                 # Log files
-├── scripts/             # Sample scripts
-└── main.py              # Application entry point
-```
-
-## Security Considerations
-
-### Domain Accounts
-- Jobs can run under specific Windows domain accounts
-- Configurable allowed domains list
-- Validation of account formats and permissions
-
-### SQL Security
-- Windows Authentication recommended
-- Query validation to prevent dangerous operations
-- Connection string security
-
-### PowerShell Security
-- Configurable execution policies
-- Script content validation
-- Parameter sanitization
-
-## Troubleshooting
-
-### Common Issues
-
-**"ODBC Driver not found"**
-```cmd
-# Install ODBC Driver 17 for SQL Server
-# Download from Microsoft's website
-```
-
-**"PowerShell execution policy error"**
-```cmd
-# Check execution policy
-Get-ExecutionPolicy
-# Set policy (as administrator)
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-**"Permission denied"**
-- Ensure running with appropriate Windows permissions
-- Check domain account permissions for job execution
-- Verify SQL Server connection permissions
 
 ### Logging
-- Application logs: `logs/scheduler.log`
-- Windows Event Log integration for errors
-- Per-job execution logging
+- Enhanced structured logging
+- Timezone-aware timestamps
+- Step-level execution tracking
+- Performance metrics
 
-### Database Connection Issues
-```cmd
-# Test connections
-py main.py --test-system
+### Common Issues
+- **Timezone Configuration**: Ensure IANA timezone identifiers
+- **Step Dependencies**: Verify step execution order
+- **Resource Limits**: Monitor queue depths and execution times
+- **Database Connections**: Validate connection pool settings
 
-# Check ODBC drivers
-py -c "import pyodbc; print(pyodbc.drivers())"
-```
+## Performance & Scaling
 
-## Development
+### Capacity Planning
+- **Concurrent Jobs**: Up to 50 concurrent executions per timezone
+- **Step Execution**: Parallel step processing within jobs
+- **Queue Management**: Automatic queue balancing and overflow handling
 
-### Adding New Job Types
-1. Create new job class inheriting from `JobBase`
-2. Implement `execute()` method
-3. Add job type to `SchedulerManager._create_job_from_config()`
-4. Update CLI and web UI for job creation
+### Optimization Features
+- Connection pooling for database steps
+- Script caching for PowerShell steps
+- Result caching for expensive operations
+- Automatic retry with exponential backoff
 
-### Custom Storage Backends
-1. Implement storage interface in `database/job_storage.py`
-2. Add storage type to `JobStorage.__init__()`
-3. Update configuration options
+## Security
 
-## API Reference
+### Step Isolation
+- Each step executes in isolated context
+- Secure parameter passing
+- No cross-step data leakage
 
-### Core Classes
-- `JobBase`: Base class for all job types
-- `SqlJob`: SQL Server job implementation
-- `PowerShellJob`: PowerShell script job implementation
-- `SchedulerManager`: Main scheduler and job manager
-- `JobStorage`: Job persistence layer
+### Access Control
+- API key authentication for V2 endpoints
+- Role-based step type access
+- Audit logging for all executions
 
-### Key Methods
-```python
-# Create jobs
-scheduler.create_sql_job(name, query, connection)
-scheduler.create_powershell_job(name, script_path=path)
+### Data Protection
+- Encrypted parameter storage
+- Secure credential management
+- PII handling compliance
 
-# Manage jobs
-scheduler.add_job(job, schedule)
-scheduler.remove_job(job_id)
-scheduler.run_job_once(job_id)
+## Support & Documentation
 
-# Monitoring
-scheduler.get_scheduler_status()
-scheduler.get_job_status(job_id)
-scheduler.get_execution_history(job_id)
-```
+### Additional Resources
+- **EDD Document**: `docs/EDD_JobExecution_V2.md` - Complete technical specifications
+- **API Documentation**: Generated from OpenAPI specifications
+- **Examples**: `examples/` directory with sample jobs
+- **Migration Tools**: `tools/migration/` utilities for V1 to V2 conversion
 
-## Contributing
+### Getting Help
+- Check execution logs in `logs/scheduler.log`
+- Review API response error messages
+- Consult EDD for detailed technical information
+- Contact system administrators for database issues
 
-1. Fork the repository
-2. Create feature branch
-3. Add tests for new functionality
-4. Ensure Windows compatibility
-5. Submit pull request
+---
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-For issues and questions:
-1. Check the troubleshooting section
-2. Review log files
-3. Test system components with `--test-system`
-4. Create an issue with system information and logs
-
-## Version History
-
-### v1.0.0
-- Initial release
-- SQL Server and PowerShell job support
-- Web and CLI interfaces
-- Windows Authentication
-- Multi-threading with APScheduler
-- YAML and database storage options
+**Job Scheduler V2** - Built for scale, designed for the future of enterprise job execution.

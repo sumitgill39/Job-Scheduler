@@ -915,7 +915,6 @@
     // Run job
     function runJob(jobId) {
         if (confirm('Are you sure you want to run this job now?')) {
-            showLoading();
             
             fetch(`/api/jobs/${jobId}/run`, {
                 method: 'POST',
@@ -925,7 +924,6 @@
             })
             .then(response => response.json())
             .then(data => {
-                hideLoading();
                 if (data.message) {
                     showSuccess(`Job executed: ${data.status}`);
                     // Start monitoring the job execution
@@ -940,7 +938,6 @@
                 }
             })
             .catch(error => {
-                hideLoading();
                 showError('Error running job: ' + error.message);
             });
         }

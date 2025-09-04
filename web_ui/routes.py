@@ -1,5 +1,6 @@
 """
 Flask Routes for Windows Job Scheduler Web UI
+FIXED VERSION - 2025-09-04 12:00 - Using execute_job_fixed to bypass caching
 """
 
 import time
@@ -12,6 +13,108 @@ def create_routes(app):
     """Create all routes for the Flask application"""
     
     logger = get_logger(__name__)
+    
+    def convert_form_data_to_v2_yaml(data: dict) -> str:
+        """Convert form data to V2 YAML configuration"""
+        import yaml
+        import uuid
+        
+        job_type = data.get('type', 'powershell').lower()
+        
+        # Create base YAML structure
+        yaml_config = {
+            'id': f"{job_type.upper()}-{str(uuid.uuid4())[:8]}",
+            'name': data.get('name', 'Unnamed Job'),
+            'type': job_type.title(),
+            'enabled': data.get('enabled', True),
+            'timeout': data.get('timeout', 300),
+        }
+        
+        # Add job-specific configuration
+        if job_type == 'powershell':
+            script_content = data.get('script_content', '').strip()
+            script_path = data.get('script_path', '').strip()
+            
+            if script_content:
+                yaml_config['executionMode'] = 'inline'
+                yaml_config['inlineScript'] = script_content
+            elif script_path:
+                yaml_config['executionMode'] = 'script'
+                yaml_config['scriptPath'] = script_path
+            else:
+                yaml_config['executionMode'] = 'inline'
+                yaml_config['inlineScript'] = 'Write-Host "Hello World"'
+            
+            if data.get('execution_policy'):
+                yaml_config['executionPolicy'] = data.get('execution_policy')
+            
+            if data.get('parameters'):
+                yaml_config['parameters'] = data.get('parameters')
+                
+        elif job_type == 'sql':
+            yaml_config['query'] = data.get('sql_query', 'SELECT 1')
+            if data.get('connection_name'):
+                yaml_config['connection'] = data.get('connection_name')
+        
+        # Add retry policy if specified
+        if data.get('max_retries') or data.get('retry_delay'):
+            yaml_config['retryPolicy'] = {
+                'maxRetries': int(data.get('max_retries', 3)),
+                'retryDelay': int(data.get('retry_delay', 30))
+            }
+        
+        # Add scheduling if specified
+        schedule_enabled = data.get('enable_schedule', False) or data.get('schedule_enabled', False)
+        if schedule_enabled:
+            schedule_config = {}
+            schedule_type = data.get('schedule_type', 'cron')
+            timezone = data.get('schedule_timezone', 'UTC')
+            
+            if schedule_type == 'cron':
+                schedule_config = {
+                    'type': 'cron',
+                    'expression': data.get('cron_expression', '0 0 * * *'),
+                    'timezone': timezone
+                }
+            elif schedule_type == 'interval':
+                # Handle interval scheduling
+                days = int(data.get('interval_days', 0))
+                hours = int(data.get('interval_hours', 0))
+                minutes = int(data.get('interval_minutes', 0))
+                seconds = int(data.get('interval_seconds', 0))
+                
+                schedule_config = {
+                    'type': 'interval',
+                    'interval': {
+                        'days': days,
+                        'hours': hours,
+                        'minutes': minutes,
+                        'seconds': seconds
+                    },
+                    'timezone': timezone
+                }
+            elif schedule_type == 'once':
+                # Handle one-time scheduling
+                run_date = data.get('run_date', '')
+                run_time = data.get('run_time', '')
+                if run_date and run_time:
+                    run_datetime = f"{run_date}T{run_time}:00"
+                    schedule_config = {
+                        'type': 'date',
+                        'run_date': run_datetime,
+                        'timezone': timezone
+                    }
+            
+            if schedule_config:
+                yaml_config['schedule'] = schedule_config
+        
+        # Also handle legacy schedule format if it exists
+        if data.get('schedule'):
+            schedule_data = data.get('schedule')
+            if isinstance(schedule_data, dict):
+                yaml_config['schedule'] = schedule_data
+        
+        return yaml.dump(yaml_config, default_flow_style=False, allow_unicode=True)
     
     def get_job_executor():
         """Get or create a JobExecutor instance with proper job_manager"""
@@ -49,25 +152,13 @@ def create_routes(app):
                 # Get jobs from SQLAlchemy database
                 all_jobs_raw = job_manager.list_jobs()
                 
-                # Transform job data to include job_type field that template expects
+                # Transform job data to include job_type field that template expects (V2 only)
                 all_jobs = []
                 for job in all_jobs_raw:
-                    # Extract job_type from different sources based on version
+                    # Extract job_type from V2 parsed_config
                     job_type = 'unknown'
-                    if job.get('_version') == 'v2' and job.get('parsed_config'):
+                    if job.get('parsed_config'):
                         job_type = job['parsed_config'].get('type', 'unknown').lower()
-                    elif job.get('job_type'):  # V1 jobs
-                        job_type = job['job_type'].lower()
-                    elif job.get('configuration'):  # V1 fallback
-                        try:
-                            import json
-                            config = json.loads(job['configuration']) if isinstance(job['configuration'], str) else job['configuration']
-                            if 'sql' in str(config).lower():
-                                job_type = 'sql'
-                            elif 'powershell' in str(config).lower():
-                                job_type = 'powershell'
-                        except:
-                            pass
                     
                     # Add job_type field to job data
                     job['job_type'] = job_type
@@ -143,25 +234,13 @@ def create_routes(app):
             
             jobs_raw = job_manager.list_jobs()
             
-            # Transform jobs data to match template expectations (without expensive execution history lookup)
+            # Transform jobs data to match template expectations (V2 only)
             jobs = []
             for job in jobs_raw:
-                # Extract job_type from different sources based on version
+                # Extract job_type from V2 parsed_config
                 job_type = 'unknown'
-                if job.get('_version') == 'v2' and job.get('parsed_config'):
+                if job.get('parsed_config'):
                     job_type = job['parsed_config'].get('type', 'unknown').lower()
-                elif job.get('job_type'):  # V1 jobs
-                    job_type = job['job_type'].lower()
-                elif job.get('configuration'):  # V1 fallback
-                    try:
-                        import json
-                        config = json.loads(job['configuration']) if isinstance(job['configuration'], str) else job['configuration']
-                        if 'sql' in str(config).lower():
-                            job_type = 'sql'
-                        elif 'powershell' in str(config).lower():
-                            job_type = 'powershell'
-                    except:
-                        pass
                 
                 # Don't load execution history on every page load - it's too expensive
                 # Use basic status based on job enabled state
@@ -228,11 +307,32 @@ def create_routes(app):
                 flash('Job manager not available', 'error')
                 return redirect(url_for('job_list'))
             
-            # Get job data
+            # Get job data with enhanced debugging
             job_data = job_manager.get_job(job_id)
+            
+            # Enhanced debugging for edit job
+            logger.info(f"[EDIT_JOB] Raw job_data retrieved: {job_data is not None}")
+            if job_data:
+                logger.info(f"[EDIT_JOB] Job data keys: {list(job_data.keys())}")
+                logger.info(f"[EDIT_JOB] Job name: {job_data.get('name', 'NO_NAME')}")
+                logger.info(f"[EDIT_JOB] Job enabled: {job_data.get('enabled', 'NO_ENABLED')}")
+                logger.info(f"[EDIT_JOB] Job version: {job_data.get('version', 'NO_VERSION')}")
+                logger.info(f"[EDIT_JOB] YAML config length: {len(job_data.get('yaml_configuration', ''))}")
+                logger.info(f"[EDIT_JOB] Parsed config exists: {bool(job_data.get('parsed_config'))}")
+                if job_data.get('parsed_config'):
+                    logger.info(f"[EDIT_JOB] Parsed config keys: {list(job_data.get('parsed_config', {}).keys())}")
+            else:
+                logger.error(f"[EDIT_JOB] No job data retrieved for job_id: {job_id}")
+                
             if not job_data:
                 flash(f'Job {job_id} not found', 'error')
                 return redirect(url_for('job_list'))
+            
+            # Final template data debug
+            logger.info(f"[EDIT_JOB] Template data - job_type: {job_data.get('job_type', 'MISSING')}")
+            logger.info(f"[EDIT_JOB] Template data - script_content: {job_data.get('script_content', 'MISSING')}")
+            logger.info(f"[EDIT_JOB] Template data - script_path: {job_data.get('script_path', 'MISSING')}")
+            logger.info(f"[EDIT_JOB] Template data - configuration keys: {list(job_data.get('configuration', {}).keys())}")
             
             logger.info(f"[EDIT_JOB] Successfully loaded job data for editing: {job_data['name']}")
             return render_template('edit_job.html', job_id=job_id, job=job_data)
@@ -511,16 +611,31 @@ def create_routes(app):
                     'error': 'No data provided'
                 }), 400
             
+            # Enhanced debugging for job update
+            logger.info(f"[API_UPDATE_JOB] Received data keys: {list(data.keys())}")
+            logger.info(f"[API_UPDATE_JOB] Data contents: {data}")
+            
             # Use global JobManager instance
             job_manager = getattr(app, 'job_manager', None)
             if not job_manager:
                 return jsonify({
                     'success': False,
-                    'error': 'Database not available'
+                    'error': 'Job manager not available'
                 }), 500
             
+            # Clean the data before passing to job manager
+            # Remove any None values or empty strings that shouldn't be saved
+            clean_data = {}
+            for key, value in data.items():
+                if value is not None and value != '':
+                    clean_data[key] = value
+                elif key in ['enabled']:  # Keep boolean fields even if False
+                    clean_data[key] = value
+            
+            logger.info(f"[API_UPDATE_JOB] Cleaned data: {clean_data}")
+            
             # Update the job
-            result = job_manager.update_job(job_id, data)
+            result = job_manager.update_job(job_id, clean_data)
             
             if result.get('success', False):
                 logger.info(f"[API_UPDATE_JOB] Job {job_id} updated successfully")
@@ -623,13 +738,22 @@ def create_routes(app):
             # Use integrated scheduler instead of just job manager
             integrated_scheduler = getattr(app, 'integrated_scheduler', None)
             if integrated_scheduler:
-                # Remove description field if present (not supported by current schema)
-                clean_data = data.copy()
-                if 'description' in clean_data:
-                    clean_data.pop('description')
+                # Convert form data to V2 YAML format for integrated scheduler
+                logger.info(f"[API_JOB_CREATE] Converting form data to V2 YAML format for integrated scheduler")
+                yaml_config = convert_form_data_to_v2_yaml(data)
+                logger.info(f"[API_JOB_CREATE] Generated YAML config for scheduler: {yaml_config[:200]}...")
+                
+                # Create V2 job data for integrated scheduler
+                v2_job_data = {
+                    'name': data.get('name', 'Unnamed Job'),
+                    'description': data.get('description', f"{data.get('type', 'Job')}: {data.get('name', 'Unnamed Job')}"),
+                    'yaml_config': yaml_config,
+                    'enabled': data.get('enabled', True),
+                    'schedule': data.get('schedule')  # Keep original schedule data for scheduler
+                }
                 
                 # Use integrated scheduler for job creation with scheduling
-                result = integrated_scheduler.create_job_with_schedule(clean_data)
+                result = integrated_scheduler.create_job_with_schedule(v2_job_data)
                 
                 if result.get('success', False):
                     logger.info(f"[API_JOB_CREATE] Job created successfully: {result.get('job_id', 'unknown')}")
@@ -648,12 +772,20 @@ def create_routes(app):
                         'error': 'Job management system not available'
                     }), 500
                 
-                # Remove description field if present (not supported by current schema)
-                clean_data = data.copy()
-                if 'description' in clean_data:
-                    clean_data.pop('description')
+                # Convert form data to V2 YAML format
+                logger.info(f"[API_JOB_CREATE] Converting form data to V2 YAML format")
+                yaml_config = convert_form_data_to_v2_yaml(data)
+                logger.info(f"[API_JOB_CREATE] Generated YAML config: {yaml_config[:200]}...")
                 
-                result = job_manager.create_job(clean_data)
+                # Create V2 job data
+                v2_job_data = {
+                    'name': data.get('name', 'Unnamed Job'),
+                    'description': data.get('description', f"{data.get('type', 'Job')}: {data.get('name', 'Unnamed Job')}"),
+                    'yaml_config': yaml_config,
+                    'enabled': data.get('enabled', True)
+                }
+                
+                result = job_manager.create_job(v2_job_data)
                 
                 if result.get('success', False):
                     logger.info(f"[API_JOB_CREATE] Job created successfully (no scheduling): {result.get('job_id', 'unknown')}")
@@ -771,19 +903,32 @@ def create_routes(app):
     def api_run_job(job_id):
         """API endpoint to run a job immediately - NEW MODERN EXECUTION"""
         print(f"**** ROUTE api_run_job() called with job_id: {job_id} ****")
+        print(f"**** ROUTE FILE: {__file__} ****")
+        print(f"**** ROUTE FUNCTION: api_run_job ****")
         logger.info(f"[API_RUN_JOB_V2] Received request to run job: {job_id}")
         
         try:
             # Get job manager to fetch job data
             job_manager = getattr(app, 'job_manager', None)
+            print(f"**** ROUTE job_manager type: {type(job_manager)} ****")
             if not job_manager:
                 return jsonify({
                     'success': False,
                     'error': 'Job manager not available'
                 }), 500
             
-            # Get job data
+            # Get job data - LOG THIS CALL CAREFULLY
+            print(f"**** ROUTE: About to call job_manager.get_job({job_id}) ****")
+            print(f"**** ROUTE: job_manager.get_job method: {job_manager.get_job} ****")
+            
+            # Import inspect to see method signature
+            import inspect
+            sig = inspect.signature(job_manager.get_job)
+            print(f"**** ROUTE: get_job signature: {sig} ****")
+            
             job_data = job_manager.get_job(job_id)
+            print(f"**** ROUTE: job_manager.get_job() returned: {job_data is not None} ****")
+            
             if not job_data:
                 return jsonify({
                     'success': False,
@@ -792,13 +937,27 @@ def create_routes(app):
             
             # Use the working unified job executor
             job_executor = getattr(app, 'job_executor', None)
+            print(f"**** ROUTE: app.job_executor exists: {job_executor is not None} ****")
+            
             if not job_executor:
                 # Fallback: create job executor
+                print(f"**** ROUTE: Importing JobExecutor from core.job_executor ****")
                 from core.job_executor import JobExecutor
+                print(f"**** ROUTE: JobExecutor class imported: {JobExecutor} ****")
+                
                 job_executor = JobExecutor(job_manager=job_manager)
+                print(f"**** ROUTE: JobExecutor instance created: {type(job_executor)} ****")
             
-            # Execute job directly (this works perfectly as tested)
+            # Execute job using CLEAN V2 YAML executor (fresh file, no caching)
+            print(f"**** ROUTE: About to call job_executor.execute_job({job_id}) ****")
+            print(f"**** ROUTE: job_executor.execute_job method: {job_executor.execute_job} ****")
+            
+            # Check execute_job signature
+            exec_sig = inspect.signature(job_executor.execute_job)
+            print(f"**** ROUTE: execute_job signature: {exec_sig} ****")
+            
             execution_result = job_executor.execute_job(job_id)
+            print(f"**** ROUTE: job_executor.execute_job() returned: {execution_result.get('success', 'Unknown')} ****")
             
             # Convert to API response format
             result = {
@@ -2865,7 +3024,7 @@ def create_routes(app):
             enabled_only = request.args.get('enabled_only', 'false').lower() == 'true'
             limit = request.args.get('limit', type=int)
             
-            jobs = job_manager.list_jobs(enabled_only=enabled_only, limit=limit, version='v2')
+            jobs = job_manager.list_jobs(enabled_only=enabled_only, limit=limit)
             
             return jsonify({
                 'success': True,
@@ -2932,7 +3091,7 @@ def create_routes(app):
                     'error': 'Job manager not available'
                 }), 500
             
-            job = job_manager.get_job(job_id, version='v2')
+            job = job_manager.get_job(job_id)
             
             if job:
                 return jsonify({
@@ -3021,6 +3180,7 @@ def create_routes(app):
                 from core.job_executor import JobExecutor
                 job_manager = getattr(app, 'job_manager', None)
                 executor = JobExecutor(job_manager=job_manager)
+                print(f"V2 ROUTES DEBUG: Using CLEAN V2 YAML executor for job {job_id}")
                 result = executor.execute_job(job_id)
             except ImportError:
                 # Fallback: Job execution not available
