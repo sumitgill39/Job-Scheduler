@@ -538,17 +538,340 @@
             <div class="section" id="agent-protocol">
                 <h1>4. Agent Communication Protocol</h1>
                 
-                <h3>4.1 Protocol Selection: RESTful HTTP API</h3>
-                <div class="info-box">
-                    <p><strong>Selected Protocol:</strong> HTTP/HTTPS with JSON payloads</p>
+                <h3>4.1 Protocol Options Analysis</h3>
+                
+                <h4>4.1.1 Option 1: RESTful HTTP API (Recommended)</h4>
+                <div class="highlight-box">
+                    <p><strong>Protocol:</strong> HTTP/HTTPS with JSON payloads</p>
                     <p><strong>Architecture:</strong> Pull-based with heartbeat mechanism</p>
                     <p><strong>Security:</strong> JWT tokens + HTTPS encryption</p>
                     <p><strong>Port:</strong> 8080 (configurable)</p>
                 </div>
                 
-                <h3>4.2 Agent Lifecycle Management</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Aspect</th>
+                            <th>Details</th>
+                            <th>Pros</th>
+                            <th>Cons</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Implementation</strong></td>
+                            <td>Standard REST endpoints</td>
+                            <td>Simple, widely supported</td>
+                            <td>Request-response overhead</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Scalability</strong></td>
+                            <td>Horizontal with load balancers</td>
+                            <td>Standard scaling patterns</td>
+                            <td>Connection per request</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Security</strong></td>
+                            <td>HTTPS + JWT tokens</td>
+                            <td>Industry standard, proven</td>
+                            <td>Token management overhead</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Debugging</strong></td>
+                            <td>Standard HTTP tools</td>
+                            <td>Easy troubleshooting</td>
+                            <td>Verbose payloads</td>
+                        </tr>
+                    </tbody>
+                </table>
                 
-                <h4>4.2.1 Agent Registration</h4>
+                <h4>4.1.2 Option 2: Message Queue (AMQP/Kafka)</h4>
+                <div class="info-box">
+                    <p><strong>Protocol:</strong> AMQP (RabbitMQ) or Apache Kafka</p>
+                    <p><strong>Architecture:</strong> Event-driven pub/sub messaging</p>
+                    <p><strong>Security:</strong> TLS + Authentication (SASL/OAuth)</p>
+                    <p><strong>Port:</strong> 5672 (AMQP) or 9092 (Kafka)</p>
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Aspect</th>
+                            <th>Details</th>
+                            <th>Pros</th>
+                            <th>Cons</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Implementation</strong></td>
+                            <td>Message broker required</td>
+                            <td>Decoupled, reliable delivery</td>
+                            <td>Additional infrastructure</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Scalability</strong></td>
+                            <td>Built-in clustering</td>
+                            <td>Excellent for high volume</td>
+                            <td>Complex configuration</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Security</strong></td>
+                            <td>TLS + SASL/OAuth</td>
+                            <td>Enterprise-grade security</td>
+                            <td>Complex setup</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Debugging</strong></td>
+                            <td>Specialized tools needed</td>
+                            <td>Message tracing available</td>
+                            <td>Harder to troubleshoot</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <pre><code># Example RabbitMQ Configuration
+exchanges:
+  - name: job.scheduler
+    type: topic
+    durable: true
+
+queues:
+  - name: agent.{agent_id}.jobs
+    durable: true
+    auto_delete: false
+  - name: scheduler.heartbeats
+    durable: true
+  - name: scheduler.results
+    durable: true
+
+bindings:
+  - exchange: job.scheduler
+    queue: agent.{agent_id}.jobs
+    routing_key: job.assign.{agent_id}</code></pre>
+                
+                <h4>4.1.3 Option 3: WebSocket (Real-time)</h4>
+                <div class="info-box">
+                    <p><strong>Protocol:</strong> WebSocket with JSON/Binary frames</p>
+                    <p><strong>Architecture:</strong> Persistent bidirectional connection</p>
+                    <p><strong>Security:</strong> WSS (WebSocket Secure) + Authentication</p>
+                    <p><strong>Port:</strong> 9090 (configurable)</p>
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Aspect</th>
+                            <th>Details</th>
+                            <th>Pros</th>
+                            <th>Cons</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Implementation</strong></td>
+                            <td>WebSocket server/client</td>
+                            <td>Real-time communication</td>
+                            <td>Connection management</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Scalability</strong></td>
+                            <td>Sticky sessions required</td>
+                            <td>Low latency</td>
+                            <td>Complex load balancing</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Security</strong></td>
+                            <td>WSS + Token auth</td>
+                            <td>Encrypted channel</td>
+                            <td>Persistent connection risks</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Debugging</strong></td>
+                            <td>Browser dev tools</td>
+                            <td>Real-time monitoring</td>
+                            <td>Frame-level debugging</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <pre><code># WebSocket Message Protocol
+// Agent → Scheduler
+{
+  "type": "agent.register",
+  "payload": {
+    "agent_id": "agent-001",
+    "capabilities": ["docker", "python"]
+  }
+}
+
+// Scheduler → Agent
+{
+  "type": "job.assign",
+  "payload": {
+    "job_id": "job-123",
+    "execution_id": "exec-456",
+    "yaml_config": "..."
+  }
+}</code></pre>
+                
+                <h4>4.1.4 Option 4: gRPC (High Performance)</h4>
+                <div class="info-box">
+                    <p><strong>Protocol:</strong> gRPC with Protocol Buffers</p>
+                    <p><strong>Architecture:</strong> HTTP/2 streaming RPC</p>
+                    <p><strong>Security:</strong> mTLS certificates</p>
+                    <p><strong>Port:</strong> 50051 (configurable)</p>
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Aspect</th>
+                            <th>Details</th>
+                            <th>Pros</th>
+                            <th>Cons</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Implementation</strong></td>
+                            <td>Protocol Buffer definitions</td>
+                            <td>Type-safe, efficient</td>
+                            <td>Learning curve</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Scalability</strong></td>
+                            <td>HTTP/2 multiplexing</td>
+                            <td>Excellent performance</td>
+                            <td>Proxy complexity</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Security</strong></td>
+                            <td>mTLS built-in</td>
+                            <td>Strong authentication</td>
+                            <td>Certificate management</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Debugging</strong></td>
+                            <td>gRPC-specific tools</td>
+                            <td>Strong typing helps</td>
+                            <td>Binary protocol</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <pre><code># agent.proto - gRPC Service Definition
+syntax = "proto3";
+
+service AgentService {
+  rpc RegisterAgent(AgentRegistration) returns (RegistrationResponse);
+  rpc StreamHeartbeat(stream Heartbeat) returns (stream HeartbeatAck);
+  rpc GetJobs(JobPollRequest) returns (stream JobAssignment);
+  rpc UpdateJobStatus(stream JobStatusUpdate) returns (StatusAck);
+}
+
+message AgentRegistration {
+  string agent_id = 1;
+  string hostname = 2;
+  repeated string capabilities = 3;
+  int32 max_parallel_jobs = 4;
+}</code></pre>
+                
+                <h3>4.2 Protocol Selection Rationale</h3>
+                
+                <div class="highlight-box">
+                    <h4>✅ Recommended: RESTful HTTP API</h4>
+                    <p><strong>Decision Factors:</strong></p>
+                    <ul>
+                        <li><strong>Simplicity</strong> - Easiest to implement and maintain</li>
+                        <li><strong>Compatibility</strong> - Works with any programming language</li>
+                        <li><strong>Infrastructure</strong> - No additional message brokers required</li>
+                        <li><strong>Firewall Friendly</strong> - Standard HTTP/HTTPS ports</li>
+                        <li><strong>Debugging</strong> - Standard tools (Postman, curl, browser)</li>
+                        <li><strong>Team Expertise</strong> - Most developers familiar with REST</li>
+                    </ul>
+                </div>
+                
+                <h4>Protocol Comparison Matrix</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Criteria</th>
+                            <th>REST API</th>
+                            <th>Message Queue</th>
+                            <th>WebSocket</th>
+                            <th>gRPC</th>
+                            <th>Weight</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Implementation Complexity</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐</td>
+                            <td>⭐⭐⭐</td>
+                            <td>⭐⭐</td>
+                            <td>25%</td>
+                        </tr>
+                        <tr>
+                            <td>Scalability</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>20%</td>
+                        </tr>
+                        <tr>
+                            <td>Performance</td>
+                            <td>⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>15%</td>
+                        </tr>
+                        <tr>
+                            <td>Security</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>15%</td>
+                        </tr>
+                        <tr>
+                            <td>Debugging/Monitoring</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐</td>
+                            <td>⭐⭐⭐</td>
+                            <td>⭐⭐</td>
+                            <td>15%</td>
+                        </tr>
+                        <tr>
+                            <td>Infrastructure Requirements</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>10%</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Total Score</strong></td>
+                            <td><strong>4.4/5</strong></td>
+                            <td><strong>3.3/5</strong></td>
+                            <td><strong>3.5/5</strong></td>
+                            <td><strong>3.4/5</strong></td>
+                            <td>100%</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>4.3 RESTful HTTP API Implementation</h3>
+                <div class="info-box">
+                    <p>Based on the analysis, <strong>RESTful HTTP API</strong> is selected as the primary protocol for the Agent-Based Job Execution System.</p>
+                </div>
+                
+                <h3>4.4 Agent Lifecycle Management</h3>
+                
+                <h4>4.4.1 Agent Registration</h4>
                 <pre><code>POST /api/agent/register
 Content-Type: application/json
 Authorization: Bearer {jwt_token}
@@ -569,7 +892,7 @@ Authorization: Bearer {jwt_token}
   }
 }</code></pre>
                 
-                <h4>4.2.2 Heartbeat Mechanism</h4>
+                <h4>4.4.2 Heartbeat Mechanism</h4>
                 <pre><code>POST /api/agent/heartbeat
 Content-Type: application/json
 Authorization: Bearer {jwt_token}
@@ -587,7 +910,7 @@ Authorization: Bearer {jwt_token}
   "last_job_completed": "2025-09-06T10:25:00Z"
 }</code></pre>
                 
-                <h4>4.2.3 Job Polling</h4>
+                <h4>4.4.3 Job Polling</h4>
                 <pre><code>GET /api/agent/jobs/poll?agent_id=win-agent-001&max_jobs=2
 Authorization: Bearer {jwt_token}
 
@@ -608,9 +931,9 @@ Response:
   "poll_interval_seconds": 30
 }</code></pre>
                 
-                <h3>4.3 Job Execution Protocol</h3>
+                <h3>4.5 Job Execution Protocol</h3>
                 
-                <h4>4.3.1 Job Status Updates</h4>
+                <h4>4.5.1 Job Status Updates</h4>
                 <pre><code>POST /api/agent/jobs/{execution_id}/status
 Content-Type: application/json
 Authorization: Bearer {jwt_token}
@@ -628,7 +951,7 @@ Authorization: Bearer {jwt_token}
   }
 }</code></pre>
                 
-                <h4>4.3.2 Job Completion</h4>
+                <h4>4.5.2 Job Completion</h4>
                 <pre><code>POST /api/agent/jobs/{execution_id}/complete
 Content-Type: application/json
 Authorization: Bearer {jwt_token}
@@ -663,7 +986,7 @@ Authorization: Bearer {jwt_token}
   }
 }</code></pre>
                 
-                <h3>4.4 Error Handling</h3>
+                <h3>4.6 Error Handling</h3>
                 <div class="warning-box">
                     <h4>⚠️ Error Scenarios</h4>
                     <ul>
