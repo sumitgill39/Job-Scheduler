@@ -1,0 +1,2224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent-Based Job Execution System - Engineering Design Document</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8f9fa;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .document-info {
+            background: #f8f9fa;
+            padding: 20px 40px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .document-info table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .document-info td {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .document-info td:first-child {
+            font-weight: 600;
+            color: #667eea;
+            width: 150px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 40px;
+        }
+        
+        .toc h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .toc ul {
+            list-style: none;
+        }
+        
+        .toc li {
+            margin: 8px 0;
+        }
+        
+        .toc a {
+            color: #333;
+            text-decoration: none;
+            padding: 5px 10px;
+            display: block;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        
+        .toc a:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        h1, h2, h3, h4 {
+            color: #333;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        
+        h1 {
+            color: #667eea;
+            font-size: 2.2em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            color: #764ba2;
+            font-size: 1.8em;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 8px;
+        }
+        
+        h3 {
+            color: #667eea;
+            font-size: 1.4em;
+        }
+        
+        h4 {
+            color: #666;
+            font-size: 1.2em;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .highlight-box {
+            background: linear-gradient(135deg, #667eea15, #764ba215);
+            padding: 25px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            margin: 20px 0;
+        }
+        
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-left: 4px solid #fdcb6e;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-left: 4px solid #2196f3;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            color: #d73a49;
+        }
+        
+        pre {
+            background: #f8f8f8;
+            border: 1px solid #e1e4e8;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+            margin: 15px 0;
+        }
+        
+        pre code {
+            background: none;
+            padding: 0;
+            color: #333;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .architecture-diagram {
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .flow-diagram {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea15, #764ba215);
+            border-radius: 8px;
+        }
+        
+        .flow-step {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+            min-width: 120px;
+        }
+        
+        .flow-arrow {
+            font-size: 1.5em;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-new { background: #e3f2fd; color: #1976d2; }
+        .status-enhanced { background: #f3e5f5; color: #7b1fa2; }
+        .status-critical { background: #ffebee; color: #d32f2f; }
+        
+        ul, ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+        
+        li {
+            margin: 8px 0;
+        }
+        
+        .footer {
+            background: #f8f9fa;
+            padding: 30px 40px;
+            text-align: center;
+            border-top: 1px solid #eee;
+            color: #666;
+        }
+        
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .header, .content { padding: 20px; }
+            .flow-diagram { flex-direction: column; }
+            .flow-arrow { transform: rotate(90deg); margin: 10px 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Document Header -->
+        <div class="header">
+            <h1>Agent-Based Job Execution System</h1>
+            <p>Engineering Design Document (EDD) - Distributed Job Processing Architecture</p>
+        </div>
+        
+        <!-- Document Information -->
+        <div class="document-info">
+            <table>
+                <tr>
+                    <td>Document Version:</td>
+                    <td>1.0</td>
+                </tr>
+                <tr>
+                    <td>Created Date:</td>
+                    <td>September 6, 2025</td>
+                </tr>
+                <tr>
+                    <td>Project:</td>
+                    <td>Windows Job Scheduler V3 - Agent Extension</td>
+                </tr>
+                <tr>
+                    <td>Target System:</td>
+                    <td>SQL Server (SUMEETGILL7E47\MSSQLSERVER01) + Agent Network</td>
+                </tr>
+                <tr>
+                    <td>Classification:</td>
+                    <td>Technical Specification</td>
+                </tr>
+                <tr>
+                    <td>Status:</td>
+                    <td><span class="status-badge status-new">Design Phase</span></td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h2>📋 Table of Contents</h2>
+                <ul>
+                    <li><a href="#executive-summary">1. Executive Summary</a></li>
+                    <li><a href="#system-overview">2. System Overview</a></li>
+                    <li><a href="#architecture">3. Architecture Design</a></li>
+                    <li><a href="#agent-protocol">4. Agent Communication Protocol</a></li>
+                    <li><a href="#database-schema">5. Database Schema</a></li>
+                    <li><a href="#yaml-configuration">6. YAML Configuration</a></li>
+                    <li><a href="#execution-strategies">7. Execution Strategies</a></li>
+                    <li><a href="#security-considerations">8. Security Considerations</a></li>
+                    <li><a href="#implementation-phases">9. Implementation Phases</a></li>
+                    <li><a href="#testing-strategy">10. Testing Strategy</a></li>
+                    <li><a href="#deployment-guide">11. Deployment Guide</a></li>
+                    <li><a href="#appendices">12. Appendices</a></li>
+                </ul>
+            </div>
+
+            <!-- Executive Summary -->
+            <div class="section" id="executive-summary">
+                <h1>1. Executive Summary</h1>
+                
+                <div class="highlight-box">
+                    <h3>🎯 Project Objective</h3>
+                    <p>Design and implement an <strong>Agent-Based Job Execution System</strong> that extends the existing Windows Job Scheduler with distributed computing capabilities, enabling jobs to execute across multiple remote agents with configurable parallelism strategies.</p>
+                </div>
+                
+                <h3>1.1 Business Requirements</h3>
+                <ul>
+                    <li><strong>Distributed Execution</strong> - Execute jobs across multiple remote machines</li>
+                    <li><strong>Execution Parallelism</strong> - Support multiple execution strategies (None, Multi-Configuration, Multi-Agent)</li>
+                    <li><strong>Agent Pool Management</strong> - Organize and manage groups of execution agents</li>
+                    <li><strong>Independent Job Type</strong> - New job category alongside SQL and PowerShell jobs</li>
+                    <li><strong>Enterprise Scalability</strong> - Support for large-scale distributed workloads</li>
+                </ul>
+                
+                <h3>1.2 Key Benefits</h3>
+                <div class="info-box">
+                    <ul>
+                        <li>🔄 <strong>Horizontal Scaling</strong> - Distribute workload across multiple machines</li>
+                        <li>⚡ <strong>Parallel Processing</strong> - Execute multiple configurations simultaneously</li>
+                        <li>🎯 <strong>Resource Optimization</strong> - Intelligent job distribution and load balancing</li>
+                        <li>🛡️ <strong>High Availability</strong> - Agent failure tolerance and automatic failover</li>
+                        <li>📊 <strong>Enterprise Integration</strong> - Similar to Azure DevOps Agent Pools</li>
+                    </ul>
+                </div>
+                
+                <h3>1.3 Success Criteria</h3>
+                <ol>
+                    <li>Successfully execute agent jobs across distributed machines</li>
+                    <li>Support all three parallelism strategies with configurable parameters</li>
+                    <li>Maintain 99.9% job execution reliability</li>
+                    <li>Integrate seamlessly with existing YAML-based job configuration</li>
+                    <li>Provide comprehensive monitoring and logging capabilities</li>
+                </ol>
+            </div>
+
+            <!-- System Overview -->
+            <div class="section" id="system-overview">
+                <h1>2. System Overview</h1>
+                
+                <h3>2.1 Current State Analysis</h3>
+                <p>The existing Windows Job Scheduler supports:</p>
+                <ul>
+                    <li><strong>SQL Jobs</strong> - Database query execution</li>
+                    <li><strong>PowerShell Jobs</strong> - Script execution on local machine</li>
+                    <li><strong>YAML Configuration</strong> - Flexible job definition format</li>
+                    <li><strong>V2 Architecture</strong> - Modern execution engine with step-based processing</li>
+                </ul>
+                
+                <h3>2.2 Proposed Enhancement</h3>
+                <div class="architecture-diagram">
+                    <h4>🏗️ Agent-Based Architecture</h4>
+                    <div class="flow-diagram">
+                        <div class="flow-step">
+                            <strong>Job Scheduler</strong><br>
+                            <small>Central Controller</small>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-step">
+                            <strong>Agent Pool</strong><br>
+                            <small>Distributed Agents</small>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-step">
+                            <strong>Job Execution</strong><br>
+                            <small>Parallel Processing</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>2.3 Agent Job Characteristics</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>SQL/PowerShell Jobs</th>
+                            <th>Agent Jobs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Execution Location</td>
+                            <td>Local Machine</td>
+                            <td>Remote Agents</td>
+                        </tr>
+                        <tr>
+                            <td>Parallelism</td>
+                            <td>Single Instance</td>
+                            <td>Configurable (None/Multi-Config/Multi-Agent)</td>
+                        </tr>
+                        <tr>
+                            <td>Resource Management</td>
+                            <td>Local Resources</td>
+                            <td>Agent Pool Resources</td>
+                        </tr>
+                        <tr>
+                            <td>Scalability</td>
+                            <td>Vertical (Machine Specs)</td>
+                            <td>Horizontal (More Agents)</td>
+                        </tr>
+                        <tr>
+                            <td>Failure Handling</td>
+                            <td>Single Point of Failure</td>
+                            <td>Agent Failover Support</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Architecture Design -->
+            <div class="section" id="architecture">
+                <h1>3. Architecture Design</h1>
+                
+                <h3>3.1 High-Level Architecture</h3>
+                <div class="architecture-diagram">
+                    <pre>
+┌─────────────────────────────────────────────────────────────────┐
+│                    Job Scheduler (Master)                       │
+├─────────────────────┬───────────────────┬───────────────────────┤
+│   Job Management    │   Agent Manager   │   Execution Engine    │
+│   • Job Queuing     │   • Agent Registry│   • Strategy Handler │
+│   • YAML Parsing    │   • Health Check  │   • Load Balancing   │
+│   • Result Tracking │   • Pool Mgmt     │   • Result Aggreg.   │
+└─────────────────────┴───────────────────┴───────────────────────┘
+                               │
+                    ┌──────────┴──────────┐
+                    │    Agent Protocol   │
+                    │   (HTTP REST API)   │
+                    └──────────┬──────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+┌───────▼──────┐    ┌─────────▼──────┐    ┌─────────▼──────┐
+│   Agent 1    │    │    Agent 2     │    │    Agent N     │
+│  Windows VM  │    │   Linux VM     │    │   Docker       │
+│  Pool: Build │    │  Pool: Test    │    │  Pool: Deploy  │
+└──────────────┘    └────────────────┘    └────────────────┘
+                    </pre>
+                </div>
+                
+                <h3>3.2 Component Responsibilities</h3>
+                
+                <h4>3.2.1 Job Scheduler (Master)</h4>
+                <ul>
+                    <li><strong>Job Management</strong> - YAML parsing, validation, queuing</li>
+                    <li><strong>Agent Manager</strong> - Agent registration, health monitoring, pool management</li>
+                    <li><strong>Execution Engine</strong> - Strategy implementation, job distribution, result aggregation</li>
+                    <li><strong>Database Integration</strong> - Job configuration storage, execution history</li>
+                </ul>
+                
+                <h4>3.2.2 Agents (Workers)</h4>
+                <ul>
+                    <li><strong>Job Execution</strong> - Receive and execute assigned jobs</li>
+                    <li><strong>Health Reporting</strong> - Regular heartbeat and status updates</li>
+                    <li><strong>Resource Monitoring</strong> - CPU, memory, disk usage reporting</li>
+                    <li><strong>Result Transmission</strong> - Send execution results back to master</li>
+                </ul>
+                
+                <h3>3.3 Data Flow</h3>
+                <div class="flow-diagram">
+                    <div class="flow-step">
+                        <strong>1. Job Submit</strong><br>
+                        <small>YAML → Parser</small>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>2. Agent Select</strong><br>
+                        <small>Pool → Strategy</small>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>3. Job Execute</strong><br>
+                        <small>Agent → Results</small>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>4. Results Aggregate</strong><br>
+                        <small>Master → Database</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent Protocol -->
+            <div class="section" id="agent-protocol">
+                <h1>4. Agent Communication Protocol</h1>
+                
+                <h3>4.1 Protocol Selection: RESTful HTTP API</h3>
+                <div class="info-box">
+                    <p><strong>Selected Protocol:</strong> HTTP/HTTPS with JSON payloads</p>
+                    <p><strong>Architecture:</strong> Pull-based with heartbeat mechanism</p>
+                    <p><strong>Security:</strong> JWT tokens + HTTPS encryption</p>
+                    <p><strong>Port:</strong> 8080 (configurable)</p>
+                </div>
+                
+                <h3>4.2 Agent Lifecycle Management</h3>
+                
+                <h4>4.2.1 Agent Registration</h4>
+                <pre><code>POST /api/agent/register
+Content-Type: application/json
+Authorization: Bearer {jwt_token}
+
+{
+  "agent_id": "win-agent-001",
+  "hostname": "BUILD-SERVER-01", 
+  "ip_address": "192.168.1.100",
+  "capabilities": ["windows", "dotnet", "powershell", "docker"],
+  "max_parallel_jobs": 3,
+  "agent_pool": "windows_build_pool",
+  "version": "1.0.0",
+  "system_info": {
+    "os": "Windows Server 2022",
+    "cpu_cores": 8,
+    "memory_gb": 16,
+    "disk_space_gb": 500
+  }
+}</code></pre>
+                
+                <h4>4.2.2 Heartbeat Mechanism</h4>
+                <pre><code>POST /api/agent/heartbeat
+Content-Type: application/json
+Authorization: Bearer {jwt_token}
+
+{
+  "agent_id": "win-agent-001",
+  "timestamp": "2025-09-06T10:30:00Z",
+  "status": "available", // available, busy, maintenance, offline
+  "current_jobs": ["job-123", "job-456"],
+  "resource_usage": {
+    "cpu_percent": 45.2,
+    "memory_percent": 67.8,
+    "disk_percent": 23.1
+  },
+  "last_job_completed": "2025-09-06T10:25:00Z"
+}</code></pre>
+                
+                <h4>4.2.3 Job Polling</h4>
+                <pre><code>GET /api/agent/jobs/poll?agent_id=win-agent-001&max_jobs=2
+Authorization: Bearer {jwt_token}
+
+Response:
+{
+  "jobs": [
+    {
+      "job_id": "job-789",
+      "job_name": "Build Application",
+      "execution_id": "exec-101",
+      "job_type": "agent_job",
+      "priority": 5,
+      "timeout_minutes": 30,
+      "yaml_configuration": "...",
+      "assigned_at": "2025-09-06T10:35:00Z"
+    }
+  ],
+  "poll_interval_seconds": 30
+}</code></pre>
+                
+                <h3>4.3 Job Execution Protocol</h3>
+                
+                <h4>4.3.1 Job Status Updates</h4>
+                <pre><code>POST /api/agent/jobs/{execution_id}/status
+Content-Type: application/json
+Authorization: Bearer {jwt_token}
+
+{
+  "agent_id": "win-agent-001",
+  "status": "running", // pending, running, success, failed, timeout
+  "progress_percent": 45,
+  "current_step": "build_application",
+  "message": "Compiling source code...",
+  "start_time": "2025-09-06T10:35:30Z",
+  "resource_usage": {
+    "cpu_percent": 85.0,
+    "memory_mb": 2048
+  }
+}</code></pre>
+                
+                <h4>4.3.2 Job Completion</h4>
+                <pre><code>POST /api/agent/jobs/{execution_id}/complete
+Content-Type: application/json
+Authorization: Bearer {jwt_token}
+
+{
+  "agent_id": "win-agent-001",
+  "status": "success",
+  "return_code": 0,
+  "start_time": "2025-09-06T10:35:30Z",
+  "end_time": "2025-09-06T10:45:15Z",
+  "duration_seconds": 585,
+  "output_log": "Build completed successfully...",
+  "error_message": null,
+  "step_results": [
+    {
+      "step_name": "checkout_code",
+      "status": "success",
+      "duration_seconds": 15,
+      "output": "Code checked out from repository"
+    },
+    {
+      "step_name": "build_application", 
+      "status": "success",
+      "duration_seconds": 570,
+      "output": "Application built successfully"
+    }
+  ],
+  "resource_summary": {
+    "peak_cpu_percent": 95.2,
+    "peak_memory_mb": 3072,
+    "disk_io_mb": 1024
+  }
+}</code></pre>
+                
+                <h3>4.4 Error Handling</h3>
+                <div class="warning-box">
+                    <h4>⚠️ Error Scenarios</h4>
+                    <ul>
+                        <li><strong>Agent Timeout</strong> - No heartbeat for 5 minutes → Mark agent offline</li>
+                        <li><strong>Job Timeout</strong> - Job exceeds timeout limit → Cancel and reassign</li>
+                        <li><strong>Network Failure</strong> - Connection loss → Implement exponential backoff</li>
+                        <li><strong>Authentication Failure</strong> - Invalid JWT → Require re-registration</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Database Schema -->
+            <div class="section" id="database-schema">
+                <h1>5. Database Schema</h1>
+                
+                <h3>5.1 New Tables for Agent System</h3>
+                
+                <h4>5.1.1 Agent Registration Table</h4>
+                <pre><code>CREATE TABLE [dbo].[agent_registry] (
+    -- Primary identification
+    [agent_id] NVARCHAR(50) PRIMARY KEY,
+    [agent_name] NVARCHAR(255) NOT NULL,
+    [hostname] NVARCHAR(255) NOT NULL,
+    [ip_address] NVARCHAR(50) NOT NULL,
+    
+    -- Agent capabilities and pool assignment
+    [agent_pool] NVARCHAR(100) NOT NULL,
+    [capabilities] NTEXT, -- JSON array of capabilities
+    [max_parallel_jobs] INT DEFAULT 1,
+    [agent_version] NVARCHAR(20),
+    
+    -- System information
+    [os_info] NVARCHAR(255),
+    [cpu_cores] INT,
+    [memory_gb] INT,
+    [disk_space_gb] INT,
+    
+    -- Status and health
+    [status] NVARCHAR(20) DEFAULT 'offline', -- online, offline, maintenance, error
+    [last_heartbeat] DATETIME,
+    [last_job_completed] DATETIME,
+    
+    -- Resource utilization
+    [current_jobs] INT DEFAULT 0,
+    [cpu_percent] FLOAT,
+    [memory_percent] FLOAT,
+    [disk_percent] FLOAT,
+    
+    -- Metadata
+    [registered_date] DATETIME DEFAULT GETDATE(),
+    [last_updated] DATETIME DEFAULT GETDATE(),
+    [is_active] BIT DEFAULT 1
+)</code></pre>
+                
+                <h4>5.1.2 Agent Pool Configuration</h4>
+                <pre><code>CREATE TABLE [dbo].[agent_pools] (
+    -- Pool identification
+    [pool_id] NVARCHAR(100) PRIMARY KEY,
+    [pool_name] NVARCHAR(255) NOT NULL,
+    [description] NTEXT,
+    
+    -- Pool configuration
+    [max_agents] INT DEFAULT 100,
+    [default_timeout_minutes] INT DEFAULT 60,
+    [required_capabilities] NTEXT, -- JSON array
+    [allowed_job_types] NTEXT, -- JSON array
+    
+    -- Load balancing strategy
+    [load_balancing_strategy] NVARCHAR(50) DEFAULT 'round_robin',
+    -- Options: round_robin, least_loaded, random, priority_based
+    
+    -- Pool status
+    [is_active] BIT DEFAULT 1,
+    [created_date] DATETIME DEFAULT GETDATE(),
+    [created_by] NVARCHAR(255) DEFAULT 'system'
+)</code></pre>
+                
+                <h4>5.1.3 Agent Job Assignments</h4>
+                <pre><code>CREATE TABLE [dbo].[agent_job_assignments] (
+    -- Assignment identification
+    [assignment_id] NVARCHAR(36) PRIMARY KEY, -- UUID
+    [execution_id] NVARCHAR(36) NOT NULL, -- FK to job_execution_history_v2
+    [job_id] NVARCHAR(36) NOT NULL, -- FK to job_configurations_v2
+    [agent_id] NVARCHAR(50) NOT NULL, -- FK to agent_registry
+    
+    -- Assignment details
+    [assignment_strategy] NVARCHAR(50), -- default_pool, multi_config, multi_agent
+    [configuration_index] INT, -- For multi-configuration jobs
+    [total_configurations] INT, -- Total number of configurations
+    
+    -- Assignment status
+    [assignment_status] NVARCHAR(20) DEFAULT 'assigned',
+    -- assigned, accepted, running, completed, failed, timeout, cancelled
+    [assigned_at] DATETIME DEFAULT GETDATE(),
+    [accepted_at] DATETIME,
+    [started_at] DATETIME,
+    [completed_at] DATETIME,
+    
+    -- Resource allocation
+    [priority] INT DEFAULT 5, -- 1-10 (10 = highest)
+    [timeout_minutes] INT DEFAULT 60,
+    [max_retries] INT DEFAULT 0,
+    [retry_count] INT DEFAULT 0,
+    
+    -- Results
+    [return_code] INT,
+    [output_log] NTEXT,
+    [error_message] NTEXT
+)</code></pre>
+                
+                <h3>5.2 Extended Job Configuration (YAML Enhancement)</h3>
+                <p>The existing <code>job_configurations_v2</code> table supports agent jobs through the <code>yaml_configuration</code> field:</p>
+                
+                <pre><code>-- Example YAML configuration stored in job_configurations_v2.yaml_configuration
+job_type: agent_job
+execution_strategy: multi_configuration
+agent_pool: windows_build_pool
+parallelism: configuration
+timeout_minutes: 45
+
+configurations:
+  - environment: development
+    database: dev_db
+    build_config: Debug
+  - environment: staging  
+    database: stage_db
+    build_config: Release
+  - environment: production
+    database: prod_db
+    build_config: Release
+
+job_steps:
+  - name: checkout_code
+    type: git_checkout
+    repository: "https://github.com/company/app.git"
+    branch: "${configuration.environment}"
+    
+  - name: build_application
+    type: dotnet_build
+    configuration: "${configuration.build_config}"
+    
+  - name: run_tests
+    type: dotnet_test
+    test_filter: "Category=${configuration.environment}"</code></pre>
+                
+                <h3>5.3 Database Indexes</h3>
+                <pre><code>-- Agent Registry Indexes
+CREATE INDEX IX_agent_registry_pool ON [dbo].[agent_registry]([agent_pool])
+CREATE INDEX IX_agent_registry_status ON [dbo].[agent_registry]([status])
+CREATE INDEX IX_agent_registry_heartbeat ON [dbo].[agent_registry]([last_heartbeat])
+CREATE INDEX IX_agent_registry_active ON [dbo].[agent_registry]([is_active])
+
+-- Agent Job Assignments Indexes  
+CREATE INDEX IX_agent_assignments_execution ON [dbo].[agent_job_assignments]([execution_id])
+CREATE INDEX IX_agent_assignments_agent ON [dbo].[agent_job_assignments]([agent_id])
+CREATE INDEX IX_agent_assignments_status ON [dbo].[agent_job_assignments]([assignment_status])
+CREATE INDEX IX_agent_assignments_assigned ON [dbo].[agent_job_assignments]([assigned_at])
+
+-- Agent Pools Indexes
+CREATE INDEX IX_agent_pools_active ON [dbo].[agent_pools]([is_active])</code></pre>
+            </div>
+
+            <!-- YAML Configuration -->
+            <div class="section" id="yaml-configuration">
+                <h1>6. YAML Configuration</h1>
+                
+                <h3>6.1 Agent Job Schema</h3>
+                <div class="info-box">
+                    <p>Agent jobs use the same YAML configuration system as SQL and PowerShell jobs, stored in the <code>job_configurations_v2.yaml_configuration</code> field.</p>
+                </div>
+                
+                <h4>6.1.1 Basic Agent Job Structure</h4>
+                <pre><code>job_type: agent_job
+name: "Build and Deploy Application"
+description: "Multi-environment build and deployment job"
+version: "2.0"
+
+# Agent execution configuration
+execution_strategy: default_pool  # default_pool, multi_configuration, multi_agent
+agent_pool: windows_build_pool
+parallelism: none  # none, configuration, agent
+timeout_minutes: 60
+priority: 5  # 1-10 (10 = highest)
+
+# Job requirements
+agent_requirements:
+  capabilities: ["dotnet", "docker", "git"]
+  min_cpu_cores: 4
+  min_memory_gb: 8
+  os_type: "windows"
+
+# Job execution steps
+job_steps:
+  - name: setup_environment
+    type: shell_command
+    command: "echo 'Setting up build environment'"
+    
+  - name: checkout_code
+    type: git_checkout
+    repository: "https://github.com/company/application.git"
+    branch: "main"
+    
+  - name: build_application
+    type: dotnet_build
+    project_file: "Application.sln"
+    configuration: "Release"
+    
+  - name: run_tests
+    type: dotnet_test
+    test_project: "Tests/UnitTests.csproj"</code></pre>
+                
+                <h3>6.2 Execution Strategies</h3>
+                
+                <h4>6.2.1 Default Pool Strategy</h4>
+                <pre><code>execution_strategy: default_pool
+agent_pool: default
+parallelism: none
+
+# Job runs on any available agent in the default pool
+# Single execution instance
+# Simplest configuration for basic jobs</code></pre>
+                
+                <h4>6.2.2 Multi-Configuration Strategy</h4>
+                <pre><code>execution_strategy: multi_configuration
+agent_pool: windows_build_pool
+parallelism: configuration
+max_parallel: 3
+
+# Multiple configurations run in parallel
+# Each configuration uses a single agent
+configurations:
+  - name: development
+    environment: dev
+    database_server: dev-sql-01
+    build_config: Debug
+    deploy_target: dev-web-01
+    
+  - name: staging
+    environment: stage  
+    database_server: stage-sql-01
+    build_config: Release
+    deploy_target: stage-web-01
+    
+  - name: production
+    environment: prod
+    database_server: prod-sql-01  
+    build_config: Release
+    deploy_target: prod-web-01
+
+# Steps can reference configuration variables
+job_steps:
+  - name: build_for_environment
+    type: dotnet_build
+    configuration: "${configuration.build_config}"
+    environment: "${configuration.environment}"
+    
+  - name: deploy_to_target
+    type: web_deploy
+    target_server: "${configuration.deploy_target}"
+    database_connection: "${configuration.database_server}"</code></pre>
+                
+                <h4>6.2.3 Multi-Agent Strategy</h4>
+                <pre><code>execution_strategy: multi_agent
+agent_pool: load_test_pool
+parallelism: agent
+agent_count: 5
+distribution: round_robin  # round_robin, random, least_loaded
+
+# Same job steps run on multiple agents simultaneously
+# Useful for load testing, distributed processing
+job_steps:
+  - name: run_load_test
+    type: load_test
+    target_url: "https://api.company.com"
+    concurrent_users: 100
+    test_duration: "10m"
+    
+  - name: collect_metrics
+    type: performance_collector
+    metrics: ["response_time", "throughput", "error_rate"]</code></pre>
+                
+                <h3>6.3 Advanced Configuration Options</h3>
+                
+                <h4>6.3.1 Conditional Execution</h4>
+                <pre><code>job_steps:
+  - name: build_application
+    type: dotnet_build
+    configuration: "Release"
+    
+  - name: run_integration_tests
+    type: dotnet_test
+    condition: "${configuration.environment != 'production'}"
+    test_category: "Integration"
+    
+  - name: deploy_to_production
+    type: deployment
+    condition: "${configuration.environment == 'production' && previous_step.success}"
+    target: "${configuration.deploy_target}"</code></pre>
+                
+                <h4>6.3.2 Error Handling and Retries</h4>
+                <pre><code>execution_strategy: multi_configuration
+retry_policy:
+  max_retries: 3
+  retry_interval_minutes: 5
+  retry_on_failure: true
+  backoff_strategy: exponential
+
+failure_handling:
+  continue_on_error: false
+  notify_on_failure: ["admin@company.com"]
+  rollback_on_failure: true
+
+job_steps:
+  - name: deploy_database
+    type: sql_deployment
+    retry_attempts: 2
+    timeout_minutes: 30
+    rollback_script: "rollback_v1.2.sql"</code></pre>
+                
+                <h4>6.3.3 Environment Variables and Secrets</h4>
+                <pre><code>environment_variables:
+  BUILD_NUMBER: "${system.build_number}"
+  ENVIRONMENT: "${configuration.environment}"
+  API_BASE_URL: "${configuration.api_url}"
+
+secrets:
+  - name: DATABASE_PASSWORD
+    source: azure_key_vault
+    key_name: "db-password-${configuration.environment}"
+    
+  - name: API_KEY
+    source: environment_variable
+    variable_name: "COMPANY_API_KEY"
+
+job_steps:
+  - name: connect_to_database
+    type: sql_connection_test
+    connection_string: "Server=${configuration.database_server};Database=AppDB;User Id=appuser;Password=${secrets.DATABASE_PASSWORD}"</code></pre>
+            </div>
+
+            <!-- Execution Strategies -->
+            <div class="section" id="execution-strategies">
+                <h1>7. Execution Strategies</h1>
+                
+                <h3>7.1 Strategy Comparison</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Strategy</th>
+                            <th>Use Case</th>
+                            <th>Agent Usage</th>
+                            <th>Parallelism</th>
+                            <th>Complexity</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Default Pool</strong></td>
+                            <td>Simple jobs, single execution</td>
+                            <td>1 Agent</td>
+                            <td>None</td>
+                            <td>Low</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Multi-Configuration</strong></td>
+                            <td>Environment deployments, A/B testing</td>
+                            <td>N Agents (per config)</td>
+                            <td>Configuration-based</td>
+                            <td>Medium</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Multi-Agent</strong></td>
+                            <td>Load testing, distributed processing</td>
+                            <td>M Agents (same job)</td>
+                            <td>Agent-based</td>
+                            <td>High</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>7.2 Strategy Implementation Details</h3>
+                
+                <h4>7.2.1 Default Pool Strategy</h4>
+                <div class="highlight-box">
+                    <p><strong>Behavior:</strong> Job executes on any available agent in the specified pool</p>
+                    <p><strong>Agent Selection:</strong> Based on pool's load balancing strategy (round-robin, least-loaded)</p>
+                    <p><strong>Result Handling:</strong> Single result set returned</p>
+                </div>
+                
+                <pre><code>Algorithm: Default Pool Execution
+1. Parse job configuration
+2. Validate agent requirements
+3. Select agent pool
+4. Find available agent using load balancing strategy
+5. Assign job to selected agent
+6. Monitor execution progress
+7. Collect and store results</code></pre>
+                
+                <h4>7.2.2 Multi-Configuration Strategy</h4>
+                <div class="highlight-box">
+                    <p><strong>Behavior:</strong> Job executes multiple times with different configurations in parallel</p>
+                    <p><strong>Agent Selection:</strong> Each configuration gets assigned to a different agent</p>
+                    <p><strong>Result Handling:</strong> Multiple result sets aggregated</p>
+                </div>
+                
+                <pre><code>Algorithm: Multi-Configuration Execution
+1. Parse job configuration and extract configurations array
+2. For each configuration:
+   a. Create execution instance with configuration variables
+   b. Select available agent from pool
+   c. Assign configuration-specific job to agent
+3. Monitor all parallel executions
+4. Wait for all configurations to complete (or fail)
+5. Aggregate results from all configurations
+6. Determine overall job status (success if all configs succeed)</code></pre>
+                
+                <h4>7.2.3 Multi-Agent Strategy</h4>
+                <div class="highlight-box">
+                    <p><strong>Behavior:</strong> Same job executes simultaneously on multiple agents</p>
+                    <p><strong>Agent Selection:</strong> Multiple agents selected based on distribution strategy</p>
+                    <p><strong>Result Handling:</strong> Multiple identical executions, results can be aggregated or analyzed separately</p>
+                </div>
+                
+                <pre><code>Algorithm: Multi-Agent Execution
+1. Parse job configuration and determine agent count
+2. Select N agents from pool using distribution strategy:
+   - round_robin: Cycle through available agents
+   - random: Randomly select from available agents  
+   - least_loaded: Select agents with lowest current load
+3. Create identical job instances for each selected agent
+4. Assign jobs to all selected agents simultaneously
+5. Monitor all parallel executions
+6. Collect results from all agents
+7. Apply aggregation logic (if specified)</code></pre>
+                
+                <h3>7.3 Load Balancing Algorithms</h3>
+                
+                <h4>7.3.1 Round Robin</h4>
+                <pre><code>class RoundRobinLoadBalancer:
+    def __init__(self, agents):
+        self.agents = agents
+        self.current_index = 0
+    
+    def select_agent(self):
+        if not self.agents:
+            return None
+        agent = self.agents[self.current_index]
+        self.current_index = (self.current_index + 1) % len(self.agents)
+        return agent</code></pre>
+                
+                <h4>7.3.2 Least Loaded</h4>
+                <pre><code>class LeastLoadedBalancer:
+    def select_agent(self, agents):
+        if not agents:
+            return None
+        return min(agents, key=lambda agent: agent.current_jobs + agent.cpu_percent/100)</code></pre>
+                
+                <h4>7.3.3 Priority Based</h4>
+                <pre><code>class PriorityBasedBalancer:
+    def select_agent(self, agents, job_priority):
+        available_agents = [a for a in agents if a.status == 'online']
+        if job_priority >= 8:  # High priority jobs
+            return max(available_agents, key=lambda a: a.cpu_cores * a.memory_gb)
+        else:  # Normal priority jobs
+            return min(available_agents, key=lambda a: a.current_jobs)</code></pre>
+            </div>
+
+            <!-- Security Considerations -->
+            <div class="section" id="security-considerations">
+                <h1>8. Security Considerations</h1>
+                
+                <h3>8.1 Authentication and Authorization</h3>
+                
+                <h4>8.1.1 JWT Token Management</h4>
+                <div class="warning-box">
+                    <h4>🔐 Security Requirements</h4>
+                    <ul>
+                        <li>All agent communications must use HTTPS/TLS 1.2+</li>
+                        <li>JWT tokens must be signed with strong keys (RS256 or ES256)</li>
+                        <li>Token expiration must be enforced (recommended: 4 hours)</li>
+                        <li>Refresh token mechanism for long-running agents</li>
+                    </ul>
+                </div>
+                
+                <pre><code>JWT Payload Structure:
+{
+  "sub": "agent-win-build-001",
+  "iss": "job-scheduler-master",
+  "aud": "agent-network", 
+  "exp": 1725627600,
+  "iat": 1725613200,
+  "agent_id": "win-build-001",
+  "agent_pool": "windows_build_pool",
+  "capabilities": ["dotnet", "docker", "powershell"],
+  "permissions": ["job.execute", "status.report", "heartbeat.send"]
+}</code></pre>
+                
+                <h4>8.1.2 Agent Registration Security</h4>
+                <ul>
+                    <li><strong>Agent Authentication</strong> - Pre-shared keys or certificate-based authentication</li>
+                    <li><strong>IP Address Validation</strong> - Whitelist allowed IP ranges for agent registration</li>
+                    <li><strong>Agent Approval Process</strong> - Manual approval required for new agent registration</li>
+                    <li><strong>Certificate Validation</strong> - X.509 certificate validation for enterprise environments</li>
+                </ul>
+                
+                <h3>8.2 Network Security</h3>
+                
+                <h4>8.2.1 Network Communication</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Protocol</th>
+                            <th>Port</th>
+                            <th>Security</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Agent Registration</td>
+                            <td>HTTPS</td>
+                            <td>8080</td>
+                            <td>TLS 1.2+ + JWT</td>
+                        </tr>
+                        <tr>
+                            <td>Job Assignment</td>
+                            <td>HTTPS</td>
+                            <td>8080</td>
+                            <td>TLS 1.2+ + JWT</td>
+                        </tr>
+                        <tr>
+                            <td>Status Updates</td>
+                            <td>HTTPS</td>
+                            <td>8080</td>
+                            <td>TLS 1.2+ + JWT</td>
+                        </tr>
+                        <tr>
+                            <td>Database Connection</td>
+                            <td>TDS (SQL Server)</td>
+                            <td>1433</td>
+                            <td>Windows Auth + Encryption</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h4>8.2.2 Firewall Configuration</h4>
+                <pre><code># Master Server (Job Scheduler)
+# Inbound Rules
+Allow TCP 8080 from Agent Network (e.g., 192.168.1.0/24)
+Allow TCP 1433 from Localhost (Database)
+Allow TCP 5000 from Admin Network (Web UI)
+
+# Agent Machines  
+# Outbound Rules
+Allow TCP 8080 to Master Server (Job Scheduler)
+Allow HTTPS 443 for external dependencies (if required)
+Deny all other outbound traffic by default</code></pre>
+                
+                <h3>8.3 Data Security</h3>
+                
+                <h4>8.3.1 Sensitive Data Handling</h4>
+                <div class="warning-box">
+                    <h4>⚠️ Critical Security Measures</h4>
+                    <ul>
+                        <li><strong>No Secrets in YAML</strong> - Use secret management system (Azure Key Vault, HashiCorp Vault)</li>
+                        <li><strong>Encrypted Database Connections</strong> - Enable SQL Server encryption</li>
+                        <li><strong>Secure Logging</strong> - Mask sensitive data in execution logs</li>
+                        <li><strong>Agent Isolation</strong> - Agents should not access each other directly</li>
+                    </ul>
+                </div>
+                
+                <h4>8.3.2 Secret Management Integration</h4>
+                <pre><code># YAML Configuration with Secret References
+job_steps:
+  - name: connect_to_api
+    type: http_request
+    url: "https://api.company.com/data"
+    headers:
+      Authorization: "Bearer ${secrets.api_token}"  # Retrieved from Key Vault
+      
+  - name: database_operation
+    type: sql_query
+    connection_string: "Server=db.company.com;Database=prod;User Id=appuser;Password=${secrets.db_password}"</code></pre>
+                
+                <h3>8.4 Audit and Monitoring</h3>
+                
+                <h4>8.4.1 Security Logging</h4>
+                <ul>
+                    <li><strong>Authentication Events</strong> - All agent authentication attempts (success/failure)</li>
+                    <li><strong>Authorization Events</strong> - Job assignment and execution permissions</li>
+                    <li><strong>Network Events</strong> - Unusual network traffic patterns</li>
+                    <li><strong>Data Access Events</strong> - Database and file system access</li>
+                </ul>
+                
+                <h4>8.4.2 Intrusion Detection</h4>
+                <pre><code># Security Monitoring Rules
+1. Multiple failed authentication attempts from same IP
+2. Agent heartbeat anomalies (too frequent or missing)
+3. Unusual job execution patterns (high-privilege operations)
+4. Network connections from unauthorized IP ranges
+5. Abnormal resource usage patterns on agents</code></pre>
+            </div>
+
+            <!-- Implementation Phases -->
+            <div class="section" id="implementation-phases">
+                <h1>9. Implementation Phases</h1>
+                
+                <h3>9.1 Phase 1: Foundation (Weeks 1-3)</h3>
+                <div class="highlight-box">
+                    <h4>🎯 Objective: Basic Agent Infrastructure</h4>
+                    <p>Establish core agent registration and communication capabilities</p>
+                </div>
+                
+                <h4>Week 1: Database Schema</h4>
+                <ul>
+                    <li>Create agent registry, agent pools, and assignment tables</li>
+                    <li>Implement database migration scripts</li>
+                    <li>Add indexes for performance optimization</li>
+                    <li>Test database integration with existing system</li>
+                </ul>
+                
+                <h4>Week 2: Agent Communication API</h4>
+                <ul>
+                    <li>Implement REST API endpoints for agent communication</li>
+                    <li>Add JWT authentication and authorization</li>
+                    <li>Create agent registration and heartbeat mechanisms</li>
+                    <li>Implement basic security measures (HTTPS, input validation)</li>
+                </ul>
+                
+                <h4>Week 3: Agent Client</h4>
+                <ul>
+                    <li>Develop agent client application (Python/C#)</li>
+                    <li>Implement registration, heartbeat, and job polling</li>
+                    <li>Create basic job execution framework</li>
+                    <li>Add logging and error handling</li>
+                </ul>
+                
+                <h3>9.2 Phase 2: Basic Execution (Weeks 4-6)</h3>
+                <div class="highlight-box">
+                    <h4>🎯 Objective: Default Pool Strategy</h4>
+                    <p>Implement single-agent job execution with basic load balancing</p>
+                </div>
+                
+                <h4>Week 4: Job Assignment Engine</h4>
+                <ul>
+                    <li>Implement agent pool management</li>
+                    <li>Create job assignment algorithms (round-robin, least-loaded)</li>
+                    <li>Add agent health monitoring and status tracking</li>
+                    <li>Implement job timeout and cancellation</li>
+                </ul>
+                
+                <h4>Week 5: YAML Parser Enhancement</h4>
+                <ul>
+                    <li>Extend YAML parser to support agent job configurations</li>
+                    <li>Implement job validation for agent requirements</li>
+                    <li>Add agent job type to execution engine</li>
+                    <li>Create job step execution framework</li>
+                </ul>
+                
+                <h4>Week 6: Web UI Integration</h4>
+                <ul>
+                    <li>Add agent management pages to web interface</li>
+                    <li>Implement agent registration approval workflow</li>
+                    <li>Create agent status dashboard</li>
+                    <li>Add agent job execution monitoring</li>
+                </ul>
+                
+                <h3>9.3 Phase 3: Advanced Execution (Weeks 7-10)</h3>
+                <div class="highlight-box">
+                    <h4>🎯 Objective: Multi-Configuration and Multi-Agent Strategies</h4>
+                    <p>Implement parallel execution strategies with result aggregation</p>
+                </div>
+                
+                <h4>Weeks 7-8: Multi-Configuration Strategy</h4>
+                <ul>
+                    <li>Implement configuration parsing and variable substitution</li>
+                    <li>Create parallel execution orchestration</li>
+                    <li>Add configuration-specific agent assignment</li>
+                    <li>Implement result aggregation and status determination</li>
+                </ul>
+                
+                <h4>Weeks 9-10: Multi-Agent Strategy</h4>
+                <ul>
+                    <li>Implement multi-agent job distribution</li>
+                    <li>Add agent selection strategies (round-robin, random, least-loaded)</li>
+                    <li>Create result collection and analysis</li>
+                    <li>Implement load testing and performance monitoring</li>
+                </ul>
+                
+                <h3>9.4 Phase 4: Production Readiness (Weeks 11-14)</h3>
+                <div class="highlight-box">
+                    <h4>🎯 Objective: Enterprise Features and Security</h4>
+                    <p>Add enterprise-grade security, monitoring, and reliability features</p>
+                </div>
+                
+                <h4>Weeks 11-12: Security Enhancement</h4>
+                <ul>
+                    <li>Implement advanced authentication (certificate-based)</li>
+                    <li>Add secret management integration (Azure Key Vault)</li>
+                    <li>Enhance audit logging and security monitoring</li>
+                    <li>Implement network security policies</li>
+                </ul>
+                
+                <h4>Weeks 13-14: Reliability and Monitoring</h4>
+                <ul>
+                    <li>Add comprehensive error handling and retry mechanisms</li>
+                    <li>Implement agent failover and automatic recovery</li>
+                    <li>Create performance monitoring and alerting</li>
+                    <li>Add capacity planning and resource optimization</li>
+                </ul>
+                
+                <h3>9.5 Delivery Milestones</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Phase</th>
+                            <th>Deliverable</th>
+                            <th>Success Criteria</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Phase 1</strong></td>
+                            <td>Agent Infrastructure</td>
+                            <td>Agents can register and communicate with master</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 2</strong></td>
+                            <td>Basic Job Execution</td>
+                            <td>Simple agent jobs execute successfully</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 3</strong></td>
+                            <td>Parallel Execution</td>
+                            <td>Multi-config and multi-agent jobs work correctly</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Phase 4</strong></td>
+                            <td>Production System</td>
+                            <td>System ready for enterprise deployment</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Testing Strategy -->
+            <div class="section" id="testing-strategy">
+                <h1>10. Testing Strategy</h1>
+                
+                <h3>10.1 Testing Pyramid</h3>
+                <div class="architecture-diagram">
+                    <pre>
+                    ┌─────────────────────────┐
+                    │    E2E Testing         │ ← Full system integration
+                    │   (10% of tests)       │
+                    ├─────────────────────────┤
+                    │   Integration Testing   │ ← Component interaction  
+                    │   (20% of tests)        │
+                    ├─────────────────────────┤
+                    │    Unit Testing        │ ← Individual components
+                    │   (70% of tests)        │
+                    └─────────────────────────┘
+                    </pre>
+                </div>
+                
+                <h3>10.2 Unit Testing</h3>
+                
+                <h4>10.2.1 Core Components</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Test Focus</th>
+                            <th>Test Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Agent Registration</td>
+                            <td>Registration logic, validation, JWT generation</td>
+                            <td>15 tests</td>
+                        </tr>
+                        <tr>
+                            <td>Job Assignment</td>
+                            <td>Load balancing, agent selection, assignment logic</td>
+                            <td>20 tests</td>
+                        </tr>
+                        <tr>
+                            <td>YAML Parser</td>
+                            <td>Agent job parsing, validation, configuration extraction</td>
+                            <td>25 tests</td>
+                        </tr>
+                        <tr>
+                            <td>Execution Strategies</td>
+                            <td>Default, multi-config, multi-agent logic</td>
+                            <td>30 tests</td>
+                        </tr>
+                        <tr>
+                            <td>Communication Protocol</td>
+                            <td>REST API endpoints, error handling, security</td>
+                            <td>35 tests</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h4>10.2.2 Sample Unit Tests</h4>
+                <pre><code>def test_agent_registration_valid_data():
+    """Test successful agent registration with valid data"""
+    agent_data = {
+        "agent_id": "test-agent-001",
+        "hostname": "test-host",
+        "capabilities": ["docker", "python"],
+        "max_parallel_jobs": 2,
+        "agent_pool": "test_pool"
+    }
+    
+    result = agent_manager.register_agent(agent_data)
+    
+    assert result['success'] == True
+    assert result['jwt_token'] is not None
+    assert agent_manager.get_agent("test-agent-001") is not None
+
+def test_round_robin_load_balancer():
+    """Test round robin agent selection"""
+    agents = [create_mock_agent("agent-1"), create_mock_agent("agent-2")]
+    balancer = RoundRobinLoadBalancer(agents)
+    
+    # First selection should be agent-1
+    assert balancer.select_agent().agent_id == "agent-1"
+    # Second selection should be agent-2  
+    assert balancer.select_agent().agent_id == "agent-2"
+    # Third selection should cycle back to agent-1
+    assert balancer.select_agent().agent_id == "agent-1"
+
+def test_multi_config_job_parsing():
+    """Test parsing of multi-configuration agent job"""
+    yaml_config = """
+    job_type: agent_job
+    execution_strategy: multi_configuration
+    configurations:
+      - env: dev
+      - env: prod
+    """
+    
+    job = yaml_parser.parse_agent_job(yaml_config)
+    
+    assert job.execution_strategy == "multi_configuration"
+    assert len(job.configurations) == 2
+    assert job.configurations[0]['env'] == 'dev'</code></pre>
+                
+                <h3>10.3 Integration Testing</h3>
+                
+                <h4>10.3.1 Component Integration Tests</h4>
+                <ul>
+                    <li><strong>Master-Agent Communication</strong> - Full protocol testing with real HTTP calls</li>
+                    <li><strong>Database Integration</strong> - Agent registry and job assignment with real database</li>
+                    <li><strong>Job Execution Flow</strong> - End-to-end job processing without UI</li>
+                    <li><strong>Security Integration</strong> - JWT authentication and HTTPS communication</li>
+                </ul>
+                
+                <h4>10.3.2 Sample Integration Test</h4>
+                <pre><code>def test_complete_agent_job_execution():
+    """Integration test: agent registration through job completion"""
+    
+    # 1. Register agent
+    agent_client = AgentClient("http://localhost:8080")
+    registration_result = agent_client.register({
+        "agent_id": "integration-test-agent",
+        "capabilities": ["python", "shell"]
+    })
+    assert registration_result['success'] == True
+    
+    # 2. Submit agent job
+    job_yaml = """
+    job_type: agent_job
+    execution_strategy: default_pool
+    agent_pool: default
+    job_steps:
+      - name: echo_test
+        type: shell_command
+        command: echo "Integration test successful"
+    """
+    
+    job_id = job_scheduler.submit_job(job_yaml)
+    assert job_id is not None
+    
+    # 3. Agent polls and executes job
+    jobs = agent_client.poll_jobs()
+    assert len(jobs) == 1
+    assert jobs[0]['job_id'] == job_id
+    
+    # 4. Execute job and report results
+    execution_result = agent_client.execute_job(jobs[0])
+    assert execution_result['status'] == 'success'
+    
+    # 5. Verify job completion in database
+    job_status = job_scheduler.get_job_status(job_id)
+    assert job_status['status'] == 'completed'</code></pre>
+                
+                <h3>10.4 End-to-End Testing</h3>
+                
+                <h4>10.4.1 Comprehensive Scenarios</h4>
+                <div class="info-box">
+                    <ul>
+                        <li>🔄 <strong>Full System Flow</strong> - Web UI job creation → Agent execution → Result display</li>
+                        <li>⚖️ <strong>Load Balancing</strong> - Multiple agents, multiple jobs, verify distribution</li>
+                        <li>🔀 <strong>Multi-Configuration</strong> - Parallel execution across different environments</li>
+                        <li>📊 <strong>Multi-Agent</strong> - Same job on multiple agents simultaneously</li>
+                        <li>💥 <strong>Failure Scenarios</strong> - Agent failures, network issues, job timeouts</li>
+                    </ul>
+                </div>
+                
+                <h4>10.4.2 Performance Testing</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Test Scenario</th>
+                            <th>Load</th>
+                            <th>Success Criteria</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Agent Registration</td>
+                            <td>100 agents in 60 seconds</td>
+                            <td>All agents successfully registered</td>
+                        </tr>
+                        <tr>
+                            <td>Job Distribution</td>
+                            <td>1000 jobs across 10 agents</td>
+                            <td>Even distribution, no timeouts</td>
+                        </tr>
+                        <tr>
+                            <td>Parallel Execution</td>
+                            <td>50 multi-config jobs (5 configs each)</td>
+                            <td>All 250 executions complete successfully</td>
+                        </tr>
+                        <tr>
+                            <td>Heartbeat Processing</td>
+                            <td>100 agents, 30-second intervals</td>
+                            <td>No missed heartbeats, accurate status</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>10.5 Testing Environment</h3>
+                
+                <h4>10.5.1 Test Infrastructure</h4>
+                <pre><code># Docker Compose Test Environment
+version: '3.8'
+services:
+  job-scheduler:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_CONNECTION_STRING=Server=sql-server;Database=testdb
+      
+  sql-server:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=TestPassword123!
+      
+  test-agent-1:
+    build: ./agent
+    environment:
+      - SCHEDULER_URL=http://job-scheduler:8080
+      - AGENT_ID=test-agent-1
+      
+  test-agent-2:
+    build: ./agent  
+    environment:
+      - SCHEDULER_URL=http://job-scheduler:8080
+      - AGENT_ID=test-agent-2</code></pre>
+                
+                <h4>10.5.2 Automated Testing Pipeline</h4>
+                <div class="flow-diagram">
+                    <div class="flow-step">
+                        <strong>Code Commit</strong><br>
+                        <small>Git Push</small>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>Unit Tests</strong><br>
+                        <small>pytest/unittest</small>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>Integration Tests</strong><br>
+                        <small>Docker Compose</small>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>E2E Tests</strong><br>
+                        <small>Selenium + API</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Deployment Guide -->
+            <div class="section" id="deployment-guide">
+                <h1>11. Deployment Guide</h1>
+                
+                <h3>11.1 System Requirements</h3>
+                
+                <h4>11.1.1 Master Server (Job Scheduler)</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Minimum</th>
+                            <th>Recommended</th>
+                            <th>Production</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>CPU</td>
+                            <td>4 cores</td>
+                            <td>8 cores</td>
+                            <td>16+ cores</td>
+                        </tr>
+                        <tr>
+                            <td>RAM</td>
+                            <td>8 GB</td>
+                            <td>16 GB</td>
+                            <td>32+ GB</td>
+                        </tr>
+                        <tr>
+                            <td>Storage</td>
+                            <td>100 GB SSD</td>
+                            <td>500 GB SSD</td>
+                            <td>1 TB+ NVMe</td>
+                        </tr>
+                        <tr>
+                            <td>Network</td>
+                            <td>1 Gbps</td>
+                            <td>10 Gbps</td>
+                            <td>25+ Gbps</td>
+                        </tr>
+                        <tr>
+                            <td>OS</td>
+                            <td colspan="3">Windows Server 2019+, Ubuntu 20.04+, CentOS 8+</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h4>11.1.2 Agent Machines</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Agent Type</th>
+                            <th>CPU</th>
+                            <th>RAM</th>
+                            <th>Storage</th>
+                            <th>Use Case</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Light Agent</td>
+                            <td>2 cores</td>
+                            <td>4 GB</td>
+                            <td>50 GB</td>
+                            <td>Simple scripts, API calls</td>
+                        </tr>
+                        <tr>
+                            <td>Standard Agent</td>
+                            <td>4 cores</td>
+                            <td>8 GB</td>
+                            <td>100 GB</td>
+                            <td>Build, test, deploy tasks</td>
+                        </tr>
+                        <tr>
+                            <td>Heavy Agent</td>
+                            <td>8+ cores</td>
+                            <td>16+ GB</td>
+                            <td>500+ GB</td>
+                            <td>Compilation, ML, data processing</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>11.2 Installation Steps</h3>
+                
+                <h4>11.2.1 Master Server Installation</h4>
+                
+                <pre><code># 1. Install Prerequisites
+# Windows
+choco install python3 git
+pip install -r requirements.txt
+
+# Linux  
+sudo apt update
+sudo apt install python3 python3-pip git
+pip3 install -r requirements.txt
+
+# 2. Database Setup
+sqlcmd -S "your-sql-server" -i database_setup_complete.sql
+
+# 3. Configuration
+cp .env.example .env
+# Edit .env with your database and security settings
+
+# 4. Initialize Database with Agent Tables
+python -c "
+from database.sqlalchemy_models import database_engine
+from database.agent_models import create_agent_tables
+database_engine.create_tables()
+create_agent_tables()
+"
+
+# 5. Start Job Scheduler
+python main.py --enable-agents</code></pre>
+                
+                <h4>11.2.2 Agent Installation</h4>
+                
+                <pre><code># 1. Download Agent Package
+wget https://releases.company.com/job-agent/v1.0/job-agent.zip
+unzip job-agent.zip
+cd job-agent
+
+# 2. Install Dependencies
+pip install -r requirements.txt
+
+# 3. Configuration
+cp config.example.yaml config.yaml
+
+# Edit config.yaml:
+scheduler:
+  url: "https://job-scheduler.company.com:8080"
+  api_key: "your-secure-api-key"
+  
+agent:
+  id: "unique-agent-id" 
+  name: "Agent Display Name"
+  pool: "default"
+  capabilities: ["python", "docker", "git"]
+  max_parallel_jobs: 3
+
+# 4. Install as Windows Service (Windows)
+python install_service.py
+
+# Install as systemd service (Linux)
+sudo cp job-agent.service /etc/systemd/system/
+sudo systemctl enable job-agent
+sudo systemctl start job-agent</code></pre>
+                
+                <h3>11.3 Configuration Management</h3>
+                
+                <h4>11.3.1 Master Server Configuration</h4>
+                <pre><code># .env - Production Configuration
+# Database Configuration
+DB_SERVER=prod-sql-cluster.company.com
+DB_DATABASE=job_scheduler_prod
+DB_TRUSTED_CONNECTION=false
+DB_USERNAME=job_scheduler_app
+DB_PASSWORD=${SECURE_DB_PASSWORD}
+DB_ENCRYPT=true
+DB_TRUST_SERVER_CERTIFICATE=false
+
+# Agent System Configuration
+AGENT_SYSTEM_ENABLED=true
+AGENT_API_PORT=8080
+AGENT_JWT_SECRET=${SECURE_JWT_SECRET}
+AGENT_JWT_EXPIRY_HOURS=4
+AGENT_HEARTBEAT_TIMEOUT_MINUTES=5
+AGENT_MAX_PARALLEL_ASSIGNMENTS=1000
+
+# Security Configuration
+HTTPS_ENABLED=true
+SSL_CERT_PATH=/etc/ssl/certs/job-scheduler.pem
+SSL_KEY_PATH=/etc/ssl/private/job-scheduler.key
+ALLOWED_AGENT_NETWORKS=192.168.1.0/24,10.0.0.0/16
+
+# Monitoring and Logging
+LOG_LEVEL=INFO
+METRICS_ENABLED=true
+AUDIT_LOGGING=true</code></pre>
+                
+                <h4>11.3.2 Agent Configuration Template</h4>
+                <pre><code># config.yaml - Agent Configuration
+scheduler:
+  url: "https://job-scheduler.company.com:8080"
+  api_key: "${AGENT_API_KEY}"
+  verify_ssl: true
+  connection_timeout: 30
+  request_timeout: 300
+
+agent:
+  id: "${HOSTNAME}-${ENVIRONMENT}"
+  name: "${ENVIRONMENT} Build Agent - ${HOSTNAME}" 
+  pool: "${AGENT_POOL}"
+  capabilities:
+    - "python3.9"
+    - "dotnet6"
+    - "docker"
+    - "git"
+    - "nodejs16"
+  
+  max_parallel_jobs: 3
+  heartbeat_interval: 30
+  job_poll_interval: 10
+  
+  resource_limits:
+    max_cpu_percent: 90
+    max_memory_percent: 85
+    max_disk_percent: 80
+
+logging:
+  level: "INFO"
+  file: "/var/log/job-agent/agent.log"
+  max_size_mb: 100
+  backup_count: 5
+
+security:
+  ssl_verify: true
+  cert_path: "/etc/ssl/certs/agent.pem"
+  key_path: "/etc/ssl/private/agent.key"</code></pre>
+                
+                <h3>11.4 Production Deployment</h3>
+                
+                <h4>11.4.1 High Availability Setup</h4>
+                <div class="architecture-diagram">
+                    <pre>
+                ┌─────────────────────────────────────┐
+                │         Load Balancer               │
+                │        (NGINX/HAProxy)              │
+                └─────────────┬───────────────────────┘
+                              │
+                ┌─────────────┴───────────────────────┐
+                │                                     │
+        ┌───────▼────────┐                  ┌────────▼───────┐
+        │ Job Scheduler  │                  │ Job Scheduler  │
+        │   (Master 1)   │◄────────────────►│   (Master 2)   │
+        └────────────────┘                  └────────────────┘
+                │                                     │
+                └─────────────┬───────────────────────┘
+                              │
+                    ┌─────────▼────────┐
+                    │  SQL Server      │
+                    │  Always On       │
+                    │  Availability    │
+                    │  Group           │
+                    └──────────────────┘
+                    </pre>
+                </div>
+                
+                <h4>11.4.2 Monitoring and Alerting</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Warning Threshold</th>
+                            <th>Critical Threshold</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Agent Heartbeat Missing</td>
+                            <td>2 minutes</td>
+                            <td>5 minutes</td>
+                            <td>Mark offline, reassign jobs</td>
+                        </tr>
+                        <tr>
+                            <td>Job Queue Length</td>
+                            <td>100 jobs</td>
+                            <td>500 jobs</td>
+                            <td>Scale agents, investigate bottlenecks</td>
+                        </tr>
+                        <tr>
+                            <td>Database Connection</td>
+                            <td>Connection errors</td>
+                            <td>Persistent failure</td>
+                            <td>Failover to secondary database</td>
+                        </tr>
+                        <tr>
+                            <td>Failed Job Rate</td>
+                            <td>5% in 1 hour</td>
+                            <td>15% in 1 hour</td>
+                            <td>Investigation required</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>11.5 Maintenance and Operations</h3>
+                
+                <h4>11.5.1 Backup Strategy</h4>
+                <ul>
+                    <li><strong>Database Backup</strong> - Daily full backup, hourly transaction log backup</li>
+                    <li><strong>Configuration Backup</strong> - Version controlled configuration files</li>
+                    <li><strong>Job History Archive</strong> - Monthly archival of execution history older than 90 days</li>
+                    <li><strong>Agent Logs</strong> - Centralized log collection with 30-day retention</li>
+                </ul>
+                
+                <h4>11.5.2 Update Procedures</h4>
+                <pre><code># Master Server Update (Blue-Green Deployment)
+1. Deploy new version to staging environment
+2. Run full test suite against staging
+3. Create database backup
+4. Update secondary master server
+5. Switch load balancer to updated server
+6. Update primary master server
+7. Verify all functionality
+8. Complete rollback plan if issues occur
+
+# Agent Update (Rolling Update)
+1. Update agents in batches (25% at a time)
+2. Drain jobs from agents before update
+3. Install new agent version
+4. Verify agent registration and job execution
+5. Continue to next batch</code></pre>
+            </div>
+
+            <!-- Appendices -->
+            <div class="section" id="appendices">
+                <h1>12. Appendices</h1>
+                
+                <h3>12.1 API Reference</h3>
+                
+                <h4>12.1.1 Agent Management Endpoints</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Endpoint</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>POST</td>
+                            <td>/api/agent/register</td>
+                            <td>Register new agent</td>
+                        </tr>
+                        <tr>
+                            <td>POST</td>
+                            <td>/api/agent/heartbeat</td>
+                            <td>Agent health update</td>
+                        </tr>
+                        <tr>
+                            <td>GET</td>
+                            <td>/api/agent/jobs/poll</td>
+                            <td>Poll for assigned jobs</td>
+                        </tr>
+                        <tr>
+                            <td>POST</td>
+                            <td>/api/agent/jobs/{id}/status</td>
+                            <td>Update job status</td>
+                        </tr>
+                        <tr>
+                            <td>POST</td>
+                            <td>/api/agent/jobs/{id}/complete</td>
+                            <td>Mark job complete</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h4>12.1.2 Administrative Endpoints</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Endpoint</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>GET</td>
+                            <td>/api/admin/agents</td>
+                            <td>List all agents</td>
+                        </tr>
+                        <tr>
+                            <td>PUT</td>
+                            <td>/api/admin/agents/{id}</td>
+                            <td>Update agent configuration</td>
+                        </tr>
+                        <tr>
+                            <td>DELETE</td>
+                            <td>/api/admin/agents/{id}</td>
+                            <td>Remove agent</td>
+                        </tr>
+                        <tr>
+                            <td>GET</td>
+                            <td>/api/admin/pools</td>
+                            <td>List agent pools</td>
+                        </tr>
+                        <tr>
+                            <td>POST</td>
+                            <td>/api/admin/pools</td>
+                            <td>Create agent pool</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>12.2 YAML Schema Reference</h3>
+                
+                <pre><code># Complete Agent Job YAML Schema
+job_type: agent_job                    # Required: Must be "agent_job"
+name: string                           # Required: Job display name  
+description: string                    # Optional: Job description
+version: string                        # Optional: Default "2.0"
+
+# Execution Configuration
+execution_strategy: enum               # Required: default_pool | multi_configuration | multi_agent
+agent_pool: string                     # Required: Target agent pool name
+parallelism: enum                      # Required: none | configuration | agent
+timeout_minutes: integer              # Optional: Default 60
+priority: integer                      # Optional: 1-10, default 5
+
+# Agent Requirements
+agent_requirements:                    # Optional
+  capabilities: [string]               # Required capabilities
+  min_cpu_cores: integer              # Minimum CPU cores
+  min_memory_gb: integer              # Minimum RAM in GB
+  os_type: string                     # windows | linux | macos
+  tags: [string]                      # Custom agent tags
+
+# Multi-Configuration Specific
+max_parallel: integer                  # Optional: Max parallel configs
+configurations: [object]              # Required for multi_configuration
+  - name: string                       # Configuration name
+    # Custom configuration variables
+
+# Multi-Agent Specific  
+agent_count: integer                   # Required for multi_agent
+distribution: enum                     # Optional: round_robin | random | least_loaded
+
+# Job Steps
+job_steps: [object]                    # Required: Array of steps
+  - name: string                       # Required: Step name
+    type: string                       # Required: Step type
+    condition: string                  # Optional: Conditional execution
+    timeout_minutes: integer           # Optional: Step timeout
+    retry_attempts: integer            # Optional: Retry count
+    # Step-specific parameters
+
+# Advanced Options
+environment_variables: object          # Optional: Environment variables  
+secrets: [object]                      # Optional: Secret references
+retry_policy: object                   # Optional: Global retry settings
+failure_handling: object              # Optional: Error handling
+notifications: object                  # Optional: Notification settings</code></pre>
+                
+                <h3>12.3 Database Schema Summary</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Table</th>
+                            <th>Purpose</th>
+                            <th>Key Columns</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>agent_registry</td>
+                            <td>Agent registration and status</td>
+                            <td>agent_id, hostname, status, capabilities</td>
+                        </tr>
+                        <tr>
+                            <td>agent_pools</td>
+                            <td>Agent pool configuration</td>
+                            <td>pool_id, name, load_balancing_strategy</td>
+                        </tr>
+                        <tr>
+                            <td>agent_job_assignments</td>
+                            <td>Job-to-agent assignments</td>
+                            <td>assignment_id, execution_id, agent_id</td>
+                        </tr>
+                        <tr>
+                            <td>job_configurations_v2</td>
+                            <td>Job definitions (existing, enhanced)</td>
+                            <td>job_id, yaml_configuration</td>
+                        </tr>
+                        <tr>
+                            <td>job_execution_history_v2</td>
+                            <td>Execution results (existing, enhanced)</td>
+                            <td>execution_id, job_id, status</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>12.4 Troubleshooting Guide</h3>
+                
+                <div class="warning-box">
+                    <h4>⚠️ Common Issues and Solutions</h4>
+                    
+                    <h5>Agent Registration Failures</h5>
+                    <ul>
+                        <li><strong>Invalid JWT</strong> - Check API key and token expiration</li>
+                        <li><strong>Network Connectivity</strong> - Verify firewall rules and DNS resolution</li>
+                        <li><strong>Duplicate Agent ID</strong> - Ensure unique agent identifiers</li>
+                    </ul>
+                    
+                    <h5>Job Assignment Issues</h5>
+                    <ul>
+                        <li><strong>No Available Agents</strong> - Check agent pool configuration and agent status</li>
+                        <li><strong>Capability Mismatch</strong> - Verify job requirements match agent capabilities</li>
+                        <li><strong>Load Balancer Errors</strong> - Check agent health and resource utilization</li>
+                    </ul>
+                    
+                    <h5>Execution Problems</h5>
+                    <ul>
+                        <li><strong>Job Timeouts</strong> - Increase timeout values or optimize job steps</li>
+                        <li><strong>Permission Errors</strong> - Verify agent service account permissions</li>
+                        <li><strong>Resource Exhaustion</strong> - Monitor CPU, memory, and disk usage</li>
+                    </ul>
+                </div>
+                
+                <h3>12.5 Performance Tuning</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Optimization</th>
+                            <th>Configuration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Database</td>
+                            <td>Index optimization</td>
+                            <td>Regular index maintenance, query optimization</td>
+                        </tr>
+                        <tr>
+                            <td>Agent Communication</td>
+                            <td>Connection pooling</td>
+                            <td>HTTP keep-alive, connection reuse</td>
+                        </tr>
+                        <tr>
+                            <td>Job Distribution</td>
+                            <td>Load balancing</td>
+                            <td>Optimize agent selection algorithms</td>
+                        </tr>
+                        <tr>
+                            <td>Heartbeat Processing</td>
+                            <td>Batch processing</td>
+                            <td>Process multiple heartbeats together</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>Agent-Based Job Execution System</strong> - Engineering Design Document v1.0</p>
+            <p>© 2025 Windows Job Scheduler Project • Confidential and Proprietary</p>
+            <p><em>This document contains technical specifications for enterprise software development.</em></p>
+        </div>
+    </div>
+</body>
+</html>
