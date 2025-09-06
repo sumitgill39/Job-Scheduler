@@ -372,9 +372,9 @@ class JobExecutionResult:
             "metadata": self.metadata
         }
     
-    def to_json(self) -> str:
-        """Convert to JSON string"""
-        return json.dumps(self.to_dict(), indent=2, default=str)
+    def to_text(self) -> str:
+        """Convert to text string"""
+        return str(self.to_dict())
 
 
 # Helper functions

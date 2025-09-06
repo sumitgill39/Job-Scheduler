@@ -27,15 +27,6 @@ class ExecutionLogEntry:
     component: str = ""
     details: Dict[str, Any] = field(default_factory=dict)
     
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization"""
-        return {
-            'timestamp': self.timestamp.isoformat(),
-            'level': self.level.value,
-            'message': self.message,
-            'component': self.component,
-            'details': self.details
-        }
 
 
 class ExecutionLogger:
@@ -201,15 +192,6 @@ class ExecutionLogger:
             'has_warnings': any(log.level == LogLevel.WARNING for log in self.logs)
         }
     
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert all logs to dictionary for JSON serialization"""
-        return {
-            'job_id': self.job_id,
-            'job_name': self.job_name,
-            'start_time': self.start_time.isoformat(),
-            'logs': [log.to_dict() for log in self.logs],
-            'summary': self.get_log_summary()
-        }
 
 
 class ExecutionLoggerContext:

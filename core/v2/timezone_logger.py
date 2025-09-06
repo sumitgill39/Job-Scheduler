@@ -11,7 +11,6 @@ from typing import Dict, Optional, Any
 from pathlib import Path
 import pytz
 from logging.handlers import TimedRotatingFileHandler
-import json
 
 from utils.logger import get_logger
 
@@ -209,7 +208,7 @@ class PerformanceLogger:
             "cpu_usage_percent": cpu_usage
         }
         
-        self.logger.info(json.dumps(metrics))
+        self.logger.info(f"PERFORMANCE_METRICS: {metrics}")
     
     def log_timezone_breakdown(self, timezone_stats: Dict[str, Dict[str, Any]]):
         """Log per-timezone performance breakdown"""
@@ -218,7 +217,7 @@ class PerformanceLogger:
             "timezone_stats": timezone_stats
         }
         
-        self.logger.info(f"TIMEZONE_BREAKDOWN: {json.dumps(breakdown)}")
+        self.logger.info(f"TIMEZONE_BREAKDOWN: {breakdown}")
     
     def log_queue_performance(self, timezone: str, queue_depth: int, throughput: float, 
                             avg_wait_time: float, worker_count: int):
@@ -232,7 +231,7 @@ class PerformanceLogger:
             "worker_count": worker_count
         }
         
-        self.logger.info(f"QUEUE_METRICS: {json.dumps(queue_metrics)}")
+        self.logger.info(f"QUEUE_METRICS: {queue_metrics}")
 
 
 class AuditLogger:
@@ -283,7 +282,7 @@ class AuditLogger:
             "steps_count": steps_count
         }
         
-        self.logger.info(json.dumps(audit_entry))
+        self.logger.info(f"AUDIT_EVENT: {audit_entry}")
     
     def log_api_access(self, endpoint: str, method: str, user: Optional[str], 
                       ip_address: str, status_code: int):
@@ -298,7 +297,7 @@ class AuditLogger:
             "status_code": status_code
         }
         
-        self.logger.info(json.dumps(access_entry))
+        self.logger.info(f"API_ACCESS: {access_entry}")
     
     def log_system_event(self, event_type: str, description: str, user: Optional[str] = None):
         """Log system events for audit trail"""
@@ -309,7 +308,7 @@ class AuditLogger:
             "user": user or "system"
         }
         
-        self.logger.info(json.dumps(system_entry))
+        self.logger.info(f"SYSTEM_EVENT: {system_entry}")
 
 
 # Global instances

@@ -4,11 +4,9 @@ Creates detailed logs for each job execution with comprehensive step tracking
 """
 
 import os
-import json
 from datetime import datetime, timezone
 from typing import Dict, Optional, Any, List
 from pathlib import Path
-from dataclasses import asdict
 
 from .data_models import JobDefinition, JobExecutionResult, StepResult, StepConfiguration
 from utils.logger import get_logger
@@ -100,14 +98,14 @@ EXECUTION STEPS:
   Timeout: {step.timeout or 'Default'} seconds
   Continue on Failure: {step.continue_on_failure}
   Retry Count: {step.retry_count}
-  Configuration: {json.dumps(step.config, indent=4)}
+  Configuration: {step.config}
 
 """
         
         if job_definition.metadata:
             content += f"""JOB METADATA:
 -------------
-{json.dumps(job_definition.metadata, indent=2)}
+{job_definition.metadata}
 
 """
         
@@ -133,7 +131,7 @@ Step ID: {step.step_id}
 Step Type: {step.step_type}
 Timeout: {step.timeout or 'Default'} seconds
 Configuration:
-{json.dumps(step.config, indent=2)}
+{step.config}
 
 """
         self._write_to_file(content)
@@ -184,7 +182,7 @@ Retry Count: {step_result.retry_count}
             content += f"Error: {step_result.error_message}\n"
         
         if step_result.metadata:
-            content += f"Metadata:\n{json.dumps(step_result.metadata, indent=2)}\n"
+            content += f"Metadata:\n{step_result.metadata}\n"
         
         content += "\n"
         self._write_to_file(content)
@@ -245,7 +243,7 @@ STEPS SUMMARY:
             content += f"""
 EXECUTION METADATA:
 -------------------
-{json.dumps(result.metadata, indent=2)}
+{result.metadata}
 """
         
         content += f"""
@@ -308,18 +306,17 @@ Data Size: {data_size if data_size else 'Unknown'} bytes
         self.system_logger.info(f"Job log archived: {archive_path}")
         return archive_path
     
-    def export_to_json(self) -> Dict[str, Any]:
-        """Export log metadata to JSON"""
-        return {
-            "job_id": self.job_id,
-            "execution_id": self.execution_id,
-            "job_name": self.job_name,
-            "timezone": self.timezone_name,
-            "log_file": str(self.log_file),
-            "log_size": self.get_log_size(),
-            "start_time": self.start_time.isoformat(),
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
+    def get_log_summary(self) -> str:
+        """Get log summary as text"""
+        return f"""Log Summary:
+Job ID: {self.job_id}
+Execution ID: {self.execution_id}
+Job Name: {self.job_name}
+Timezone: {self.timezone_name}
+Log File: {self.log_file}
+Log Size: {self.get_log_size()} bytes
+Start Time: {self.start_time.isoformat()}
+Created At: {datetime.now(timezone.utc).isoformat()}"""
 
 
 def create_job_logger(job_id: str, execution_id: str, job_name: str, timezone_name: str) -> JobLogger:
