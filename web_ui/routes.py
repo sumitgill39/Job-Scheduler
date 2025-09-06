@@ -312,34 +312,11 @@ def create_routes(app):
                 flash('Job manager not available', 'error')
                 return redirect(url_for('job_list'))
             
-            # Get job data with enhanced debugging
+            # Get job data
             job_data = job_manager.get_job(job_id)
-            
-            # Enhanced debugging for edit job
-            logger.info(f"[EDIT_JOB] Raw job_data retrieved: {job_data is not None}")
-            if job_data:
-                logger.info(f"[EDIT_JOB] Job data keys: {list(job_data.keys())}")
-                logger.info(f"[EDIT_JOB] Job name: {job_data.get('name', 'NO_NAME')}")
-                logger.info(f"[EDIT_JOB] Job enabled: {job_data.get('enabled', 'NO_ENABLED')}")
-                logger.info(f"[EDIT_JOB] Job version: {job_data.get('version', 'NO_VERSION')}")
-                logger.info(f"[EDIT_JOB] YAML config length: {len(job_data.get('yaml_configuration', ''))}")
-                logger.info(f"[EDIT_JOB] Parsed config exists: {bool(job_data.get('parsed_config'))}")
-                if job_data.get('parsed_config'):
-                    logger.info(f"[EDIT_JOB] Parsed config keys: {list(job_data.get('parsed_config', {}).keys())}")
-            else:
-                logger.error(f"[EDIT_JOB] No job data retrieved for job_id: {job_id}")
-                
             if not job_data:
                 flash(f'Job {job_id} not found', 'error')
                 return redirect(url_for('job_list'))
-            
-            # Final template data debug
-            logger.info(f"[EDIT_JOB] Template data - job_type: {job_data.get('job_type', 'MISSING')}")
-            logger.info(f"[EDIT_JOB] Template data - script_content: {job_data.get('script_content', 'MISSING')}")
-            logger.info(f"[EDIT_JOB] Template data - script_path: {job_data.get('script_path', 'MISSING')}")
-            logger.info(f"[EDIT_JOB] Template data - configuration keys: {list(job_data.get('configuration', {}).keys())}")
-            
-            logger.info(f"[EDIT_JOB] Successfully loaded job data for editing: {job_data['name']}")
             return render_template('edit_job.html', job_id=job_id, job=job_data)
             
         except Exception as e:
@@ -385,17 +362,13 @@ def create_routes(app):
                 if job_executor:
                     try:
                         history = job_executor.get_execution_history(job_id, limit=20)
-                        logger.debug(f"[JOB_DETAILS] Loaded {len(history)} execution records from JobExecutor")
                     except Exception as e:
-                        logger.warning(f"[JOB_DETAILS] JobExecutor failed: {e}")
+                        logger.warning(f"JobExecutor failed, using fallback: {e}")
                         # Fallback to job manager
                         history = job_manager.get_execution_history(job_id, limit=20)
-                        logger.debug(f"[JOB_DETAILS] Loaded {len(history)} execution records from JobManager")
                 else:
-                    logger.warning(f"[JOB_DETAILS] JobExecutor not available")
                     # Fallback to job manager
                     history = job_manager.get_execution_history(job_id, limit=20)
-                    logger.debug(f"[JOB_DETAILS] Loaded {len(history)} execution records from JobManager")
             except Exception as e:
                 logger.warning(f"[JOB_DETAILS] Could not load execution history: {e}")
                 history = []
@@ -442,12 +415,12 @@ def create_routes(app):
             status = {
                 'enabled': job['enabled'],
                 'current_status': 'enabled' if job['enabled'] else 'disabled',
-                'is_running': False,  # TODO: Get from scheduler if available
-                'retry_count': 0,     # TODO: Get from execution history
+                'is_running': False,
+                'retry_count': 0,
                 'max_retries': job['max_retries'],
                 'schedule': config.get('schedule'),
-                'next_run_time': None,  # TODO: Get from scheduler
-                'last_run_time': None,  # TODO: Get from execution history
+                'next_run_time': None,
+                'last_run_time': None,
                 'last_result': history[0] if history else None
             }
             
@@ -480,8 +453,6 @@ def create_routes(app):
                 status['last_result'] = history[0]  # Update with formatted data
             
             logger.info(f"[JOB_DETAILS] Successfully loaded job details: {job['name']} (ID: {job_id})")
-            logger.debug(f"[JOB_DETAILS] Job type: {job.get('job_type')}, Enabled: {job.get('enabled')}")
-            logger.debug(f"[JOB_DETAILS] History count: {len(history)}")
             
             return render_template('job_details.html', job=job, status=status, history=history)
         
@@ -820,40 +791,6 @@ def create_routes(app):
                 'error': f'Unexpected error: {str(e)}'
             }), 500
     
-    @app.route('/api/executions/history/v2-only-test', methods=['GET'])
-    def api_execution_history_v2_only_test():
-        """TEST API endpoint to verify V2-only data"""
-        logger.info("[API_EXECUTION_HISTORY_V2_TEST] *** NEW ENDPOINT V2-ONLY TEST ***")
-        
-        try:
-            # Get query parameters
-            limit = request.args.get('limit', 10, type=int)
-            
-            # Use global JobManager instance
-            job_manager = getattr(app, 'job_manager', None)
-            if not job_manager:
-                return jsonify({
-                    'success': False,
-                    'error': 'Database not available'
-                }), 500
-            
-            # Get execution history from database - V2-only method
-            history = job_manager.get_all_execution_history(limit)
-            
-            return jsonify({
-                'success': True,
-                'test_endpoint': 'v2-only-verification',
-                'total_count': len(history),
-                'executions': history,
-                'message': 'This endpoint only exists in the new V2-only process'
-            })
-            
-        except Exception as e:
-            logger.error(f"[API_EXECUTION_HISTORY_V2_TEST] Error: {e}")
-            return jsonify({
-                'success': False,
-                'error': str(e)
-            }), 500
     
     @app.route('/api/executions/history', methods=['GET'])
     def api_execution_history():
@@ -907,62 +844,34 @@ def create_routes(app):
     @app.route('/api/jobs/<job_id>/run', methods=['POST'])
     def api_run_job(job_id):
         """API endpoint to run a job immediately - NEW MODERN EXECUTION"""
-        print(f"**** ROUTE api_run_job() called with job_id: {job_id} ****")
-        print(f"**** ROUTE FILE: {__file__} ****")
-        print(f"**** ROUTE FUNCTION: api_run_job ****")
-        logger.info(f"[API_RUN_JOB_V2] Received request to run job: {job_id}")
+        logger.info(f"[API_RUN_JOB] Received request to run job: {job_id}")
         
         try:
             # Get job manager to fetch job data
             job_manager = getattr(app, 'job_manager', None)
-            print(f"**** ROUTE job_manager type: {type(job_manager)} ****")
             if not job_manager:
                 return jsonify({
                     'success': False,
                     'error': 'Job manager not available'
                 }), 500
             
-            # Get job data - LOG THIS CALL CAREFULLY
-            print(f"**** ROUTE: About to call job_manager.get_job({job_id}) ****")
-            print(f"**** ROUTE: job_manager.get_job method: {job_manager.get_job} ****")
-            
-            # Import inspect to see method signature
-            import inspect
-            sig = inspect.signature(job_manager.get_job)
-            print(f"**** ROUTE: get_job signature: {sig} ****")
-            
+            # Get job data
             job_data = job_manager.get_job(job_id)
-            print(f"**** ROUTE: job_manager.get_job() returned: {job_data is not None} ****")
-            
             if not job_data:
                 return jsonify({
                     'success': False,
                     'error': f'Job {job_id} not found'
                 }), 404
             
-            # Use the working unified job executor
+            # Use the job executor
             job_executor = getattr(app, 'job_executor', None)
-            print(f"**** ROUTE: app.job_executor exists: {job_executor is not None} ****")
-            
             if not job_executor:
                 # Fallback: create job executor
-                print(f"**** ROUTE: Importing JobExecutor from core.job_executor ****")
                 from core.job_executor import JobExecutor
-                print(f"**** ROUTE: JobExecutor class imported: {JobExecutor} ****")
-                
                 job_executor = JobExecutor(job_manager=job_manager)
-                print(f"**** ROUTE: JobExecutor instance created: {type(job_executor)} ****")
             
-            # Execute job using CLEAN V2 YAML executor (fresh file, no caching)
-            print(f"**** ROUTE: About to call job_executor.execute_job({job_id}) ****")
-            print(f"**** ROUTE: job_executor.execute_job method: {job_executor.execute_job} ****")
-            
-            # Check execute_job signature
-            exec_sig = inspect.signature(job_executor.execute_job)
-            print(f"**** ROUTE: execute_job signature: {exec_sig} ****")
-            
+            # Execute job
             execution_result = job_executor.execute_job(job_id)
-            print(f"**** ROUTE: job_executor.execute_job() returned: {execution_result.get('success', 'Unknown')} ****")
             
             # Convert to API response format
             result = {
@@ -1051,8 +960,8 @@ def create_routes(app):
             logger.error(f"API delete job error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
-    # Connection cache to avoid race conditions (temporarily disabled for debugging)
-    _connection_cache = {'data': None, 'timestamp': 0, 'cache_duration': 0}  # Cache disabled for debugging
+    # Connection cache to avoid race conditions
+    _connection_cache = {'data': None, 'timestamp': 0, 'cache_duration': 30}  # Cache for 30 seconds
     
     @app.route('/api/connections', methods=['GET'])
     def api_get_connections():
@@ -1119,13 +1028,11 @@ def create_routes(app):
         
         try:
             # Get system connection once and reuse it
-            logger.debug("[BATCH_LOAD] Attempting to create system connection")
             system_connection = db_manager._create_new_connection("system")
             if not system_connection:
                 logger.warning("[BATCH_LOAD] No system connection available, using fallback")
                 raise Exception("System connection not available")
             
-            logger.debug("[BATCH_LOAD] Creating cursor and executing query")
             cursor = system_connection.cursor()
             
             # Single query to get all connection data (using correct column names)
@@ -1144,11 +1051,9 @@ def create_routes(app):
                 ORDER BY name
             """
             
-            logger.debug(f"[BATCH_LOAD] Executing query: {query.strip()}")
             cursor.execute(query)
             
             rows = cursor.fetchall()
-            logger.debug(f"[BATCH_LOAD] Query returned {len(rows)} rows")
             
             cursor.close()
             system_connection.close()
@@ -1169,7 +1074,7 @@ def create_routes(app):
                 })
             
             batch_time = time.time() - batch_start
-            logger.info(f"[BATCH_LOAD] Batch loaded {len(connections)} connections in {batch_time:.3f}s")
+            logger.info(f"Loaded {len(connections)} connections in {batch_time:.3f}s")
             
         except Exception as e:
             logger.error(f"[BATCH_LOAD] Batch loading failed: {e}")
@@ -1513,10 +1418,7 @@ def create_routes(app):
             import threading
             connections = pool.db_manager.list_connections()
             
-            logger.info(f"[PARALLEL_VALIDATION] Found {len(connections)} connections to validate: {', '.join(connections)}")
-            
             if not connections:
-                logger.info("[PARALLEL_VALIDATION] No connections found to validate")
                 return jsonify({
                     'success': True,
                     'results': {},
@@ -1538,10 +1440,6 @@ def create_routes(app):
                         result = {'success': False, 'error': 'SQLAlchemy database engine not available'}
                     thread_time = time.time() - thread_start
                     
-                    if result.get('success', False):
-                        logger.info(f"[PARALLEL_VALIDATION] Connection '{conn_name}' validated successfully in {thread_time:.2f}s (response: {result.get('response_time', 0):.2f}s)")
-                    else:
-                        logger.warning(f"[PARALLEL_VALIDATION] Connection '{conn_name}' validation failed in {thread_time:.2f}s: {result.get('error', 'Unknown error')}")
                     
                     return conn_name, {
                         'success': result.get('success', False),
@@ -1553,7 +1451,6 @@ def create_routes(app):
                     }
                 except Exception as e:
                     thread_time = time.time() - thread_start
-                    logger.error(f"[PARALLEL_VALIDATION] Exception testing connection '{conn_name}' in {thread_time:.2f}s: {e}")
                     
                     return conn_name, {
                         'success': False,
@@ -2076,33 +1973,24 @@ def create_routes(app):
     @app.route('/api/jobs/<job_id>/history/<execution_id>')
     def api_execution_details(job_id, execution_id):
         """V2-FIXED API endpoint to get individual execution details from job_execution_history_v2"""
-        print(f"[V2_ENDPOINT_CONFIRMED] *** EXECUTION DETAILS REQUEST RECEIVED ***")
-        print(f"[V2_ENDPOINT_CONFIRMED] job_id={job_id}, execution_id={execution_id}")
-        print(f"[V2_ENDPOINT_CONFIRMED] Using JobExecutionHistoryV2 table ONLY")
-        
         try:
             from database.sqlalchemy_models import JobExecutionHistoryV2, get_db_session
-            print(f"[V2_ENDPOINT_CONFIRMED] Imported JobExecutionHistoryV2 successfully")
             
             with get_db_session() as session:
-                print(f"[V2_ENDPOINT_CONFIRMED] Querying JobExecutionHistoryV2 table...")
                 execution = session.query(JobExecutionHistoryV2).filter(
                     JobExecutionHistoryV2.job_id == job_id,
                     JobExecutionHistoryV2.execution_id == execution_id
                 ).first()
                 
                 if execution:
-                    print(f"[V2_ENDPOINT_CONFIRMED] SUCCESS: Found execution in V2 table")
                     result = {
                         'success': True,
                         'execution': execution.to_dict(),
                         'table_used': 'job_execution_history_v2',
                         'endpoint_version': 'V2_FIXED'
                     }
-                    print(f"[V2_ENDPOINT_CONFIRMED] Returning V2 execution data")
                     return jsonify(result)
                 else:
-                    print(f"[V2_ENDPOINT_CONFIRMED] NOT FOUND: Execution not found in V2 table")
                     return jsonify({
                         'success': False,
                         'error': f'V2 Execution {execution_id} not found for job {job_id}',
@@ -2111,9 +1999,6 @@ def create_routes(app):
                     }), 404
         
         except Exception as e:
-            print(f"[V2_ENDPOINT_CONFIRMED] ERROR: {str(e)}")
-            import traceback
-            print(f"[V2_ENDPOINT_CONFIRMED] TRACEBACK: {traceback.format_exc()}")
             return jsonify({
                 'success': False,
                 'error': f'V2 Failed to get execution details: {str(e)}',
@@ -2233,51 +2118,6 @@ def create_routes(app):
                 'error': str(e)
             }), 500
     
-    @app.route('/api/debug/job-data', methods=['POST'])
-    def api_debug_job_data():
-        """Debug endpoint to check what data is being sent from frontend"""
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({'error': 'No data provided'}), 400
-            
-            logger.info(f"[DEBUG] Received job data for debugging")
-            logger.info(f"[DEBUG] Data keys: {list(data.keys())}")
-            
-            # Check SQL-specific fields
-            if data.get('type') == 'sql':
-                sql_query = data.get('sql_query')
-                connection_name = data.get('connection_name')
-                
-                logger.info(f"[DEBUG] SQL Query: '{sql_query}' (length: {len(sql_query) if sql_query else 0})")
-                logger.info(f"[DEBUG] Connection: '{connection_name}'")
-                
-                return jsonify({
-                    'success': True,
-                    'debug_info': {
-                        'received_data_keys': list(data.keys()),
-                        'job_type': data.get('type'),
-                        'job_name': data.get('name'),
-                        'has_sql_query': bool(sql_query),
-                        'sql_query_length': len(sql_query) if sql_query else 0,
-                        'sql_query_preview': sql_query[:100] if sql_query else 'NONE',
-                        'connection_name': connection_name,
-                        'full_data': data
-                    }
-                })
-            else:
-                return jsonify({
-                    'success': True,
-                    'debug_info': {
-                        'received_data_keys': list(data.keys()),
-                        'job_type': data.get('type'),
-                        'full_data': data
-                    }
-                })
-                
-        except Exception as e:
-            logger.error(f"[DEBUG] Debug endpoint error: {e}")
-            return jsonify({'error': str(e)}), 500
     
     # Note: Old modern job API routes removed to prevent conflicts with V2 implementation
     # V2 execution engine is now integrated directly into the /api/jobs/<job_id>/run route above
@@ -3178,14 +3018,13 @@ def create_routes(app):
     @app.route('/api/v2/jobs/<job_id>/run', methods=['POST'])
     def api_v2_run_job(job_id):
         """Execute a V2 job immediately"""
-        print(f"**** ROUTE api_v2_run_job() called with job_id: {job_id} ****")
+        logger.info(f"[API_V2_RUN_JOB] Executing job: {job_id}")
         try:
             # Use unified execution system
             try:
                 from core.job_executor import JobExecutor
                 job_manager = getattr(app, 'job_manager', None)
                 executor = JobExecutor(job_manager=job_manager)
-                print(f"V2 ROUTES DEBUG: Using CLEAN V2 YAML executor for job {job_id}")
                 result = executor.execute_job(job_id)
             except ImportError:
                 # Fallback: Job execution not available
