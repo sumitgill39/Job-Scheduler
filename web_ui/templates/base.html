@@ -160,34 +160,18 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'connections' %}active{% endif %}" href="{{ url_for('connections') }}">
-                            <i class="fas fa-database me-1"></i>Connections
-                        </a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'execution_history' %}active{% endif %}" href="{{ url_for('execution_history') }}">
                             <i class="fas fa-history me-1"></i>History
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'timezone_simulator' %}active{% endif %}" href="{{ url_for('timezone_simulator') }}">
-                            <i class="fas fa-globe me-1"></i>Timezone Simulator
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'schedule_timezone_view' %}active{% endif %}" href="{{ url_for('schedule_timezone_view') }}">
-                            <i class="fas fa-globe-americas me-1"></i>Schedule Timezones
+                        <a class="nav-link {% if request.endpoint == 'configuration' %}active{% endif %}" href="{{ url_for('configuration') }}">
+                            <i class="fas fa-cogs me-1"></i>Configuration
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'api_documentation' %}active{% endif %}" href="{{ url_for('api_documentation') }}">
                             <i class="fas fa-code me-1"></i>API Docs
-                        </a>
-                    </li>
-                    <!-- Admin panel always accessible -->
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'admin_panel' %}active{% endif %}" href="/admin">
-                            <i class="fas fa-cog me-1"></i>Admin
                         </a>
                     </li>
                 </ul>
@@ -229,6 +213,11 @@
                                 Dashboard
                             </a>
                         </li>
+                        
+                        <!-- Job Management Section -->
+                        <li class="nav-item">
+                            <div class="text-muted small px-3 py-2 text-uppercase fw-bold">Job Management</div>
+                        </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'job_list' %}active{% endif %}" href="{{ url_for('job_list') }}">
                                 <i class="fas fa-tasks me-2"></i>
@@ -254,19 +243,15 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <hr class="my-2">
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'create_job' %}active{% endif %}" href="{{ url_for('create_job') }}">
                                 <i class="fas fa-plus-circle me-2"></i>
                                 Create New Job
                             </a>
                         </li>
+                        
+                        <!-- Monitoring Section -->
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'connections' %}active{% endif %}" href="{{ url_for('connections') }}">
-                                <i class="fas fa-database me-2"></i>
-                                Database Connections
-                            </a>
+                            <div class="text-muted small px-3 py-2 text-uppercase fw-bold mt-3">Monitoring</div>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'execution_history' %}active{% endif %}" href="{{ url_for('execution_history') }}">
@@ -274,10 +259,15 @@
                                 Execution History
                             </a>
                         </li>
+                        
+                        <!-- System Configuration -->
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'schedule_timezone_view' %}active{% endif %}" href="{{ url_for('schedule_timezone_view') }}">
-                                <i class="fas fa-globe-americas me-2"></i>
-                                Schedule Timezones
+                            <div class="text-muted small px-3 py-2 text-uppercase fw-bold mt-3">System</div>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'configuration' %}active{% endif %}" href="{{ url_for('configuration') }}">
+                                <i class="fas fa-cogs me-2"></i>
+                                Configuration
                             </a>
                         </li>
                         <li class="nav-item">
@@ -286,25 +276,21 @@
                                 API Documentation
                             </a>
                         </li>
-                        {% if session.get('authenticated') %}
-                            <!-- Check if user is admin before showing admin link -->
-                            {% set is_admin = session.get('groups', []) %}
-                            {% if 'Domain Admins' in is_admin or 'Administrators' in is_admin or 'Job Scheduler Admins' in is_admin %}
-                            <li class="nav-item">
-                                <hr class="my-2">
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link {% if request.endpoint == 'admin_panel' %}active{% endif %}" href="{{ url_for('admin_panel') }}">
-                                    <i class="fas fa-cog me-2"></i>
-                                    Administration
-                                </a>
-                            </li>
-                            {% endif %}
-                        {% endif %}
+                        
+                        <!-- Quick Actions -->
+                        <li class="nav-item">
+                            <div class="text-muted small px-3 py-2 text-uppercase fw-bold mt-3">Quick Actions</div>
+                        </li>
                         <li class="nav-item">
                             <a class="nav-link" href="#" onclick="refreshStatus()">
                                 <i class="fas fa-sync-alt me-2"></i>
                                 Refresh Status
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="window.open('/api/status', '_blank')">
+                                <i class="fas fa-heartbeat me-2"></i>
+                                System Health
                             </a>
                         </li>
                     </ul>

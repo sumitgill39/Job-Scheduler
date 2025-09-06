@@ -295,6 +295,11 @@ def create_routes(app):
         """Job creation page"""
         return render_template('create_job.html')
     
+    @app.route('/configuration')
+    def configuration():
+        """System configuration and settings page"""
+        return render_template('configuration.html')
+    
     @app.route('/jobs/<job_id>/edit')
     def edit_job(job_id):
         """Edit job page"""

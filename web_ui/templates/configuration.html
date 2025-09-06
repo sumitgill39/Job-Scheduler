@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration - Windows Job Scheduler{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/configuration.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-cogs me-2"></i>Configuration & Settings
+    </h1>
+    <div>
+        <button class="btn btn-outline-primary" onclick="exportConfiguration()">
+            <i class="fas fa-download me-2"></i>Export Config
+        </button>
+        <button class="btn btn-outline-secondary" onclick="refreshConfiguration()">
+            <i class="fas fa-sync-alt me-2"></i>Refresh
+        </button>
+    </div>
+</div>
+
+<!-- System Information -->
+<div class="config-section">
+    <div class="system-info">
+        <h2 class="h4 mb-3">
+            <i class="fas fa-server me-2"></i>System Information
+        </h2>
+        <div class="row text-center">
+            <div class="col-md-3">
+                <div class="h5" id="system-name">Windows Job Scheduler</div>
+                <small>Application</small>
+            </div>
+            <div class="col-md-3">
+                <div class="h5" id="system-version">v2.0.0</div>
+                <small>Version</small>
+            </div>
+            <div class="col-md-3">
+                <div class="h5" id="system-uptime">Loading...</div>
+                <small>Uptime</small>
+            </div>
+            <div class="col-md-3">
+                <div class="h5" id="system-environment">Development</div>
+                <small>Environment</small>
+            </div>
+        </div>
+        <div class="version-badge">
+            <small>Last Updated: <span id="last-update">Today</span></small>
+        </div>
+    </div>
+</div>
+
+<!-- Configuration Categories -->
+<div class="settings-grid">
+    <!-- Database Connections -->
+    <div class="card config-card">
+        <div class="card-body text-center">
+            <div class="config-icon">
+                <i class="fas fa-database"></i>
+            </div>
+            <h5 class="card-title">Database Connections</h5>
+            <p class="card-text">Manage SQL Server connections and test connectivity.</p>
+            <div class="d-grid gap-2">
+                <a href="{{ url_for('connections') }}" class="btn btn-primary quick-action-btn">
+                    <i class="fas fa-database me-2"></i>Manage Connections
+                </a>
+                <button onclick="testAllConnections()" class="btn btn-outline-primary quick-action-btn">
+                    <i class="fas fa-plug me-2"></i>Test All Connections
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scheduling & Timezones -->
+    <div class="card config-card">
+        <div class="card-body text-center">
+            <div class="config-icon">
+                <i class="fas fa-clock"></i>
+            </div>
+            <h5 class="card-title">Time & Scheduling</h5>
+            <p class="card-text">Configure timezone settings and schedule management.</p>
+            <div class="d-grid gap-2">
+                <a href="{{ url_for('schedule_timezone_view') }}" class="btn btn-success quick-action-btn">
+                    <i class="fas fa-globe-americas me-2"></i>Schedule Timezones
+                </a>
+                <a href="{{ url_for('timezone_simulator') }}" class="btn btn-outline-success quick-action-btn">
+                    <i class="fas fa-globe me-2"></i>Timezone Simulator
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Administration -->
+    <div class="card config-card">
+        <div class="card-body text-center">
+            <div class="config-icon">
+                <i class="fas fa-tools"></i>
+            </div>
+            <h5 class="card-title">System Administration</h5>
+            <p class="card-text">Advanced system settings and administrative tools.</p>
+            <div class="d-grid gap-2">
+                <a href="/admin" class="btn btn-warning quick-action-btn">
+                    <i class="fas fa-cog me-2"></i>Admin Panel
+                </a>
+                <a href="/admin/job-queue" class="btn btn-outline-warning quick-action-btn">
+                    <i class="fas fa-list me-2"></i>Job Queue
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- API & Integration -->
+    <div class="card config-card">
+        <div class="card-body text-center">
+            <div class="config-icon">
+                <i class="fas fa-code"></i>
+            </div>
+            <h5 class="card-title">API & Integration</h5>
+            <p class="card-text">API documentation and external integrations.</p>
+            <div class="d-grid gap-2">
+                <a href="{{ url_for('api_documentation') }}" class="btn btn-info quick-action-btn">
+                    <i class="fas fa-book me-2"></i>API Documentation
+                </a>
+                <button onclick="viewApiSpec()" class="btn btn-outline-info quick-action-btn">
+                    <i class="fas fa-file-code me-2"></i>OpenAPI Spec
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cloud & Infrastructure -->
+    <div class="card config-card">
+        <div class="card-body text-center">
+            <div class="config-icon">
+                <i class="fas fa-cloud"></i>
+            </div>
+            <h5 class="card-title">Infrastructure</h5>
+            <p class="card-text">Cloud infrastructure simulation and monitoring.</p>
+            <div class="d-grid gap-2">
+                <a href="{{ url_for('cloud_infrastructure_simulator') }}" class="btn btn-secondary quick-action-btn">
+                    <i class="fas fa-cloud-upload-alt me-2"></i>Cloud Infrastructure
+                </a>
+                <button onclick="viewSystemWorkflow()" class="btn btn-outline-secondary quick-action-btn">
+                    <i class="fas fa-project-diagram me-2"></i>System Workflow
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Security & Authentication -->
+    <div class="card config-card">
+        <div class="card-body text-center">
+            <div class="config-icon">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <h5 class="card-title">Security Settings</h5>
+            <p class="card-text">Authentication, authorization, and security policies.</p>
+            <div class="d-grid gap-2">
+                <button onclick="viewSecuritySettings()" class="btn btn-danger quick-action-btn">
+                    <i class="fas fa-lock me-2"></i>Security Policy
+                </button>
+                <button onclick="viewAuditLogs()" class="btn btn-outline-danger quick-action-btn">
+                    <i class="fas fa-clipboard-list me-2"></i>Audit Logs
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Current Configuration Summary -->
+<div class="card config-card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list-ul me-2"></i>Current Configuration Summary
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Application Settings</h6>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Environment
+                        <span class="badge bg-primary rounded-pill" id="config-environment">Development</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Debug Mode
+                        <span class="badge bg-warning rounded-pill" id="config-debug">Enabled</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Log Level
+                        <span class="badge bg-info rounded-pill" id="config-log-level">INFO</span>
+                    </li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h6>System Resources</h6>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Max Workers
+                        <span class="badge bg-success rounded-pill" id="config-workers">10</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Thread Pool
+                        <span class="badge bg-success rounded-pill" id="config-threads">20</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Database Status
+                        <span class="badge bg-success rounded-pill" id="config-database">Connected</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Configuration Changes -->
+<div class="card config-card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-history me-2"></i>Recent Configuration Changes
+        </h5>
+    </div>
+    <div class="card-body">
+        <div id="config-changes">
+            <div class="text-center text-muted">
+                <i class="fas fa-spinner fa-spin me-2"></i>Loading recent changes...
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadSystemInfo();
+    loadConfigurationStatus();
+    loadRecentChanges();
+});
+
+function loadSystemInfo() {
+    fetch('/api/admin/system-stats')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('system-uptime').textContent = data.uptime || 'N/A';
+                document.getElementById('system-environment').textContent = data.environment || 'Development';
+                
+                // Update configuration summary
+                document.getElementById('config-environment').textContent = data.environment || 'Development';
+                document.getElementById('config-workers').textContent = data.max_workers || '10';
+                document.getElementById('config-threads').textContent = data.thread_pool_size || '20';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading system info:', error);
+        });
+}
+
+function loadConfigurationStatus() {
+    fetch('/api/system/database-status')
+        .then(response => response.json())
+        .then(data => {
+            const dbStatus = document.getElementById('config-database');
+            if (data.success && data.connected) {
+                dbStatus.textContent = 'Connected';
+                dbStatus.className = 'badge bg-success rounded-pill';
+            } else {
+                dbStatus.textContent = 'Disconnected';
+                dbStatus.className = 'badge bg-danger rounded-pill';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading database status:', error);
+            const dbStatus = document.getElementById('config-database');
+            dbStatus.textContent = 'Error';
+            dbStatus.className = 'badge bg-warning rounded-pill';
+        });
+}
+
+function loadRecentChanges() {
+    // Simulate recent changes for now
+    setTimeout(() => {
+        const changesHtml = `
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-marker bg-success"></div>
+                    <div class="timeline-content">
+                        <h6 class="mb-1">Database connection updated</h6>
+                        <p class="mb-1 text-muted">Connection pool settings optimized for better performance</p>
+                        <small class="text-muted">2 hours ago</small>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-marker bg-info"></div>
+                    <div class="timeline-content">
+                        <h6 class="mb-1">Scheduler configuration modified</h6>
+                        <p class="mb-1 text-muted">Increased thread pool size to 20 workers</p>
+                        <small class="text-muted">1 day ago</small>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-marker bg-warning"></div>
+                    <div class="timeline-content">
+                        <h6 class="mb-1">Security policy updated</h6>
+                        <p class="mb-1 text-muted">Enhanced authentication requirements</p>
+                        <small class="text-muted">3 days ago</small>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.getElementById('config-changes').innerHTML = changesHtml;
+    }, 1000);
+}
+
+function testAllConnections() {
+    showLoading();
+    fetch('/api/connections/validate-all', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                showSuccess(`Connection test completed. ${data.successful_count}/${data.total_count} connections successful.`);
+            } else {
+                showError('Failed to test connections: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Error testing connections: ' + error.message);
+        });
+}
+
+function exportConfiguration() {
+    showLoading();
+    fetch('/api/admin/export-config')
+        .then(response => response.blob())
+        .then(blob => {
+            hideLoading();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'job-scheduler-config-' + new Date().toISOString().split('T')[0] + '.json';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            showSuccess('Configuration exported successfully');
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Failed to export configuration: ' + error.message);
+        });
+}
+
+function refreshConfiguration() {
+    showLoading();
+    loadSystemInfo();
+    loadConfigurationStatus();
+    loadRecentChanges();
+    setTimeout(() => {
+        hideLoading();
+        showSuccess('Configuration refreshed successfully');
+    }, 1000);
+}
+
+function viewApiSpec() {
+    window.open('/api/openapi-spec', '_blank');
+}
+
+function viewSystemWorkflow() {
+    window.open('/system/workflow', '_blank');
+}
+
+function viewSecuritySettings() {
+    // Placeholder for security settings
+    alert('Security settings panel will be available in a future update.');
+}
+
+function viewAuditLogs() {
+    // Placeholder for audit logs
+    alert('Audit logs panel will be available in a future update.');
+}
+</script>
+
+<style>
+.timeline {
+    position: relative;
+    padding: 0;
+    list-style: none;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 1.5rem;
+    padding-left: 2rem;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid white;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 3px solid var(--primary-color);
+}
+
+.timeline-item:before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 12px;
+    bottom: -1.5rem;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item:last-child:before {
+    display: none;
+}
+</style>
+{% endblock %}
