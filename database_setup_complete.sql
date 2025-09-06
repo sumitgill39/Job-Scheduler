@@ -4,7 +4,7 @@
 -- This script creates ALL required tables, indexes, and initial data
 -- for the Windows Job Scheduler application to function properly.
 -- 
--- Target Database: SQL Server Express (DESKTOP-4ADGDVE\SQLEXPRESS)
+-- Target Database: SQL Server (SUMEETGILL7E47\MSSQLSERVER01)
 -- Database: sreutil
 -- Authentication: Windows Authentication (Trusted Connection)
 -- Version: 2.0 (Matches SQLAlchemy V2 Models)
@@ -574,7 +574,7 @@ PRINT 'INSTALLATION COMPLETED SUCCESSFULLY!'
 PRINT '============================================='
 PRINT ''
 PRINT 'Database: sreutil'
-PRINT 'Server: DESKTOP-4ADGDVE\SQLEXPRESS'
+PRINT 'Server: SUMEETGILL7E47\MSSQLSERVER01'
 PRINT ''
 PRINT 'TABLES CREATED:'
 PRINT '  ✓ user_connections (4 indexes)'

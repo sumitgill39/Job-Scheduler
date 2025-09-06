@@ -36,7 +36,7 @@ class DatabaseEngine:
         """Setup SQLAlchemy engine from environment variables"""
         # Get database configuration from environment - defaults for local SQL Express
         db_driver = os.getenv('DB_DRIVER', 'ODBC Driver 17 for SQL Server')
-        db_server = os.getenv('DB_SERVER', 'DESKTOP-4ADGDVE\\SQLEXPRESS')
+        db_server = os.getenv('DB_SERVER', 'SUMEETGILL7E47\\MSSQLSERVER01')
         db_port = os.getenv('DB_PORT', '1433')
         db_database = os.getenv('DB_DATABASE', 'sreutil')
         db_username = os.getenv('DB_USERNAME', '')
