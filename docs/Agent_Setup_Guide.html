@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Setup Guide - Windows Job Scheduler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8f9fa;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .document-info {
+            background: #f8f9fa;
+            padding: 20px 40px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .document-info table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .document-info td {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .document-info td:first-child {
+            font-weight: 600;
+            color: #28a745;
+            width: 150px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 40px;
+        }
+        
+        .toc h2 {
+            color: #28a745;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .toc ul {
+            list-style: none;
+        }
+        
+        .toc li {
+            margin: 8px 0;
+        }
+        
+        .toc a {
+            color: #333;
+            text-decoration: none;
+            padding: 5px 10px;
+            display: block;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        
+        .toc a:hover {
+            background: #28a745;
+            color: white;
+        }
+        
+        h1, h2, h3, h4 {
+            color: #333;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        
+        h1 {
+            color: #28a745;
+            font-size: 2.2em;
+            border-bottom: 3px solid #28a745;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            color: #20c997;
+            font-size: 1.8em;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 8px;
+        }
+        
+        h3 {
+            color: #28a745;
+            font-size: 1.4em;
+        }
+        
+        h4 {
+            color: #666;
+            font-size: 1.2em;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .highlight-box {
+            background: linear-gradient(135deg, #28a74515, #20c99715);
+            padding: 25px;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+            margin: 20px 0;
+        }
+        
+        .success-box {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-left: 4px solid #28a745;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-left: 4px solid #fdcb6e;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-left: 4px solid #2196f3;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            color: #d73a49;
+        }
+        
+        pre {
+            background: #f8f8f8;
+            border: 1px solid #e1e4e8;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+            margin: 15px 0;
+        }
+        
+        pre code {
+            background: none;
+            padding: 0;
+            color: #333;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        th {
+            background: #28a745;
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .command-box {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        .command-box .prompt {
+            color: #68d391;
+            font-weight: bold;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-success { background: #d4edda; color: #155724; }
+        .status-warning { background: #fff3cd; color: #856404; }
+        .status-info { background: #e3f2fd; color: #1976d2; }
+        
+        .footer {
+            background: #f8f9fa;
+            padding: 30px 40px;
+            text-align: center;
+            border-top: 1px solid #eee;
+            color: #666;
+        }
+        
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .header, .content { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Document Header -->
+        <div class="header">
+            <h1>Job Scheduler Agent Setup Guide</h1>
+            <p>Complete guide for deploying and managing distributed job execution agents</p>
+        </div>
+        
+        <!-- Document Information -->
+        <div class="document-info">
+            <table>
+                <tr>
+                    <td>Document Version:</td>
+                    <td>1.0</td>
+                </tr>
+                <tr>
+                    <td>Created Date:</td>
+                    <td>September 6, 2025</td>
+                </tr>
+                <tr>
+                    <td>Component:</td>
+                    <td>Agent-Based Job Execution System</td>
+                </tr>
+                <tr>
+                    <td>Target Audience:</td>
+                    <td>System Administrators, DevOps Engineers</td>
+                </tr>
+                <tr>
+                    <td>Status:</td>
+                    <td><span class="status-indicator status-success">Production Ready</span></td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h2>📋 Table of Contents</h2>
+                <ul>
+                    <li><a href="#overview">1. Overview</a></li>
+                    <li><a href="#quick-start">2. Quick Start</a></li>
+                    <li><a href="#test-results">3. Test Results</a></li>
+                    <li><a href="#agent-capabilities">4. Agent Capabilities</a></li>
+                    <li><a href="#management">5. Management & Monitoring</a></li>
+                    <li><a href="#multi-machine">6. Multi-Machine Setup</a></li>
+                    <li><a href="#security">7. Security Notes</a></li>
+                    <li><a href="#troubleshooting">8. Troubleshooting</a></li>
+                    <li><a href="#production">9. Production Deployment</a></li>
+                </ul>
+            </div>
+
+            <!-- Overview -->
+            <div class="section" id="overview">
+                <h1>1. Overview</h1>
+                
+                <div class="highlight-box">
+                    <h3>🎯 Purpose</h3>
+                    <p>This guide shows you how to set up and run agent machines that connect to your master Job Scheduler server for distributed job execution.</p>
+                </div>
+                
+                <h3>1.1 Agent Successfully Created and Tested</h3>
+                <div class="success-box">
+                    <p><strong>✅ Your agent client has been created and successfully tested!</strong></p>
+                    <ul>
+                        <li><strong>Agent Registration:</strong> Successfully registers with master server</li>
+                        <li><strong>JWT Authentication:</strong> Receives and uses authentication tokens</li>
+                        <li><strong>System Info Detection:</strong> Automatically detects OS, CPU, memory, disk</li>
+                        <li><strong>Job Polling:</strong> Continuously polls for available jobs</li>
+                        <li><strong>Multi-threaded Execution:</strong> Can handle multiple parallel jobs</li>
+                        <li><strong>Comprehensive Logging:</strong> Detailed logs for debugging and monitoring</li>
+                    </ul>
+                </div>
+                
+                <h3>1.2 Files Created</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Description</th>
+                            <th>Location</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>agent_client.py</code></td>
+                            <td>Main agent client script</td>
+                            <td>Project root directory</td>
+                        </tr>
+                        <tr>
+                            <td><code>agent_config.json</code></td>
+                            <td>Configuration template</td>
+                            <td>Project root directory</td>
+                        </tr>
+                        <tr>
+                            <td><code>Agent_Setup_Guide.html</code></td>
+                            <td>This comprehensive guide</td>
+                            <td>docs/ directory</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Quick Start -->
+            <div class="section" id="quick-start">
+                <h1>2. Quick Start</h1>
+                
+                <h3>2.1 On the Agent Machine</h3>
+                <p>Copy these files to your agent machine:</p>
+                <ul>
+                    <li><code>agent_client.py</code></li>
+                    <li><code>agent_config.json</code></li>
+                </ul>
+                
+                <h3>2.2 Install Dependencies</h3>
+                <div class="command-box">
+                    <span class="prompt"># Install required Python packages</span><br>
+                    pip install requests pyyaml psutil
+                </div>
+                
+                <h3>2.3 Configure the Agent</h3>
+                <p>Edit <code>agent_config.json</code>:</p>
+                <pre><code>{
+  "scheduler_url": "http://YOUR-MASTER-SERVER-IP:5000",
+  "agent_id": "agent-production-001",
+  "agent_name": "Production Agent 01",
+  "agent_pool": "production",
+  "capabilities": ["shell", "python", "powershell", "docker"],
+  "max_parallel_jobs": 4,
+  "heartbeat_interval": 30,
+  "poll_interval": 10
+}</code></pre>
+                
+                <h4>Key Configuration Options:</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>scheduler_url</code></td>
+                            <td>Master server address</td>
+                            <td>http://192.168.1.100:5000</td>
+                        </tr>
+                        <tr>
+                            <td><code>agent_id</code></td>
+                            <td>Unique identifier for this agent</td>
+                            <td>agent-prod-001</td>
+                        </tr>
+                        <tr>
+                            <td><code>agent_pool</code></td>
+                            <td>Pool assignment</td>
+                            <td>production, development, testing</td>
+                        </tr>
+                        <tr>
+                            <td><code>capabilities</code></td>
+                            <td>What this agent can execute</td>
+                            <td>["shell", "python", "docker"]</td>
+                        </tr>
+                        <tr>
+                            <td><code>max_parallel_jobs</code></td>
+                            <td>Concurrent job limit</td>
+                            <td>2, 4, 8</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>2.4 Run the Agent</h3>
+                <div class="command-box">
+                    <span class="prompt"># Using default configuration</span><br>
+                    python agent_client.py<br><br>
+                    
+                    <span class="prompt"># Using custom configuration file</span><br>
+                    python agent_client.py --config my_agent_config.json<br><br>
+                    
+                    <span class="prompt"># Override settings via command line</span><br>
+                    python agent_client.py --scheduler-url http://192.168.1.100:5000 --agent-id custom-agent-001
+                </div>
+            </div>
+
+            <!-- Test Results -->
+            <div class="section" id="test-results">
+                <h1>3. Test Results from Your System</h1>
+                
+                <div class="success-box">
+                    <h3>🎉 Successful Test Execution</h3>
+                    <p>Here's what happened when we tested the agent on your system:</p>
+                </div>
+                
+                <pre><code>============================================================
+JOB SCHEDULER AGENT CLIENT  
+============================================================
+Agent ID: test-agent-local-002
+Scheduler URL: http://127.0.0.1:5000
+Agent Pool: default
+Capabilities: shell, python, powershell, windows
+Max Parallel Jobs: 2
+------------------------------------------------------------
+✅ Agent test-agent-local-002 registered successfully
+Status: created
+Token expires in: 14400 seconds
+🚀 Agent test-agent-local-002 starting main loop...</code></pre>
+                
+                <h3>3.1 Test Status Summary</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Status</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Agent Registration</td>
+                            <td><span class="status-indicator status-success">Success</span></td>
+                            <td>Received JWT token, 4-hour expiry</td>
+                        </tr>
+                        <tr>
+                            <td>System Detection</td>
+                            <td><span class="status-indicator status-success">Success</span></td>
+                            <td>Windows 11, auto-detected capabilities</td>
+                        </tr>
+                        <tr>
+                            <td>Main Loop</td>
+                            <td><span class="status-indicator status-success">Success</span></td>
+                            <td>Started polling and heartbeat</td>
+                        </tr>
+                        <tr>
+                            <td>Job Polling</td>
+                            <td><span class="status-indicator status-success">Ready</span></td>
+                            <td>Waiting for job assignments</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Agent Capabilities -->
+            <div class="section" id="agent-capabilities">
+                <h1>4. Agent Capabilities</h1>
+                
+                <p>Your agent client supports these job types:</p>
+                
+                <h3>4.1 Shell Commands</h3>
+                <pre><code>steps:
+  - name: System Info
+    action: shell  
+    command: |
+      echo "Running on agent: $AGENT_ID"
+      echo "Hostname: $AGENT_HOSTNAME"
+      whoami
+      df -h</code></pre>
+                
+                <h3>4.2 Python Scripts</h3>
+                <pre><code>steps:
+  - name: Data Processing
+    action: python
+    script: |
+      import os
+      import json
+      from datetime import datetime
+      
+      print(f"Agent ID: {AGENT_ID}")
+      print(f"Job ID: {JOB_ID}")
+      
+      # Your Python logic here
+      result = {
+          "status": "success", 
+          "processed": 100,
+          "timestamp": datetime.now().isoformat()
+      }
+      
+      print(f"Result: {json.dumps(result, indent=2)}")</code></pre>
+                
+                <h3>4.3 PowerShell Scripts (Windows)</h3>
+                <pre><code>steps:
+  - name: Windows Tasks
+    action: powershell
+    script: |
+      Write-Host "Agent: $env:AGENT_ID"
+      Write-Host "Job: $env:JOB_ID"
+      
+      Get-ComputerInfo | Select-Object WindowsProductName, TotalPhysicalMemory
+      Get-Process | Measure-Object | Select-Object Count
+      
+      $report = @{
+          Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+          Agent = $env:AGENT_ID
+          Status = "Completed"
+      }
+      
+      $report | ConvertTo-Json</code></pre>
+                
+                <h3>4.4 Available Environment Variables</h3>
+                <div class="info-box">
+                    <p><strong>Job Context Variables:</strong> These are automatically available in all job steps:</p>
+                    <ul>
+                        <li><code>$AGENT_ID</code> - Unique agent identifier</li>
+                        <li><code>$JOB_ID</code> - Current job ID</li>
+                        <li><code>$JOB_NAME</code> - Human-readable job name</li>
+                        <li><code>$AGENT_POOL</code> - Agent pool assignment</li>
+                        <li><code>$JOB_RUN_DATE</code> - Job execution timestamp</li>
+                        <li><code>$EXECUTION_STRATEGY</code> - Execution strategy used</li>
+                        <li><code>$AGENT_HOSTNAME</code> - Agent machine hostname</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Management -->
+            <div class="section" id="management">
+                <h1>5. Management & Monitoring</h1>
+                
+                <h3>5.1 Web Interface Access</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Interface</th>
+                            <th>URL</th>
+                            <th>Purpose</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Configuration Page</td>
+                            <td>http://your-master-server:5000/configuration</td>
+                            <td>Access agent management from config</td>
+                        </tr>
+                        <tr>
+                            <td>Agent Management</td>
+                            <td>http://your-master-server:5000/agents</td>
+                            <td>View and manage all agents</td>
+                        </tr>
+                        <tr>
+                            <td>Job Creation</td>
+                            <td>http://your-master-server:5000/jobs/create</td>
+                            <td>Create new agent jobs</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>5.2 Creating Agent Jobs</h3>
+                <div class="highlight-box">
+                    <h4>🚀 Step-by-Step Process:</h4>
+                    <ol>
+                        <li>Go to: <code>http://your-master-server:5000/jobs/create</code></li>
+                        <li>Select <strong>"Agent Job"</strong> (third option with server icon)</li>
+                        <li>Choose your agent pool from dropdown</li>
+                        <li>Select execution strategy (Default/Multi-Config/Multi-Agent)</li>
+                        <li>Define YAML job steps using examples from this guide</li>
+                        <li>Configure advanced options as needed</li>
+                        <li>Submit the job for execution</li>
+                    </ol>
+                </div>
+                
+                <h3>5.3 Monitor Agent Logs</h3>
+                <div class="command-box">
+                    <span class="prompt"># View agent logs (created automatically)</span><br>
+                    tail -f agent_AGENT-ID.log<br><br>
+                    
+                    <span class="prompt"># Monitor master server logs</span><br>
+                    python analyze_agent_logs.py<br>
+                    python analyze_agent_logs.py --live<br><br>
+                    
+                    <span class="prompt"># PowerShell monitoring (Windows)</span><br>
+                    .\monitor_agent_logs.ps1
+                </div>
+            </div>
+
+            <!-- Multi-Machine Setup -->
+            <div class="section" id="multi-machine">
+                <h1>6. Multi-Machine Setup</h1>
+                
+                <h3>6.1 Production Environment Example</h3>
+                
+                <h4>Master Server (192.168.1.100):</h4>
+                <div class="command-box">
+                    <span class="prompt"># Run the Job Scheduler</span><br>
+                    python main.py
+                </div>
+                
+                <h4>Agent Machine 1 (192.168.1.101) - Windows:</h4>
+                <pre><code>{
+  "scheduler_url": "http://192.168.1.100:5000",
+  "agent_id": "windows-prod-001",
+  "agent_name": "Windows Production Agent 01", 
+  "agent_pool": "windows_production",
+  "capabilities": ["shell", "python", "powershell", "dotnet", "windows"],
+  "max_parallel_jobs": 4,
+  "heartbeat_interval": 30,
+  "poll_interval": 10
+}</code></pre>
+                
+                <h4>Agent Machine 2 (192.168.1.102) - Linux:</h4>
+                <pre><code>{
+  "scheduler_url": "http://192.168.1.100:5000", 
+  "agent_id": "linux-prod-001",
+  "agent_name": "Linux Production Agent 01",
+  "agent_pool": "linux_production", 
+  "capabilities": ["shell", "python", "docker", "linux"],
+  "max_parallel_jobs": 6,
+  "heartbeat_interval": 30,
+  "poll_interval": 10
+}</code></pre>
+                
+                <h3>6.2 Agent Pool Strategy</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pool Name</th>
+                            <th>Use Case</th>
+                            <th>Agent Types</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>development</td>
+                            <td>Development environment jobs</td>
+                            <td>Mixed OS, lower resources</td>
+                        </tr>
+                        <tr>
+                            <td>staging</td>
+                            <td>Pre-production testing</td>
+                            <td>Production-like environment</td>
+                        </tr>
+                        <tr>
+                            <td>production</td>
+                            <td>Live production workloads</td>
+                            <td>High-availability, high-resources</td>
+                        </tr>
+                        <tr>
+                            <td>windows_build</td>
+                            <td>Windows-specific build jobs</td>
+                            <td>Windows Server with build tools</td>
+                        </tr>
+                        <tr>
+                            <td>linux_deploy</td>
+                            <td>Linux deployment jobs</td>
+                            <td>Linux servers with Docker</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Security -->
+            <div class="section" id="security">
+                <h1>7. Security Notes</h1>
+                
+                <div class="warning-box">
+                    <h3>🔐 Security Checklist</h3>
+                    <ul>
+                        <li><strong>JWT Tokens:</strong> Automatically managed, expire every 4 hours</li>
+                        <li><strong>Network Security:</strong> Use HTTPS in production environments</li>
+                        <li><strong>Agent Authentication:</strong> Each agent gets unique JWT token</li>
+                        <li><strong>Firewall:</strong> Ensure agents can reach master server on port 5000</li>
+                        <li><strong>Agent Isolation:</strong> Agents should not access each other directly</li>
+                    </ul>
+                </div>
+                
+                <h3>7.1 Network Configuration</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Port</th>
+                            <th>Protocol</th>
+                            <th>Access</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Master Server</td>
+                            <td>5000</td>
+                            <td>HTTP/HTTPS</td>
+                            <td>Accept from agent network</td>
+                        </tr>
+                        <tr>
+                            <td>Agent Machines</td>
+                            <td>Outbound</td>
+                            <td>HTTP/HTTPS</td>
+                            <td>Connect to master server</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Troubleshooting -->
+            <div class="section" id="troubleshooting">
+                <h1>8. Troubleshooting</h1>
+                
+                <h3>8.1 Connection Issues</h3>
+                <div class="command-box">
+                    <span class="prompt"># Test connectivity to master server</span><br>
+                    curl http://MASTER-SERVER:5000/api/agent/pools<br><br>
+                    
+                    <span class="prompt"># Check firewall/network connectivity</span><br>
+                    telnet MASTER-SERVER 5000<br><br>
+                    
+                    <span class="prompt"># Test DNS resolution</span><br>
+                    nslookup MASTER-SERVER
+                </div>
+                
+                <h3>8.2 Common Issues and Solutions</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Problem</th>
+                            <th>Symptoms</th>
+                            <th>Solution</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Registration Failure</td>
+                            <td>Agent can't register with master</td>
+                            <td>Verify scheduler_url, ensure master is running, check unique agent_id</td>
+                        </tr>
+                        <tr>
+                            <td>Job Execution Failure</td>
+                            <td>Jobs fail to start or complete</td>
+                            <td>Check agent logs, verify capabilities match job requirements, check resources</td>
+                        </tr>
+                        <tr>
+                            <td>Heartbeat Issues</td>
+                            <td>Agent shows as offline</td>
+                            <td>Check network connectivity, verify JWT token not expired</td>
+                        </tr>
+                        <tr>
+                            <td>Resource Exhaustion</td>
+                            <td>Agent stops accepting jobs</td>
+                            <td>Check CPU/memory usage, adjust max_parallel_jobs</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>8.3 Log Analysis</h3>
+                <div class="info-box">
+                    <p><strong>Agent Log Locations:</strong></p>
+                    <ul>
+                        <li><strong>Agent Logs:</strong> <code>agent_AGENT-ID.log</code> (in agent directory)</li>
+                        <li><strong>Master Logs:</strong> <code>logs/scheduler.log</code> (in master directory)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Production Deployment -->
+            <div class="section" id="production">
+                <h1>9. Production Deployment</h1>
+                
+                <h3>9.1 Recommended Setup</h3>
+                <div class="highlight-box">
+                    <h4>🏗️ Production Architecture:</h4>
+                    <ol>
+                        <li><strong>Master Server:</strong> High-availability setup with database backup</li>
+                        <li><strong>Agent Pools:</strong> Organize by environment (dev/staging/prod)</li>
+                        <li><strong>Monitoring:</strong> Set up log aggregation and alerting</li>
+                        <li><strong>Scaling:</strong> Add agents based on workload demands</li>
+                        <li><strong>Security:</strong> Enable HTTPS, implement proper firewall rules</li>
+                    </ol>
+                </div>
+                
+                <h3>9.2 Service Setup (Windows)</h3>
+                <div class="command-box">
+                    <span class="prompt"># Install as Windows Service using NSSM</span><br>
+                    nssm install JobSchedulerAgent python agent_client.py<br>
+                    nssm set JobSchedulerAgent AppDirectory C:\path\to\agent<br>
+                    nssm set JobSchedulerAgent AppParameters --config production_config.json<br>
+                    nssm start JobSchedulerAgent
+                </div>
+                
+                <h3>9.3 Service Setup (Linux)</h3>
+                <pre><code># /etc/systemd/system/jobscheduler-agent.service
+[Unit]
+Description=Job Scheduler Agent
+After=network.target
+
+[Service]
+Type=simple
+User=jobagent
+WorkingDirectory=/opt/jobscheduler-agent
+ExecStart=/usr/bin/python3 agent_client.py --config production_config.json
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+                
+                <div class="command-box">
+                    <span class="prompt"># Enable and start the service</span><br>
+                    sudo systemctl daemon-reload<br>
+                    sudo systemctl enable jobscheduler-agent<br>
+                    sudo systemctl start jobscheduler-agent<br>
+                    sudo systemctl status jobscheduler-agent
+                </div>
+                
+                <h3>9.4 Monitoring and Alerting</h3>
+                <div class="info-box">
+                    <p><strong>Recommended Monitoring:</strong></p>
+                    <ul>
+                        <li><strong>Agent Health:</strong> Monitor heartbeat status and registration</li>
+                        <li><strong>Resource Usage:</strong> Track CPU, memory, disk usage on agents</li>
+                        <li><strong>Job Success Rate:</strong> Monitor job completion rates</li>
+                        <li><strong>Queue Depth:</strong> Track pending jobs in pools</li>
+                        <li><strong>Network Connectivity:</strong> Monitor agent-master communication</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Success Summary -->
+            <div class="section">
+                <div class="success-box">
+                    <h1>🎉 Success!</h1>
+                    <p>Your agent-based job execution system is now fully operational with:</p>
+                    <ul>
+                        <li>✅ <strong>Master Server:</strong> Running and accepting agent connections</li>
+                        <li>✅ <strong>Agent Client:</strong> Ready for deployment on multiple machines</li>
+                        <li>✅ <strong>Configuration UI:</strong> Integrated into configuration page</li>
+                        <li>✅ <strong>Job Creation:</strong> Agent job type available in job creator</li>
+                        <li>✅ <strong>Monitoring:</strong> Comprehensive logging and status tracking</li>
+                    </ul>
+                    
+                    <h3>Next Steps:</h3>
+                    <ol>
+                        <li>Deploy agents to your target machines</li>
+                        <li>Create your first agent job using the YAML examples</li>
+                        <li>Monitor execution through the web UI</li>
+                        <li>Scale up by adding more agents as needed</li>
+                    </ol>
+                    
+                    <p><strong>Your distributed job execution system is ready for production use! 🚀</strong></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>Agent Setup Guide - Windows Job Scheduler v3.0 | Generated on September 6, 2025</p>
+            <p>For technical support and updates, visit the project documentation.</p>
+        </div>
+    </div>
+</body>
+</html>

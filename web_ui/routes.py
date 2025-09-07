@@ -339,6 +339,11 @@ def create_routes(app):
         """Cloud infrastructure scheduler page"""
         return render_template('cloud_infrastructure_simulator.html')
 
+    @app.route('/agents')
+    def agent_management():
+        """Agent management page"""
+        return render_template('agents/agent_list.html')
+
     @app.route('/jobs/<job_id>')
     def job_details(job_id):
         """Job details page"""

@@ -1325,6 +1325,340 @@ job_steps:
   - name: connect_to_database
     type: sql_connection_test
     connection_string: "Server=${configuration.database_server};Database=AppDB;User Id=appuser;Password=${secrets.DATABASE_PASSWORD}"</code></pre>
+                
+                <h3>6.4 Complete YAML Sample Library</h3>
+                <div class="info-box">
+                    <p>This section provides comprehensive, ready-to-use YAML samples for different agent job scenarios. These examples demonstrate real-world usage patterns and best practices.</p>
+                </div>
+                
+                <h4>6.4.1 Basic Agent Job Sample</h4>
+                <pre><code>steps:
+  - name: Setup Environment
+    action: shell
+    command: |
+      echo "Starting job execution on agent: $AGENT_ID"
+      echo "Job ID: $JOB_ID"
+      echo "Current directory: $(pwd)"
+    timeout: 30
+
+  - name: Install Dependencies
+    action: shell
+    command: |
+      # Example: Install Python packages
+      pip install requests pandas numpy
+    timeout: 300
+    continue_on_error: false
+
+  - name: Download Files
+    action: download
+    source: "https://example.com/data.csv"
+    destination: "./data/input.csv"
+    timeout: 120
+
+  - name: Process Data
+    action: python
+    script: |
+      import pandas as pd
+      import json
+      
+      print("Processing data...")
+      df = pd.read_csv('./data/input.csv')
+      
+      # Your processing logic here
+      result = {
+          'rows_processed': len(df),
+          'timestamp': pd.Timestamp.now().isoformat()
+      }
+      
+      # Save results
+      with open('./results.json', 'w') as f:
+          json.dump(result, f, indent=2)
+      
+      print(f"Processed {result['rows_processed']} rows")
+    timeout: 600
+
+  - name: Upload Results
+    action: upload
+    source: "./results.json"
+    destination: "ftp://results-server/output/"
+    credentials:
+      username: "$FTP_USER"
+      password: "$FTP_PASS"
+    timeout: 180</code></pre>
+                
+                <h4>6.4.2 Multi-Configuration Job Sample</h4>
+                <pre><code># This will run with different configurations in parallel
+steps:
+  - name: Environment Setup
+    action: shell
+    command: |
+      echo "Configuration: $CONFIG_NAME"
+      echo "Parameters: $CONFIG_PARAMS"
+      mkdir -p ./output/$CONFIG_NAME
+    
+  - name: Data Processing
+    action: python
+    script: |
+      import os
+      import json
+      
+      config_name = os.environ.get('CONFIG_NAME', 'default')
+      config_params = json.loads(os.environ.get('CONFIG_PARAMS', '{}'))
+      
+      print(f"Running configuration: {config_name}")
+      print(f"Parameters: {config_params}")
+      
+      # Your configuration-specific logic here
+      result = {
+          'config': config_name,
+          'params': config_params,
+          'status': 'completed'
+      }
+      
+      output_file = f"./output/{config_name}/result.json"
+      with open(output_file, 'w') as f:
+          json.dump(result, f, indent=2)
+    timeout: 300
+
+  - name: Validation
+    action: shell
+    command: |
+      if [ -f "./output/$CONFIG_NAME/result.json" ]; then
+        echo "✅ Configuration $CONFIG_NAME completed successfully"
+        cat "./output/$CONFIG_NAME/result.json"
+      else
+        echo "❌ Configuration $CONFIG_NAME failed"
+        exit 1
+      fi</code></pre>
+                
+                <h4>6.4.3 Database Operations Sample</h4>
+                <pre><code>steps:
+  - name: Database Query
+    action: sql
+    connection: "production_db"
+    query: |
+      SELECT 
+        COUNT(*) as total_records,
+        MAX(created_date) as latest_record
+      FROM user_activities 
+      WHERE created_date >= DATEADD(day, -7, GETDATE())
+    output_file: "./db_stats.json"
+    timeout: 120
+
+  - name: Process Database Results
+    action: python
+    script: |
+      import json
+      from datetime import datetime
+      
+      # Read database results
+      with open('./db_stats.json', 'r') as f:
+          db_stats = json.load(f)
+      
+      print(f"Total records: {db_stats['total_records']}")
+      print(f"Latest record: {db_stats['latest_record']}")
+      
+      # Generate report
+      report = {
+          'report_type': 'weekly_activity',
+          'generated_at': datetime.now().isoformat(),
+          'statistics': db_stats
+      }
+      
+      with open('./weekly_report.json', 'w') as f:
+          json.dump(report, f, indent=2)
+
+  - name: Email Report
+    action: email
+    to: ["admin@company.com", "team@company.com"]
+    subject: "Weekly Activity Report - $JOB_RUN_DATE"
+    body: |
+      Weekly activity report has been generated.
+      
+      Statistics:
+      - Total records: $DB_TOTAL_RECORDS
+      - Latest activity: $DB_LATEST_RECORD
+      
+      Full report attached.
+    attachments:
+      - "./weekly_report.json"</code></pre>
+                
+                <h4>6.4.4 Docker Container Job Sample</h4>
+                <pre><code>steps:
+  - name: Prepare Docker Environment
+    action: shell
+    command: |
+      docker --version
+      docker pull python:3.9-slim
+    timeout: 300
+
+  - name: Run Processing Container
+    action: docker
+    image: "python:3.9-slim"
+    command: |
+      pip install pandas requests &&
+      python -c "
+      import pandas as pd
+      import requests
+      
+      # Your containerized processing logic
+      print('Running in Docker container')
+      df = pd.DataFrame({'test': [1, 2, 3]})
+      print(df.head())
+      "
+    volumes:
+      - "./data:/app/data"
+      - "./output:/app/output"
+    environment:
+      - "PYTHONPATH=/app"
+      - "DATA_SOURCE=$DATA_SOURCE_URL"
+    timeout: 600
+
+  - name: Cleanup
+    action: shell
+    command: |
+      docker system prune -f
+      echo "Docker cleanup completed"</code></pre>
+                
+                <h4>6.4.5 PowerShell Integration Sample</h4>
+                <pre><code>steps:
+  - name: Windows System Check
+    action: powershell
+    script: |
+      Write-Host "System Information:"
+      Get-ComputerInfo | Select-Object WindowsProductName, TotalPhysicalMemory
+      
+      Write-Host "Disk Space:"
+      Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID, @{Name="Size(GB)";Expression={[math]::Round($_.Size/1GB,2)}}, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.FreeSpace/1GB,2)}}
+    timeout: 60
+
+  - name: File Operations
+    action: powershell
+    script: |
+      $sourcePath = "C:\temp\input"
+      $destPath = "C:\temp\processed"
+      
+      if (!(Test-Path $destPath)) {
+          New-Item -ItemType Directory -Path $destPath -Force
+      }
+      
+      Get-ChildItem $sourcePath -Filter "*.csv" | ForEach-Object {
+          $content = Get-Content $_.FullName
+          $processedContent = $content | Where-Object { $_ -notmatch "^#" }
+          $outputFile = Join-Path $destPath $_.Name
+          $processedContent | Out-File $outputFile
+          Write-Host "Processed: $($_.Name)"
+      }
+    timeout: 180
+
+  - name: Generate Report
+    action: powershell
+    script: |
+      $report = @{
+          Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+          ProcessedFiles = (Get-ChildItem "C:\temp\processed" -Filter "*.csv").Count
+          Agent = $env:COMPUTERNAME
+          JobId = $env:JOB_ID
+      }
+      
+      $report | ConvertTo-Json | Out-File "C:\temp\job_report.json"
+      Write-Host "Report generated successfully"</code></pre>
+                
+                <h4>6.4.6 Environment Variables Reference</h4>
+                <div class="info-box">
+                    <p><strong>Available Environment Variables:</strong> Your YAML jobs have access to these predefined variables for context and configuration.</p>
+                </div>
+                
+                <pre><code>steps:
+  - name: Show Environment
+    action: shell
+    command: |
+      echo "Agent ID: $AGENT_ID"
+      echo "Job ID: $JOB_ID" 
+      echo "Job Name: $JOB_NAME"
+      echo "Agent Pool: $AGENT_POOL"
+      echo "Job Run Date: $JOB_RUN_DATE"
+      echo "Execution Strategy: $EXECUTION_STRATEGY"
+      echo "Working Directory: $JOB_WORKING_DIR"
+      echo "Configuration Name: $CONFIG_NAME" # (for multi-config jobs)
+      echo "Agent Hostname: $AGENT_HOSTNAME"</code></pre>
+                
+                <h4>6.4.7 Action Types Reference</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Action Type</th>
+                            <th>Description</th>
+                            <th>Use Case</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>shell</code></td>
+                            <td>Execute shell/bash commands</td>
+                            <td>System commands, file operations</td>
+                        </tr>
+                        <tr>
+                            <td><code>powershell</code></td>
+                            <td>Execute PowerShell scripts (Windows agents)</td>
+                            <td>Windows administration, .NET operations</td>
+                        </tr>
+                        <tr>
+                            <td><code>python</code></td>
+                            <td>Execute Python scripts</td>
+                            <td>Data processing, automation</td>
+                        </tr>
+                        <tr>
+                            <td><code>sql</code></td>
+                            <td>Execute SQL queries</td>
+                            <td>Database operations, reporting</td>
+                        </tr>
+                        <tr>
+                            <td><code>docker</code></td>
+                            <td>Run Docker containers</td>
+                            <td>Isolated execution environments</td>
+                        </tr>
+                        <tr>
+                            <td><code>download</code></td>
+                            <td>Download files from URLs</td>
+                            <td>File acquisition, data ingestion</td>
+                        </tr>
+                        <tr>
+                            <td><code>upload</code></td>
+                            <td>Upload files to destinations</td>
+                            <td>Result distribution, archiving</td>
+                        </tr>
+                        <tr>
+                            <td><code>email</code></td>
+                            <td>Send email notifications</td>
+                            <td>Alerting, report distribution</td>
+                        </tr>
+                        <tr>
+                            <td><code>http</code></td>
+                            <td>Make HTTP API calls</td>
+                            <td>API integration, webhooks</td>
+                        </tr>
+                        <tr>
+                            <td><code>file</code></td>
+                            <td>File operations (copy, move, delete)</td>
+                            <td>File management, cleanup</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h4>6.4.8 Best Practices for YAML Jobs</h4>
+                <div class="highlight-box">
+                    <h4>📋 YAML Job Best Practices</h4>
+                    <ul>
+                        <li><strong>Timeout Management</strong> - Always specify appropriate timeouts for each step</li>
+                        <li><strong>Error Handling</strong> - Use continue_on_error judiciously for non-critical steps</li>
+                        <li><strong>Environment Variables</strong> - Leverage built-in variables for context-aware jobs</li>
+                        <li><strong>Resource Cleanup</strong> - Include cleanup steps for temporary files and resources</li>
+                        <li><strong>Logging</strong> - Use echo/print statements for progress tracking</li>
+                        <li><strong>Security</strong> - Never hardcode secrets; use environment variables or secret management</li>
+                        <li><strong>Modularity</strong> - Break complex operations into discrete, testable steps</li>
+                    </ul>
+                </div>
             </div>
 
             <!-- Execution Strategies -->

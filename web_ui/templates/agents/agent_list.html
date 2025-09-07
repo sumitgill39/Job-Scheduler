@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Management - Job Scheduler</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .status-online { color: #28a745; }
+        .status-offline { color: #6c757d; }
+        .status-error { color: #dc3545; }
+        .agent-card { 
+            transition: all 0.2s;
+            border-left: 4px solid #007bff;
+        }
+        .agent-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .agent-card.online { border-left-color: #28a745; }
+        .agent-card.offline { border-left-color: #6c757d; }
+        .capability-badge {
+            background: #e3f2fd;
+            color: #1565c0;
+            font-size: 0.75em;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-cogs me-2"></i>
+                Windows Job Scheduler
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/"><i class="fas fa-home me-1"></i>Dashboard</a>
+                <a class="nav-link" href="/jobs/create"><i class="fas fa-plus me-1"></i>Create Job</a>
+                <a class="nav-link active" href="/agents"><i class="fas fa-server me-1"></i>Agents</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Page Header -->
+        <div class="row mb-4">
+            <div class="col">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2><i class="fas fa-server me-2 text-primary"></i>Agent Management</h2>
+                        <p class="text-muted">Manage execution agents and agent pools</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="refreshAgents()">
+                            <i class="fas fa-sync-alt me-1"></i>Refresh
+                        </button>
+                        <button class="btn btn-success" onclick="showAddAgentModal()">
+                            <i class="fas fa-plus me-1"></i>Add Agent
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Statistics -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h5 class="card-title">Online Agents</h5>
+                                <h2 id="onlineAgents">-</h2>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-check-circle fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-secondary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h5 class="card-title">Total Agents</h5>
+                                <h2 id="totalAgents">-</h2>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-server fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h5 class="card-title">Agent Pools</h5>
+                                <h2 id="totalPools">-</h2>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-layer-group fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h5 class="card-title">Pending Approval</h5>
+                                <h2 id="pendingApproval">-</h2>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-clock fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent List -->
+        <div class="row">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-list me-2"></i>Registered Agents
+                        </h5>
+                    </div>
+                    <div class="card-body" id="agentsList">
+                        <div class="d-flex justify-content-center p-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading agents...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Details Modal -->
+        <div class="modal fade" id="agentDetailsModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Agent Details</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="agentDetailsContent">
+                        <!-- Agent details will be loaded here -->
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-success" id="approveAgentBtn" onclick="approveAgent()">
+                            <i class="fas fa-check me-1"></i>Approve Agent
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        let currentAgentId = null;
+        
+        // Load agents on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAgents();
+            loadAgentStats();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(function() {
+                loadAgents();
+                loadAgentStats();
+            }, 30000);
+        });
+        
+        async function loadAgents() {
+            try {
+                const response = await fetch('/api/agent/list');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayAgents(data.agents);
+                } else {
+                    showError('Failed to load agents: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                showError('Error loading agents: ' + error.message);
+            }
+        }
+        
+        async function loadAgentStats() {
+            try {
+                const [agentsResponse, poolsResponse] = await Promise.all([
+                    fetch('/api/agent/list'),
+                    fetch('/api/agent/pools')
+                ]);
+                
+                const agentsData = await agentsResponse.json();
+                const poolsData = await poolsResponse.json();
+                
+                if (agentsData.success) {
+                    const agents = agentsData.agents;
+                    const onlineCount = agents.filter(a => a.is_online).length;
+                    const pendingCount = agents.filter(a => !a.is_approved).length;
+                    
+                    document.getElementById('totalAgents').textContent = agents.length;
+                    document.getElementById('onlineAgents').textContent = onlineCount;
+                    document.getElementById('pendingApproval').textContent = pendingCount;
+                }
+                
+                if (poolsData.success) {
+                    document.getElementById('totalPools').textContent = poolsData.pools.length;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        function displayAgents(agents) {
+            const container = document.getElementById('agentsList');
+            
+            if (agents.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center p-4">
+                        <i class="fas fa-server fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No Agents Registered</h5>
+                        <p class="text-muted">Agents will appear here once they register with the system.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const agentsHtml = agents.map(agent => `
+                <div class="agent-card card mb-3 ${agent.is_online ? 'online' : 'offline'}">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <h5 class="card-title mb-1">
+                                    <i class="fas fa-server me-2"></i>
+                                    ${agent.agent_name}
+                                    ${agent.is_online ? 
+                                        '<span class="badge bg-success ms-2">Online</span>' : 
+                                        '<span class="badge bg-secondary ms-2">Offline</span>'
+                                    }
+                                    ${!agent.is_approved ? 
+                                        '<span class="badge bg-warning ms-1">Pending Approval</span>' : ''
+                                    }
+                                </h5>
+                                <p class="card-text text-muted mb-1">
+                                    <strong>ID:</strong> ${agent.agent_id}<br>
+                                    <strong>Host:</strong> ${agent.hostname} (${agent.ip_address})<br>
+                                    <strong>Pool:</strong> ${agent.agent_pool}
+                                </p>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">Capabilities:</small><br>
+                                ${agent.capabilities.map(cap => 
+                                    `<span class="badge capability-badge me-1">${cap}</span>`
+                                ).join('')}
+                                <br><br>
+                                <small class="text-muted">
+                                    Jobs: ${agent.current_jobs}/${agent.max_parallel_jobs}
+                                </small>
+                            </div>
+                            <div class="col-md-3 text-end">
+                                <button class="btn btn-outline-primary btn-sm me-2" 
+                                        onclick="showAgentDetails('${agent.agent_id}')">
+                                    <i class="fas fa-info-circle me-1"></i>Details
+                                </button>
+                                ${!agent.is_approved ? 
+                                    `<button class="btn btn-success btn-sm me-1" 
+                                             onclick="quickApprove('${agent.agent_id}')">
+                                        <i class="fas fa-check me-1"></i>Approve
+                                    </button>` : ''
+                                }
+                                <!-- Agent Actions Dropdown -->
+                                <div class="dropdown d-inline">
+                                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" 
+                                            type="button" data-bs-toggle="dropdown">
+                                        <i class="fas fa-cog"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        ${agent.is_active ? 
+                                            `<li><a class="dropdown-item" href="#" onclick="deactivateAgent('${agent.agent_id}')">
+                                                <i class="fas fa-pause me-2 text-warning"></i>Deactivate
+                                            </a></li>` : 
+                                            `<li><a class="dropdown-item" href="#" onclick="activateAgent('${agent.agent_id}')">
+                                                <i class="fas fa-play me-2 text-success"></i>Activate
+                                            </a></li>`
+                                        }
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item" href="#" onclick="removeAgent('${agent.agent_id}', false)">
+                                            <i class="fas fa-trash me-2 text-danger"></i>Remove (Soft)
+                                        </a></li>
+                                        <li><a class="dropdown-item text-danger" href="#" onclick="removeAgent('${agent.agent_id}', true)">
+                                            <i class="fas fa-trash-alt me-2"></i>Delete Permanently
+                                        </a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            container.innerHTML = agentsHtml;
+        }
+        
+        async function showAgentDetails(agentId) {
+            currentAgentId = agentId;
+            
+            try {
+                const response = await fetch('/api/agent/list');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const agent = data.agents.find(a => a.agent_id === agentId);
+                    if (agent) {
+                        displayAgentDetails(agent);
+                        
+                        // Show/hide approve button
+                        const approveBtn = document.getElementById('approveAgentBtn');
+                        if (agent.is_approved) {
+                            approveBtn.style.display = 'none';
+                        } else {
+                            approveBtn.style.display = 'inline-block';
+                        }
+                        
+                        const modal = new bootstrap.Modal(document.getElementById('agentDetailsModal'));
+                        modal.show();
+                    }
+                }
+            } catch (error) {
+                showError('Error loading agent details: ' + error.message);
+            }
+        }
+        
+        function displayAgentDetails(agent) {
+            const content = document.getElementById('agentDetailsContent');
+            content.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Basic Information</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>Agent ID:</strong></td><td>${agent.agent_id}</td></tr>
+                            <tr><td><strong>Name:</strong></td><td>${agent.agent_name}</td></tr>
+                            <tr><td><strong>Hostname:</strong></td><td>${agent.hostname}</td></tr>
+                            <tr><td><strong>IP Address:</strong></td><td>${agent.ip_address}</td></tr>
+                            <tr><td><strong>Agent Pool:</strong></td><td>${agent.agent_pool}</td></tr>
+                            <tr><td><strong>Version:</strong></td><td>${agent.agent_version || 'N/A'}</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>System Information</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>OS:</strong></td><td>${agent.os_info || 'N/A'}</td></tr>
+                            <tr><td><strong>CPU Cores:</strong></td><td>${agent.cpu_cores || 'N/A'}</td></tr>
+                            <tr><td><strong>Memory:</strong></td><td>${agent.memory_gb ? agent.memory_gb + ' GB' : 'N/A'}</td></tr>
+                            <tr><td><strong>Disk Space:</strong></td><td>${agent.disk_space_gb ? agent.disk_space_gb + ' GB' : 'N/A'}</td></tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <h6>Status & Performance</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>Status:</strong></td><td>
+                                <span class="badge ${agent.is_online ? 'bg-success' : 'bg-secondary'}">
+                                    ${agent.status}
+                                </span>
+                            </td></tr>
+                            <tr><td><strong>Approved:</strong></td><td>
+                                <span class="badge ${agent.is_approved ? 'bg-success' : 'bg-warning'}">
+                                    ${agent.is_approved ? 'Yes' : 'Pending'}
+                                </span>
+                            </td></tr>
+                            <tr><td><strong>Current Jobs:</strong></td><td>${agent.current_jobs}/${agent.max_parallel_jobs}</td></tr>
+                            <tr><td><strong>CPU Usage:</strong></td><td>${agent.cpu_percent ? agent.cpu_percent.toFixed(1) + '%' : 'N/A'}</td></tr>
+                            <tr><td><strong>Memory Usage:</strong></td><td>${agent.memory_percent ? agent.memory_percent.toFixed(1) + '%' : 'N/A'}</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Timestamps</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>Registered:</strong></td><td>${formatDate(agent.registered_date)}</td></tr>
+                            <tr><td><strong>Last Heartbeat:</strong></td><td>${formatDate(agent.last_heartbeat)}</td></tr>
+                            <tr><td><strong>Last Job:</strong></td><td>${formatDate(agent.last_job_completed)}</td></tr>
+                        </table>
+                        
+                        <h6>Capabilities</h6>
+                        <div>
+                            ${agent.capabilities.map(cap => 
+                                `<span class="badge capability-badge me-1 mb-1">${cap}</span>`
+                            ).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        async function approveAgent() {
+            if (!currentAgentId) return;
+            
+            try {
+                const response = await fetch(`/api/agent/${currentAgentId}/approve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showSuccess('Agent approved successfully!');
+                    
+                    // Close modal and refresh
+                    bootstrap.Modal.getInstance(document.getElementById('agentDetailsModal')).hide();
+                    loadAgents();
+                    loadAgentStats();
+                } else {
+                    showError('Failed to approve agent: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                showError('Error approving agent: ' + error.message);
+            }
+        }
+        
+        async function quickApprove(agentId) {
+            try {
+                const response = await fetch(`/api/agent/${agentId}/approve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showSuccess('Agent approved successfully!');
+                    loadAgents();
+                    loadAgentStats();
+                } else {
+                    showError('Failed to approve agent: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                showError('Error approving agent: ' + error.message);
+            }
+        }
+        
+        function refreshAgents() {
+            loadAgents();
+            loadAgentStats();
+            showSuccess('Agents refreshed successfully!');
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return 'Never';
+            return new Date(dateString).toLocaleString();
+        }
+        
+        function showSuccess(message) {
+            // Simple success notification - you can enhance this
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            alert.style.top = '20px';
+            alert.style.right = '20px';
+            alert.style.zIndex = '9999';
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alert);
+            
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 5000);
+        }
+        
+        function showError(message) {
+            // Simple error notification - you can enhance this
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            alert.style.top = '20px';
+            alert.style.right = '20px';
+            alert.style.zIndex = '9999';
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alert);
+            
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 8000);
+        }
+        
+        // Agent removal and management functions
+        async function removeAgent(agentId, permanentDelete = false) {
+            const action = permanentDelete ? 'permanently delete' : 'remove';
+            const confirmMessage = `Are you sure you want to ${action} agent "${agentId}"?\n\n${permanentDelete ? 
+                'This will permanently delete the agent and cannot be undone!' : 
+                'This will deactivate the agent but keep its data.'}`;
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/agent/${agentId}/remove`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        permanent_delete: permanentDelete
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const message = `Agent ${agentId} has been ${permanentDelete ? 'permanently deleted' : 'removed'}${data.cancelled_jobs > 0 ? ` (${data.cancelled_jobs} jobs cancelled)` : ''}`;
+                    showSuccess(message);
+                    loadAgents();
+                    loadAgentStats();
+                } else {
+                    showError('Failed to remove agent: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                showError('Error removing agent: ' + error.message);
+            }
+        }
+        
+        async function deactivateAgent(agentId) {
+            if (!confirm(`Are you sure you want to deactivate agent "${agentId}"?\n\nThe agent will stop receiving new jobs but existing jobs will complete.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/agent/${agentId}/deactivate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showSuccess(`Agent ${agentId} has been deactivated`);
+                    loadAgents();
+                    loadAgentStats();
+                } else {
+                    showError('Failed to deactivate agent: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                showError('Error deactivating agent: ' + error.message);
+            }
+        }
+        
+        async function activateAgent(agentId) {
+            try {
+                const response = await fetch(`/api/agent/${agentId}/activate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showSuccess(`Agent ${agentId} has been reactivated`);
+                    loadAgents();
+                    loadAgentStats();
+                } else {
+                    showError('Failed to activate agent: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                showError('Error activating agent: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

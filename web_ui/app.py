@@ -107,6 +107,12 @@ def create_app(scheduler_manager=None):
         from .routes import create_routes
         create_routes(app)
         logger.info("[SUCCESS] Routes registered successfully")
+        
+        # Register Agent API blueprint
+        logger.info("[AGENT API] Registering agent API routes...")
+        from .agent_api import agent_api
+        app.register_blueprint(agent_api)
+        logger.info("[SUCCESS] Agent API routes registered at /api/agent")
     except Exception as e:
         logger.error(f"[ERROR] Failed to register routes: {e}")
         raise

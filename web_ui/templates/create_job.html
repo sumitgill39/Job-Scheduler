@@ -16,7 +16,7 @@
                     <div class="mb-4">
                         <label class="form-label fw-bold">Job Type *</label>
                         <div class="row">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <div class="card job-type-card" data-type="sql" onclick="selectJobType('sql')">
                                     <div class="card-body text-center">
                                         <i class="fas fa-database fa-3x text-info mb-3"></i>
@@ -25,12 +25,21 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <div class="card job-type-card" data-type="powershell" onclick="selectJobType('powershell')">
                                     <div class="card-body text-center">
                                         <i class="fab fa-microsoft fa-3x text-primary mb-3"></i>
                                         <h5>PowerShell Job</h5>
                                         <p class="text-muted mb-0">Run PowerShell scripts and commands</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card job-type-card" data-type="agent" onclick="selectJobType('agent')">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-server fa-3x text-success mb-3"></i>
+                                        <h5>Agent Job</h5>
+                                        <p class="text-muted mb-0">Execute jobs on remote agents with distributed processing</p>
                                     </div>
                                 </div>
                             </div>
@@ -455,6 +464,168 @@
                                 </a>
                                 <button type="button" class="btn btn-primary btn-lg powershell-submit-btn" onclick="showPowerShellJobJson()">
                                     <i class="fab fa-microsoft me-2"></i>Create PowerShell Job
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Job Configuration -->
+                    <div id="agentJobConfig" class="job-config" style="display: none;">
+                        <h5 class="mb-3"><i class="fas fa-server me-2"></i>Agent Job Configuration</h5>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="agentPool" class="form-label">Agent Pool *</label>
+                                <select class="form-select" id="agentPool" name="agent_pool" required>
+                                    <option value="" disabled selected>Loading agent pools...</option>
+                                </select>
+                                <div class="form-text">Select the agent pool where this job should execute</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="executionStrategy" class="form-label">Execution Strategy *</label>
+                                <select class="form-select" id="executionStrategy" name="execution_strategy" onchange="toggleExecutionOptions()">
+                                    <option value="default_pool">Default Pool - Single execution</option>
+                                    <option value="multi_configuration">Multi-Configuration - Parallel configurations</option>
+                                    <option value="multi_agent">Multi-Agent - Same job on multiple agents</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Agent Requirements -->
+                        <div class="mb-3">
+                            <label for="agentCapabilities" class="form-label">Required Capabilities</label>
+                            <input type="text" class="form-control" id="agentCapabilities" name="agent_capabilities" 
+                                   placeholder="python,docker,git (comma-separated)">
+                            <div class="form-text">Specify required agent capabilities (optional)</div>
+                        </div>
+
+                        <!-- Multi-Configuration Options -->
+                        <div id="multiConfigOptions" style="display: none;">
+                            <div class="card bg-light mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-list me-1"></i>Multi-Configuration Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="maxParallelConfigs" class="form-label">Max Parallel Configurations</label>
+                                            <input type="number" class="form-control" id="maxParallelConfigs" 
+                                                   name="max_parallel" value="3" min="1" max="10">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="configTimeout" class="form-label">Timeout per Configuration (minutes)</label>
+                                            <input type="number" class="form-control" id="configTimeout" 
+                                                   name="config_timeout" value="30" min="1" max="480">
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="configurations" class="form-label">Configurations (JSON)</label>
+                                        <textarea class="form-control" id="configurations" name="configurations" rows="4" 
+                                                  placeholder='[{"env": "dev", "database": "dev_db"}, {"env": "prod", "database": "prod_db"}]'></textarea>
+                                        <div class="form-text">Define configurations as JSON array</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Multi-Agent Options -->
+                        <div id="multiAgentOptions" style="display: none;">
+                            <div class="card bg-light mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-server me-1"></i>Multi-Agent Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="agentCount" class="form-label">Number of Agents</label>
+                                            <input type="number" class="form-control" id="agentCount" 
+                                                   name="agent_count" value="2" min="1" max="20">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="distributionStrategy" class="form-label">Distribution Strategy</label>
+                                            <select class="form-select" id="distributionStrategy" name="distribution">
+                                                <option value="round_robin">Round Robin</option>
+                                                <option value="random">Random</option>
+                                                <option value="least_loaded">Least Loaded</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Job Steps -->
+                        <div class="mb-3">
+                            <label for="agentJobSteps" class="form-label">Job Steps (YAML) *</label>
+                            <textarea class="form-control" id="agentJobSteps" name="job_steps" rows="8" required 
+                                      placeholder="job_steps:
+  - name: checkout_code
+    type: git_checkout
+    repository: 'https://github.com/company/app.git'
+    branch: 'main'
+    
+  - name: build_application  
+    type: shell_command
+    command: 'docker build -t myapp .'
+    
+  - name: run_tests
+    type: shell_command
+    command: 'docker run --rm myapp npm test'"></textarea>
+                            <div class="form-text">Define the steps to execute on the agent(s)</div>
+                        </div>
+
+                        <!-- Advanced Options -->
+                        <div class="card bg-light">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-cog me-1"></i>Advanced Options</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <label for="agentTimeout" class="form-label">Timeout (minutes)</label>
+                                        <input type="number" class="form-control" id="agentTimeout" 
+                                               name="timeout_minutes" value="60" min="1" max="1440">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="agentPriority" class="form-label">Priority</label>
+                                        <select class="form-select" id="agentPriority" name="priority">
+                                            <option value="1">1 - Lowest</option>
+                                            <option value="3">3 - Low</option>
+                                            <option value="5" selected>5 - Normal</option>
+                                            <option value="7">7 - High</option>
+                                            <option value="10">10 - Highest</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="agentRetries" class="form-label">Max Retries</label>
+                                        <input type="number" class="form-control" id="agentRetries" 
+                                               name="max_retries" value="0" min="0" max="5">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Job Action Buttons -->
+                    <div id="agentJobActions" class="mt-4 pt-3 border-top agent-job-actions" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <button type="button" class="btn btn-outline-secondary me-2" onclick="validateAgentJob()">
+                                    <i class="fas fa-check me-1"></i>Validate Configuration
+                                </button>
+                                <button type="button" class="btn btn-outline-info me-2" onclick="previewAgentYAML()">
+                                    <i class="fas fa-eye me-1"></i>Preview YAML
+                                </button>
+                                <a href="/agents" class="btn btn-outline-success" target="_blank">
+                                    <i class="fas fa-server me-1"></i>Manage Agents
+                                </a>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <a href="{{ url_for('job_list') }}" class="btn btn-secondary me-3">
+                                    <i class="fas fa-times me-1"></i>Cancel
+                                </a>
+                                <button type="button" class="btn btn-success btn-lg agent-submit-btn" onclick="createAgentJob()">
+                                    <i class="fas fa-server me-2"></i>Create Agent Job
                                 </button>
                             </div>
                         </div>
@@ -1439,6 +1610,284 @@ finally {
                 document.getElementById('customPassword').required = true;
             }
         }
+        
+        // Load agent pools when page loads
+        loadAgentPools();
     });
+    
+    // ================== AGENT JOB FUNCTIONS ==================
+    
+    // Load available agent pools
+    function loadAgentPools() {
+        fetch('/api/agent/pools')
+            .then(response => response.json())
+            .then(data => {
+                const select = document.getElementById('agentPool');
+                select.innerHTML = '<option value="" disabled selected>Select an agent pool...</option>';
+                
+                if (data.success && data.pools && data.pools.length > 0) {
+                    data.pools.forEach(pool => {
+                        const option = document.createElement('option');
+                        option.value = pool.pool_name;
+                        option.textContent = `${pool.pool_name} (${pool.agent_count} agents)`;
+                        select.appendChild(option);
+                    });
+                } else {
+                    select.innerHTML = '<option value="default">default (No pools configured)</option>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading agent pools:', error);
+                const select = document.getElementById('agentPool');
+                select.innerHTML = '<option value="default">default (Error loading pools)</option>';
+            });
+    }
+    
+    // Toggle execution strategy options
+    function toggleExecutionOptions() {
+        const strategy = document.getElementById('executionStrategy').value;
+        const multiConfigSection = document.getElementById('multiConfigSection');
+        const multiAgentSection = document.getElementById('multiAgentSection');
+        
+        // Hide all sections first
+        if (multiConfigSection) multiConfigSection.style.display = 'none';
+        if (multiAgentSection) multiAgentSection.style.display = 'none';
+        
+        // Show relevant section
+        if (strategy === 'multi_configuration' && multiConfigSection) {
+            multiConfigSection.style.display = 'block';
+        } else if (strategy === 'multi_agent' && multiAgentSection) {
+            multiAgentSection.style.display = 'block';
+        }
+    }
+    
+    // Create agent job
+    function createAgentJob() {
+        if (!validateAgentJob()) {
+            return;
+        }
+        
+        const formData = new FormData(document.getElementById('createJobForm'));
+        const jobData = {
+            type: 'agent',
+            name: formData.get('name'),
+            description: formData.get('description'),
+            enabled: formData.get('enabled') === 'true',
+            timeout: parseInt(formData.get('timeout')) || 300,
+            max_retries: parseInt(formData.get('max_retries')) || 3,
+            retry_delay: parseInt(formData.get('retry_delay')) || 60,
+            run_as: formData.get('run_as')
+        };
+        
+        // Agent-specific configuration
+        jobData.agent_config = {
+            agent_pool: formData.get('agent_pool'),
+            execution_strategy: formData.get('execution_strategy') || 'default_pool',
+            agent_capabilities: formData.get('agent_capabilities') ? 
+                formData.get('agent_capabilities').split(',').map(s => s.trim()) : [],
+            job_steps: document.getElementById('jobStepsYaml').value,
+            environment_variables: formData.get('environment_variables') ? 
+                JSON.parse(formData.get('environment_variables')) : {},
+            working_directory: formData.get('working_directory'),
+            isolation_mode: formData.get('isolation_mode') || 'process'
+        };
+        
+        // Handle execution strategy specific options
+        if (jobData.agent_config.execution_strategy === 'multi_configuration') {
+            jobData.agent_config.configurations = formData.get('configurations') ? 
+                JSON.parse(formData.get('configurations')) : [];
+            jobData.agent_config.max_parallel = parseInt(formData.get('max_parallel_configs')) || 4;
+        } else if (jobData.agent_config.execution_strategy === 'multi_agent') {
+            jobData.agent_config.agent_count = parseInt(formData.get('agent_count')) || 2;
+            jobData.agent_config.max_parallel = parseInt(formData.get('max_parallel_agents')) || 4;
+            jobData.agent_config.failure_threshold = parseInt(formData.get('failure_threshold')) || 50;
+        }
+        
+        // Handle scheduling
+        const enableSchedule = document.getElementById('enableSchedule').checked;
+        if (enableSchedule) {
+            const scheduleType = document.querySelector('input[name="scheduleType"]:checked').value;
+            const timezone = document.getElementById('scheduleTimezone').value;
+            
+            if (scheduleType === 'cron') {
+                jobData.schedule = {
+                    type: 'cron',
+                    cron: formData.get('cron_expression'),
+                    timezone: timezone
+                };
+            } else if (scheduleType === 'interval') {
+                const intervalValue = parseInt(formData.get('interval_value'));
+                const intervalUnit = formData.get('interval_unit');
+                jobData.schedule = {
+                    type: 'interval',
+                    [intervalUnit]: intervalValue,
+                    timezone: timezone
+                };
+            } else if (scheduleType === 'once') {
+                const runDate = formData.get('run_date');
+                const runTime = formData.get('run_time');
+                const localDateTime = `${runDate}T${runTime}:00`;
+                
+                let utcDateTime = localDateTime;
+                if (timezone !== 'UTC') {
+                    try {
+                        const tempDate = new Date(localDateTime);
+                        const utcTime = new Date(tempDate.toLocaleString('en-US', { timeZone: 'UTC' }));
+                        const localTime = new Date(tempDate.toLocaleString('en-US', { timeZone: timezone }));
+                        const offset = localTime.getTime() - utcTime.getTime();
+                        const utcDate = new Date(tempDate.getTime() - offset);
+                        utcDateTime = utcDate.toISOString().slice(0, 19);
+                    } catch (error) {
+                        console.warn('Timezone conversion failed, using local time:', error);
+                    }
+                }
+                
+                jobData.schedule = {
+                    type: 'date',
+                    run_date: utcDateTime,
+                    timezone: timezone,
+                    local_time: localDateTime
+                };
+            }
+        }
+        
+        // Show preview
+        const jsonConfig = JSON.stringify(jobData, null, 2);
+        const confirmed = confirm(`Agent Job Configuration:\n\n${jsonConfig}\n\nDo you want to create this agent job?`);
+        
+        if (confirmed) {
+            submitAgentJob(jobData);
+        }
+    }
+    
+    // Submit agent job to API
+    function submitAgentJob(jobData) {
+        showLoading('Creating agent job...');
+        
+        fetch('/api/jobs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(jobData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                showSuccess(data.message || 'Agent job created successfully!');
+                setTimeout(() => {
+                    window.location.href = `/jobs/${data.job_id}`;
+                }, 2000);
+            } else {
+                showError(data.error || 'Failed to create agent job');
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            showError('Error creating agent job: ' + error.message);
+        });
+    }
+    
+    // Validate agent job configuration
+    function validateAgentJob() {
+        const form = document.getElementById('createJobForm');
+        const formData = new FormData(form);
+        
+        // Basic validation
+        if (!formData.get('name')) {
+            showError('Job name is required');
+            return false;
+        }
+        
+        if (!formData.get('agent_pool')) {
+            showError('Agent pool selection is required');
+            return false;
+        }
+        
+        const jobSteps = document.getElementById('jobStepsYaml').value.trim();
+        if (!jobSteps) {
+            showError('Job steps YAML is required');
+            return false;
+        }
+        
+        // Validate YAML syntax
+        try {
+            // Basic YAML validation (check for common issues)
+            if (!jobSteps.includes('steps:') && !jobSteps.includes('- name:')) {
+                throw new Error('Job steps should contain "steps:" section with step definitions');
+            }
+        } catch (error) {
+            showError('Invalid YAML syntax in job steps: ' + error.message);
+            return false;
+        }
+        
+        // Strategy-specific validation
+        const strategy = formData.get('execution_strategy');
+        if (strategy === 'multi_configuration') {
+            const configs = formData.get('configurations');
+            if (configs) {
+                try {
+                    const configArray = JSON.parse(configs);
+                    if (!Array.isArray(configArray) || configArray.length === 0) {
+                        throw new Error('Configurations must be a non-empty array');
+                    }
+                } catch (error) {
+                    showError('Invalid configurations JSON: ' + error.message);
+                    return false;
+                }
+            }
+        } else if (strategy === 'multi_agent') {
+            const agentCount = parseInt(formData.get('agent_count'));
+            if (isNaN(agentCount) || agentCount < 2 || agentCount > 20) {
+                showError('Agent count must be between 2 and 20 for multi-agent execution');
+                return false;
+            }
+        }
+        
+        showSuccess('Agent job configuration is valid');
+        return true;
+    }
+    
+    // Preview agent job configuration
+    function previewAgentJob() {
+        if (!validateAgentJob()) {
+            return;
+        }
+        
+        const formData = new FormData(document.getElementById('createJobForm'));
+        const jobData = {
+            type: 'agent',
+            name: formData.get('name'),
+            description: formData.get('description'),
+            enabled: formData.get('enabled') === 'true',
+            timeout: parseInt(formData.get('timeout')) || 300,
+            agent_pool: formData.get('agent_pool'),
+            execution_strategy: formData.get('execution_strategy'),
+            job_steps: document.getElementById('jobStepsYaml').value,
+            agent_capabilities: formData.get('agent_capabilities') ? 
+                formData.get('agent_capabilities').split(',').map(s => s.trim()) : []
+        };
+        
+        const jsonConfig = JSON.stringify(jobData, null, 2);
+        alert(`Agent Job Preview:\n\n${jsonConfig}`);
+    }
+    
+    // Update selectJobType function to handle agent jobs
+    const originalSelectJobType = selectJobType;
+    selectJobType = function(type) {
+        originalSelectJobType(type);
+        
+        // Handle agent job specific UI
+        if (type === 'agent') {
+            document.getElementById('agentJobActions').style.display = 'block';
+            document.getElementById('sqlJobActions').style.display = 'none';
+            document.getElementById('powershellJobActions').style.display = 'none';
+            document.getElementById('defaultJobActions').style.display = 'none';
+            
+            // Load agent pools when agent job type is selected
+            loadAgentPools();
+        }
+    };
 </script>
 {% endblock %}
