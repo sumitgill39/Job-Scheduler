@@ -32,7 +32,7 @@ import signal
 class JobSchedulerAgent:
     def __init__(self, scheduler_url, agent_id, agent_name="", agent_pool="default", 
                  capabilities=None, max_parallel_jobs=2, heartbeat_interval=30, 
-                 poll_interval=10, log_level="INFO"):
+                 poll_interval=10, log_level="INFO", work_dir=None):
         """
         Initialize the Job Scheduler Agent with command-line parameters
         
@@ -46,6 +46,7 @@ class JobSchedulerAgent:
             heartbeat_interval (int): Heartbeat interval in seconds
             poll_interval (int): Job polling interval in seconds
             log_level (str): Logging level (DEBUG, INFO, WARNING, ERROR)
+            work_dir (str): Base working directory for agent (default: ./_work)
         """
         self.scheduler_url = scheduler_url.rstrip('/')
         self.agent_id = agent_id
@@ -54,6 +55,15 @@ class JobSchedulerAgent:
         self.max_parallel_jobs = max_parallel_jobs
         self.heartbeat_interval = heartbeat_interval
         self.poll_interval = poll_interval
+        
+        # Setup working directory structure
+        if work_dir:
+            self.work_dir = os.path.abspath(work_dir)
+        else:
+            self.work_dir = os.path.abspath(os.path.join(os.getcwd(), '_work'))
+        
+        # Initialize working directory structure
+        self._setup_work_directory()
         
         # Auto-detect capabilities if not provided
         if capabilities is None:
@@ -108,6 +118,95 @@ class JobSchedulerAgent:
         """Handle shutdown signals"""
         self.logger.info(f"Received signal {signum}, shutting down gracefully...")
         self.shutdown_requested = True
+    
+    def _setup_work_directory(self):
+        """
+        Setup the agent working directory structure
+        Creates:
+        - _work/              # Base working directory
+        - _work/temp/         # Temporary files
+        - _work/tools/        # Agent tools and utilities
+        - _work/{exec_id}/    # Job execution directories (created per job)
+            - a/              # Artifacts directory
+            - b/              # Binaries/build output directory  
+            - s/              # Sources directory (for checkouts)
+        """
+        # Create base work directory
+        os.makedirs(self.work_dir, exist_ok=True)
+        
+        # Create subdirectories
+        temp_dir = os.path.join(self.work_dir, 'temp')
+        tools_dir = os.path.join(self.work_dir, 'tools')
+        
+        os.makedirs(temp_dir, exist_ok=True)
+        os.makedirs(tools_dir, exist_ok=True)
+        
+        # Store paths for later use
+        self.temp_dir = temp_dir
+        self.tools_dir = tools_dir
+        
+        # Log directory creation
+        if hasattr(self, 'logger'):
+            self.logger.info(f"Working directory initialized at: {self.work_dir}")
+    
+    def _create_job_workspace(self, job_id):
+        """
+        Create workspace directories for a specific job execution
+        
+        Args:
+            job_id: The job/execution ID
+            
+        Returns:
+            dict: Paths to the created directories
+        """
+        # Create execution-specific directory
+        exec_dir = os.path.join(self.work_dir, str(job_id))
+        os.makedirs(exec_dir, exist_ok=True)
+        
+        # Create standard subdirectories (Azure DevOps style)
+        paths = {
+            'root': exec_dir,
+            'a': os.path.join(exec_dir, 'a'),  # Artifacts
+            'b': os.path.join(exec_dir, 'b'),  # Binaries/Build
+            's': os.path.join(exec_dir, 's'),  # Sources
+        }
+        
+        for dir_path in paths.values():
+            os.makedirs(dir_path, exist_ok=True)
+        
+        return paths
+    
+    def _cleanup_job_workspace(self, job_id, keep_artifacts=False):
+        """
+        Clean up job workspace after execution
+        
+        Args:
+            job_id: The job/execution ID
+            keep_artifacts: Whether to preserve artifacts directory
+        """
+        exec_dir = os.path.join(self.work_dir, str(job_id))
+        
+        if not os.path.exists(exec_dir):
+            return
+        
+        try:
+            if keep_artifacts:
+                # Keep artifacts, clean other directories
+                for subdir in ['b', 's']:
+                    dir_path = os.path.join(exec_dir, subdir)
+                    if os.path.exists(dir_path):
+                        import shutil
+                        shutil.rmtree(dir_path, ignore_errors=True)
+            else:
+                # Clean entire execution directory
+                import shutil
+                shutil.rmtree(exec_dir, ignore_errors=True)
+                
+            if hasattr(self, 'logger'):
+                self.logger.debug(f"Cleaned workspace for job {job_id}")
+        except Exception as e:
+            if hasattr(self, 'logger'):
+                self.logger.warning(f"Failed to clean workspace for job {job_id}: {e}")
     
     def _detect_capabilities(self):
         """Auto-detect system capabilities"""
@@ -349,6 +448,7 @@ class JobSchedulerAgent:
         """Execute a job"""
         job_id = job.get("id")
         job_name = job.get("name", f"Job-{job_id}")
+        workspace = None
         
         self.logger.info(f"STARTING JOB {job_id}: {job_name}")
         self.active_jobs[job_id] = job
@@ -357,6 +457,10 @@ class JobSchedulerAgent:
         self.update_job_status(job_id, "running", f"Job started on agent {self.agent_id}")
         
         try:
+            # Create job workspace
+            workspace = self._create_job_workspace(job_id)
+            self.logger.info(f"Job workspace created at: {workspace['root']}")
+            
             # Parse job YAML
             job_yaml = job.get("job_yaml", "")
             if job_yaml:
@@ -364,7 +468,7 @@ class JobSchedulerAgent:
             else:
                 raise Exception("No job configuration provided")
             
-            # Set environment variables
+            # Set environment variables including workspace paths
             env = os.environ.copy()
             env.update({
                 "JOB_ID": str(job_id),
@@ -372,7 +476,18 @@ class JobSchedulerAgent:
                 "AGENT_ID": self.agent_id,
                 "AGENT_NAME": self.agent_name,
                 "AGENT_HOSTNAME": platform.node(),
-                "AGENT_POOL": self.agent_pool
+                "AGENT_POOL": self.agent_pool,
+                # Workspace paths
+                "AGENT_WORKFOLDER": self.work_dir,
+                "AGENT_BUILDDIRECTORY": workspace['root'],
+                "BUILD_SOURCESDIRECTORY": workspace['s'],
+                "BUILD_BINARIESDIRECTORY": workspace['b'],
+                "BUILD_ARTIFACTSDIRECTORY": workspace['a'],
+                # Short aliases
+                "WORKSPACE": workspace['root'],
+                "SOURCES_DIR": workspace['s'],
+                "BINARIES_DIR": workspace['b'],
+                "ARTIFACTS_DIR": workspace['a']
             })
             
             # Execute job steps
@@ -388,15 +503,15 @@ class JobSchedulerAgent:
                 
                 if action == "shell":
                     command = step.get("command", "")
-                    output = self._execute_shell(command, env)
+                    output = self._execute_shell(command, env, workspace['s'])
                     
                 elif action == "python":
                     script = step.get("script", "")
-                    output = self._execute_python(script, env)
+                    output = self._execute_python(script, env, workspace['s'])
                     
                 elif action == "powershell":
                     script = step.get("script", "")
-                    output = self._execute_powershell(script, env)
+                    output = self._execute_powershell(script, env, workspace['s'])
                     
                 else:
                     raise Exception(f"Unsupported action: {action}")
@@ -417,19 +532,23 @@ class JobSchedulerAgent:
         finally:
             # Remove from active jobs
             self.active_jobs.pop(job_id, None)
+            
+            # Clean up workspace (keeping artifacts for now)
+            if workspace:
+                self._cleanup_job_workspace(job_id, keep_artifacts=True)
     
-    def _execute_shell(self, command, env):
+    def _execute_shell(self, command, env, working_dir=None):
         """Execute shell command"""
         try:
             if platform.system() == "Windows":
                 result = subprocess.run(
                     command, shell=True, capture_output=True, 
-                    text=True, env=env, timeout=300
+                    text=True, env=env, timeout=300, cwd=working_dir
                 )
             else:
                 result = subprocess.run(
                     ["bash", "-c", command], capture_output=True, 
-                    text=True, env=env, timeout=300
+                    text=True, env=env, timeout=300, cwd=working_dir
                 )
             
             output = result.stdout
@@ -446,12 +565,12 @@ class JobSchedulerAgent:
         except Exception as e:
             raise Exception(f"Shell execution failed: {e}")
     
-    def _execute_python(self, script, env):
+    def _execute_python(self, script, env, working_dir=None):
         """Execute Python script"""
         try:
             result = subprocess.run(
                 [sys.executable, "-c", script],
-                capture_output=True, text=True, env=env, timeout=300
+                capture_output=True, text=True, env=env, timeout=300, cwd=working_dir
             )
             
             output = result.stdout
@@ -468,7 +587,7 @@ class JobSchedulerAgent:
         except Exception as e:
             raise Exception(f"Python execution failed: {e}")
     
-    def _execute_powershell(self, script, env):
+    def _execute_powershell(self, script, env, working_dir=None):
         """Execute PowerShell script (Windows only)"""
         if platform.system() != "Windows":
             raise Exception("PowerShell is only available on Windows")
@@ -476,7 +595,7 @@ class JobSchedulerAgent:
         try:
             result = subprocess.run(
                 ["powershell", "-Command", script],
-                capture_output=True, text=True, env=env, timeout=300
+                capture_output=True, text=True, env=env, timeout=300, cwd=working_dir
             )
             
             output = result.stdout
@@ -612,6 +731,8 @@ Requirements:
     parser.add_argument("--log-level", default="INFO",
                        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                        help="Logging level (default: INFO)")
+    parser.add_argument("--work-dir", 
+                       help="Base working directory for agent (default: ./_work)")
     
     # Parse arguments
     args = parser.parse_args()
