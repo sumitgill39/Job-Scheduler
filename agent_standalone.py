@@ -372,11 +372,17 @@ class JobSchedulerAgent:
         if not self.auth_token:
             return []
         
+        poll_data = {
+            "agent_id": self.agent_id,
+            "agent_pool": self.agent_pool,
+            "max_jobs": self.max_parallel_jobs - len(self.active_jobs)
+        }
+        
         try:
-            response = requests.get(
+            response = requests.post(
                 f"{self.scheduler_url}/api/agent/jobs/poll",
+                json=poll_data,
                 headers={"Authorization": f"Bearer {self.auth_token}"},
-                params={"agent_id": self.agent_id},
                 timeout=10
             )
             
