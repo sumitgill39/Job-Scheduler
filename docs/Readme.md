@@ -183,7 +183,7 @@ web_ui/
 ### Prerequisites
 - Python 3.8+
 - SQLAlchemy database
-- Existing Job Scheduler V1 installation
+
 
 ### Installation
 1. **Database Migration**: Run V2 schema migration
