@@ -1,0 +1,83 @@
+Job Scheduler Project Notes
+===========================
+
+## Active Agent Setup Steps
+1. Configure agent machine with Python 3.7+
+2. Install required packages: requests, pyyaml, psutil, flask
+3. Set up agent with polling configuration
+4. Register agent with scheduler via /api/agent/register
+5. Agent polls for jobs via /api/agent/jobs/poll
+6. Execute jobs and report back via /api/agent/jobs/{execution_id}/complete
+
+## Passive Agent Setup Steps
+1. Deploy PassiveAgentSetup.py to target machine
+2. Configure agent settings (scheduler URL, agent ID, pool)
+3. Run startup scripts: start_passive_agent.bat or start_passive_agent.ps1
+4. Agent registers and waits for HTTP job assignments
+5. Scheduler pushes jobs to agent via HTTP POST
+6. Agent executes and reports completion with full logs
+
+## Database Schema Files
+- database_setup_complete.sql - Main database schema setup
+- database/create_agents_table.sql - Agent tables creation
+- database/agent_migration.sql - Schema migration for agents
+- database/sql_schema_update.sql - Schema updates and modifications
+
+## SQL Troubleshooting Files
+- Fix missing columns in agent_job_assignments table
+- Run schema updates for passive agent support
+- Check agent registration and approval status
+
+## Key Files
+- main.py - Application entry point
+- core/job_executor.py - Job execution engine with passive agent support
+- core/agent_job_handler.py - Agent management and job assignment
+- web_ui/routes.py - Web interface and job management
+- web_ui/agent_api.py - Agent REST API with JWT authentication
+- database/sqlalchemy_models.py - Core database models
+- database/agent_models.py - Agent-specific database models
+- docs/PassiveAgentSetup.py - Complete passive agent implementation
+- docs/agent_standalone.py - Active polling agent implementation
+
+## Agent Deployment Scripts
+- scripts/start_passive_agent.bat - Windows batch startup
+- scripts/start_passive_agent.ps1 - PowerShell startup with service support
+- scripts/install_passive_agent.ps1 - Remote deployment script
+
+## Current Issues
+- Database schema mismatch in agent_job_assignments table
+- Missing columns: assignment_type, assignment_strategy, accepted_at, priority, timeout_minutes, max_retries, retry_count, return_code, output_summary
+- Need to run database migration to add missing columns
+
+## Agent API Endpoints
+- POST /api/agent/register - Agent registration
+- POST /api/agent/heartbeat - Agent heartbeat updates
+- GET /api/agent/jobs/poll - Job polling (active agents)
+- POST /api/agent/jobs/{execution_id}/status - Job status updates
+- POST /api/agent/jobs/{execution_id}/complete - Job completion reporting
+
+## Job Types Supported
+- PowerShell scripts (.ps1)
+- SQL queries and procedures
+- Command line executables
+- Python scripts (.py)
+- Agent-based distributed jobs
+
+## Configuration Files
+- .env - Environment variables (database connection, etc.)
+- config/config.yaml - Application configuration
+- config/database_config.yaml - Database connection settings
+- examples/*.yaml - Sample job configurations
+
+## Testing & Examples
+- examples/simple_agent_job.yaml - Basic agent job example
+- examples/powershell_agent_job.yaml - PowerShell on agent example
+- examples/database_agent_job.yaml - Database job via agent
+
+## Recent Changes
+- Implemented passive agent job assignment architecture
+- Added HTTP-based job pushing to passive agents
+- Enhanced agent API with completion reporting
+- Fixed job executor to assign jobs immediately to passive agents
+- Added comprehensive logging and monitoring
+- Cleaned up obsolete files and debug scripts

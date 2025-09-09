@@ -704,6 +704,69 @@ def activate_agent(agent_id):
 
 
 # =============================================
+# Passive Agent Endpoints
+# =============================================
+
+@agent_api.route('/jobs/<execution_id>/status', methods=['POST'])
+@require_agent_auth
+def passive_agent_status_update(agent_id: str, execution_id: str):
+    """
+    Status update from passive agent (same as update_job_status but with different path)
+    This is called by passive agents to update job status during execution
+    """
+    return update_job_status(agent_id, execution_id)
+
+
+@agent_api.route('/jobs/<execution_id>/complete', methods=['POST'])
+@require_agent_auth
+def passive_agent_job_complete(agent_id: str, execution_id: str):
+    """
+    Job completion from passive agent (enhanced for passive agent workflow)
+    
+    Expected JSON payload from passive agent:
+    {
+        "execution_id": "uuid",
+        "success": true/false,
+        "output": "execution output logs",
+        "error_message": "error details if failed",
+        "completed_by": "agent_id",
+        "completed_at": "timestamp",
+        "execution_logs": ["log entries"]
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        # Map passive agent data format to expected format
+        mapped_data = {
+            'status': 'success' if data.get('success', False) else 'failed',
+            'return_code': 0 if data.get('success', False) else 1,
+            'end_time': data.get('completed_at', datetime.utcnow().isoformat()),
+            'output_log': data.get('output', ''),
+            'error_message': data.get('error_message', ''),
+            'execution_logs': data.get('execution_logs', [])
+        }
+        
+        # If execution_logs are provided, append them to output_log
+        if mapped_data['execution_logs']:
+            log_text = '\n'.join(mapped_data['execution_logs'])
+            if mapped_data['output_log']:
+                mapped_data['output_log'] += '\n\n=== Execution Logs ===\n' + log_text
+            else:
+                mapped_data['output_log'] = log_text
+        
+        # Store the mapped data in request context for the complete_job function
+        request.json = mapped_data
+        
+        # Call the existing complete_job function
+        return complete_job(agent_id, execution_id)
+        
+    except Exception as e:
+        logger.error(f"Passive agent job completion error for {execution_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================
 # Health Check Endpoint
 # =============================================
 

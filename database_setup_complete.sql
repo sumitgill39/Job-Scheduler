@@ -1,5 +1,5 @@
 -- =============================================
--- Windows Job Scheduler - Complete Database Setup Script V2.0
+-- Windows Job Scheduler - Complete Database Setup Script V2.1
 -- =============================================
 -- This script creates ALL required tables, indexes, and initial data
 -- for the Windows Job Scheduler application to function properly.
@@ -7,16 +7,17 @@
 -- Target Database: SQL Server (SUMEETGILL7E47\MSSQLSERVER01)
 -- Database: sreutil
 -- Authentication: Windows Authentication (Trusted Connection)
--- Version: 2.0 (Matches SQLAlchemy V2 Models)
--- Created: 2025-09-06
+-- Version: 2.1 (Includes Agent Management & Passive Agent Support)
+-- Created: 2025-09-06, Updated: 2025-09-08
 -- =============================================
 
 USE [sreutil]
 GO
 
 PRINT '============================================='
-PRINT 'Windows Job Scheduler V2.0 Database Setup'
+PRINT 'Windows Job Scheduler V2.1 Database Setup'
 PRINT 'Starting complete database initialization...'
+PRINT '(Includes Agent Management & Passive Agent Support)'
 PRINT '============================================='
 
 -- =============================================
@@ -25,6 +26,12 @@ PRINT '============================================='
 PRINT 'Step 1: Cleaning up existing tables...'
 
 -- Drop in dependency order
+IF EXISTS (SELECT * FROM sysobjects WHERE name='agent_job_assignments' AND xtype='U')
+BEGIN
+    DROP TABLE [dbo].[agent_job_assignments]
+    PRINT '  - Dropped existing agent_job_assignments'
+END
+
 IF EXISTS (SELECT * FROM sysobjects WHERE name='job_execution_history_v2' AND xtype='U')
 BEGIN
     DROP TABLE [dbo].[job_execution_history_v2]
@@ -35,6 +42,12 @@ IF EXISTS (SELECT * FROM sysobjects WHERE name='job_configurations_v2' AND xtype
 BEGIN
     DROP TABLE [dbo].[job_configurations_v2]
     PRINT '  - Dropped existing job_configurations_v2'
+END
+
+IF EXISTS (SELECT * FROM sysobjects WHERE name='agent_registry' AND xtype='U')
+BEGIN
+    DROP TABLE [dbo].[agent_registry]
+    PRINT '  - Dropped existing agent_registry'
 END
 
 IF EXISTS (SELECT * FROM sysobjects WHERE name='user_connections' AND xtype='U')
@@ -107,6 +120,114 @@ CREATE INDEX IX_user_connections_server ON [dbo].[user_connections]([server_name
 CREATE INDEX IX_user_connections_created ON [dbo].[user_connections]([created_date])
 
 PRINT '  - user_connections table created with 4 indexes'
+GO
+
+-- =============================================
+-- STEP 2.5: Create agent_registry table (Agent Management)
+-- =============================================
+PRINT 'Step 2.5: Creating agent_registry table...'
+
+CREATE TABLE [dbo].[agent_registry] (
+    -- Primary identification
+    [agent_id] NVARCHAR(50) PRIMARY KEY,
+    [agent_name] NVARCHAR(255) NOT NULL,
+    [hostname] NVARCHAR(255) NOT NULL,
+    [ip_address] NVARCHAR(50) NOT NULL,
+    
+    -- Passive agent connection info
+    [agent_port] INT NULL,                    -- Port for passive agents
+    [agent_endpoint] NVARCHAR(255) NULL,     -- Full endpoint URL for passive agents
+    
+    -- Agent capabilities and pool assignment
+    [agent_pool] NVARCHAR(100) DEFAULT 'default',
+    [capabilities] NTEXT NULL,               -- JSON array of capabilities
+    [max_parallel_jobs] INT DEFAULT 1,
+    [agent_version] NVARCHAR(20) NULL,
+    
+    -- System information
+    [os_info] NVARCHAR(255) NULL,
+    [cpu_cores] INT NULL,
+    [memory_gb] INT NULL,
+    [disk_space_gb] INT NULL,
+    
+    -- Status and health
+    [status] NVARCHAR(20) DEFAULT 'offline', -- online, offline, maintenance, error
+    [last_heartbeat] DATETIME NULL,
+    [last_job_completed] DATETIME NULL,
+    [current_jobs] INT DEFAULT 0,
+    [cpu_percent] FLOAT NULL,
+    [memory_percent] FLOAT NULL,
+    [disk_percent] FLOAT NULL,
+    
+    -- Security and authentication
+    [api_key_hash] NVARCHAR(255) NULL,
+    [jwt_secret] NVARCHAR(255) NULL,
+    
+    -- Metadata
+    [registered_date] DATETIME DEFAULT GETDATE(),
+    [last_updated] DATETIME DEFAULT GETDATE(),
+    [is_active] BIT DEFAULT 1,
+    [is_approved] BIT DEFAULT 0              -- Require manual approval
+)
+
+-- Create indexes for agent_registry
+CREATE INDEX IX_agent_registry_pool ON [dbo].[agent_registry]([agent_pool])
+CREATE INDEX IX_agent_registry_status ON [dbo].[agent_registry]([status])
+CREATE INDEX IX_agent_registry_active ON [dbo].[agent_registry]([is_active])
+CREATE INDEX IX_agent_registry_approved ON [dbo].[agent_registry]([is_approved])
+CREATE INDEX IX_agent_registry_heartbeat ON [dbo].[agent_registry]([last_heartbeat])
+CREATE INDEX IX_agent_registry_hostname ON [dbo].[agent_registry]([hostname])
+CREATE INDEX IX_agent_registry_ip_address ON [dbo].[agent_registry]([ip_address])
+CREATE INDEX IX_agent_registry_endpoint ON [dbo].[agent_registry]([agent_endpoint])
+
+PRINT '  - agent_registry table created with 8 indexes'
+GO
+
+-- =============================================
+-- STEP 2.6: Create agent_job_assignments table (Job Assignment Tracking)
+-- =============================================
+PRINT 'Step 2.6: Creating agent_job_assignments table...'
+
+CREATE TABLE [dbo].[agent_job_assignments] (
+    -- Primary key and references
+    [assignment_id] NVARCHAR(36) PRIMARY KEY, -- UUID
+    [execution_id] NVARCHAR(36) NOT NULL,     -- Links to job_execution_history_v2
+    [job_id] NVARCHAR(36) NOT NULL,           -- Links to job_configurations_v2
+    [agent_id] NVARCHAR(50) NOT NULL,         -- Links to agent_registry
+    
+    -- Assignment details
+    [pool_id] NVARCHAR(100) NULL,
+    [assignment_status] NVARCHAR(20) DEFAULT 'assigned', -- assigned, running, completed, failed, cancelled
+    [assigned_at] DATETIME DEFAULT GETDATE(),
+    [started_at] DATETIME NULL,
+    [completed_at] DATETIME NULL,
+    
+    -- Results
+    [result_status] NVARCHAR(20) NULL,        -- success, failed, timeout, error
+    [result_message] NTEXT NULL,
+    [output_log] NTEXT NULL,
+    [error_log] NTEXT NULL,
+    
+    -- Metadata
+    [created_date] DATETIME DEFAULT GETDATE(),
+    [last_updated] DATETIME DEFAULT GETDATE()
+)
+
+-- Create indexes for agent_job_assignments
+CREATE INDEX IX_agent_job_assignments_execution_id ON [dbo].[agent_job_assignments]([execution_id])
+CREATE INDEX IX_agent_job_assignments_job_id ON [dbo].[agent_job_assignments]([job_id])
+CREATE INDEX IX_agent_job_assignments_agent_id ON [dbo].[agent_job_assignments]([agent_id])
+CREATE INDEX IX_agent_job_assignments_status ON [dbo].[agent_job_assignments]([assignment_status])
+CREATE INDEX IX_agent_job_assignments_assigned_at ON [dbo].[agent_job_assignments]([assigned_at])
+CREATE INDEX IX_agent_job_assignments_pool_id ON [dbo].[agent_job_assignments]([pool_id])
+
+-- Create foreign key constraints
+ALTER TABLE [dbo].[agent_job_assignments]
+ADD CONSTRAINT FK_agent_job_assignments_agent_id 
+FOREIGN KEY ([agent_id]) REFERENCES [dbo].[agent_registry]([agent_id])
+ON DELETE CASCADE
+
+PRINT '  - agent_job_assignments table created with 6 indexes and 1 foreign key'
 GO
 
 -- =============================================
@@ -194,7 +315,11 @@ CREATE TABLE [dbo].[job_execution_history_v2] (
     [retry_count] INT DEFAULT 0,
     [max_retries] INT DEFAULT 0,
     [is_retry] BIT DEFAULT 0,
-    [parent_execution_id] NVARCHAR(36) NULL  -- Original execution if this is a retry
+    [parent_execution_id] NVARCHAR(36) NULL,  -- Original execution if this is a retry
+    
+    -- Agent execution support (New for V2.1)
+    [executed_on_agent] NVARCHAR(50) NULL,   -- Agent ID that executed this job
+    [assignment_id] NVARCHAR(36) NULL        -- Links to agent_job_assignments
 )
 
 -- Create comprehensive indexes for job_execution_history_v2
@@ -207,6 +332,8 @@ CREATE INDEX IX_job_execution_history_v2_duration ON [dbo].[job_execution_histor
 CREATE INDEX IX_job_execution_history_v2_executed_by ON [dbo].[job_execution_history_v2]([executed_by])
 CREATE INDEX IX_job_execution_history_v2_is_retry ON [dbo].[job_execution_history_v2]([is_retry])
 CREATE INDEX IX_job_execution_history_v2_parent_execution ON [dbo].[job_execution_history_v2]([parent_execution_id])
+CREATE INDEX IX_job_execution_history_v2_executed_on_agent ON [dbo].[job_execution_history_v2]([executed_on_agent])
+CREATE INDEX IX_job_execution_history_v2_assignment_id ON [dbo].[job_execution_history_v2]([assignment_id])
 
 -- Create foreign key constraint
 ALTER TABLE [dbo].[job_execution_history_v2]
@@ -214,7 +341,18 @@ ADD CONSTRAINT FK_job_execution_history_v2_job_id
 FOREIGN KEY ([job_id]) REFERENCES [dbo].[job_configurations_v2]([job_id])
 ON DELETE CASCADE
 
-PRINT '  - job_execution_history_v2 table created with 9 indexes and 1 foreign key'
+-- Add foreign key constraints for agent support
+ALTER TABLE [dbo].[job_execution_history_v2]
+ADD CONSTRAINT FK_job_execution_history_v2_agent_id 
+FOREIGN KEY ([executed_on_agent]) REFERENCES [dbo].[agent_registry]([agent_id])
+ON DELETE SET NULL
+
+ALTER TABLE [dbo].[job_execution_history_v2]
+ADD CONSTRAINT FK_job_execution_history_v2_assignment_id 
+FOREIGN KEY ([assignment_id]) REFERENCES [dbo].[agent_job_assignments]([assignment_id])
+ON DELETE NO ACTION
+
+PRINT '  - job_execution_history_v2 table created with 11 indexes and 3 foreign keys'
 GO
 
 -- =============================================
@@ -355,6 +493,61 @@ PRINT '  - Inserted 3 sample job configurations (2 enabled, 1 disabled)'
 GO
 
 -- =============================================
+-- STEP 6.5: Insert sample agent configurations for testing
+-- =============================================
+PRINT 'Step 6.5: Inserting sample agent configurations...'
+
+-- Sample passive agent
+INSERT INTO [dbo].[agent_registry] (
+    [agent_id], [agent_name], [hostname], [ip_address], [agent_port], 
+    [agent_endpoint], [agent_pool], [capabilities], [max_parallel_jobs], 
+    [agent_version], [os_info], [cpu_cores], [memory_gb], [disk_space_gb],
+    [status], [is_approved]
+) VALUES (
+    'sample-passive-agent-001',
+    'Sample Passive Agent',
+    'DEVELOPMENT-HOST',
+    '127.0.0.1',
+    8081,
+    'http://127.0.0.1:8081',
+    'development',
+    '["powershell", "cmd", "python", "passive_execution"]',
+    3,
+    '1.0.0-passive',
+    'Windows 11 Pro',
+    4,
+    16,
+    500,
+    'offline',
+    1
+)
+
+-- Sample active agent (for comparison)
+INSERT INTO [dbo].[agent_registry] (
+    [agent_id], [agent_name], [hostname], [ip_address], [agent_pool], 
+    [capabilities], [max_parallel_jobs], [agent_version], [os_info], 
+    [cpu_cores], [memory_gb], [disk_space_gb], [status], [is_approved]
+) VALUES (
+    'sample-active-agent-001',
+    'Sample Active Agent',
+    'PRODUCTION-HOST',
+    '10.0.1.100',
+    'production',
+    '["powershell", "python", "shell"]',
+    2,
+    '1.0.0',
+    'Windows Server 2019',
+    8,
+    32,
+    1000,
+    'offline',
+    1
+)
+
+PRINT '  - Inserted 2 sample agent configurations (1 passive, 1 active)'
+GO
+
+-- =============================================
 -- STEP 7: Create stored procedures for maintenance
 -- =============================================
 PRINT 'Step 7: Creating maintenance stored procedures...'
@@ -483,7 +676,7 @@ SELECT
     eh.return_code,
     eh.retry_count,
     eh.is_retry,
-    LEN(eh.output_log) as output_length,
+    DATALENGTH(eh.output_log) as output_length,
     CASE WHEN eh.error_message IS NOT NULL THEN 1 ELSE 0 END as has_error
 FROM [dbo].[job_execution_history_v2] eh
 LEFT JOIN [dbo].[job_configurations_v2] jc ON eh.job_id = jc.job_id
@@ -536,15 +729,15 @@ DECLARE @table_count INT
 SELECT @table_count = COUNT(*)
 FROM INFORMATION_SCHEMA.TABLES 
 WHERE TABLE_TYPE = 'BASE TABLE' 
-AND TABLE_NAME IN ('user_connections', 'job_configurations_v2', 'job_execution_history_v2')
+AND TABLE_NAME IN ('user_connections', 'agent_registry', 'agent_job_assignments', 'job_configurations_v2', 'job_execution_history_v2')
 
-IF @table_count = 3
+IF @table_count = 5
 BEGIN
-    PRINT '  ✓ All 3 required tables created successfully'
+    PRINT '  ✓ All 5 required tables created successfully'
 END
 ELSE
 BEGIN
-    PRINT '  ✗ ERROR: Missing tables! Expected 3, found ' + CAST(@table_count AS NVARCHAR(10))
+    PRINT '  ✗ ERROR: Missing tables! Expected 5, found ' + CAST(@table_count AS NVARCHAR(10))
 END
 
 -- Check indexes
@@ -554,13 +747,17 @@ SELECT
 FROM INFORMATION_SCHEMA.TABLES t
 LEFT JOIN sys.indexes i ON OBJECT_ID(t.TABLE_SCHEMA + '.' + t.TABLE_NAME) = i.object_id
 WHERE t.TABLE_TYPE = 'BASE TABLE' 
-AND t.TABLE_NAME IN ('user_connections', 'job_configurations_v2', 'job_execution_history_v2')
+AND t.TABLE_NAME IN ('user_connections', 'agent_registry', 'agent_job_assignments', 'job_configurations_v2', 'job_execution_history_v2')
 AND i.type > 0  -- Exclude heap
 GROUP BY t.TABLE_NAME
 ORDER BY t.TABLE_NAME
 
 -- Check sample data
 SELECT 'user_connections' as table_name, COUNT(*) as record_count FROM [dbo].[user_connections]
+UNION ALL
+SELECT 'agent_registry', COUNT(*) FROM [dbo].[agent_registry]
+UNION ALL
+SELECT 'agent_job_assignments', COUNT(*) FROM [dbo].[agent_job_assignments]
 UNION ALL
 SELECT 'job_configurations_v2', COUNT(*) FROM [dbo].[job_configurations_v2]
 UNION ALL
@@ -569,8 +766,9 @@ SELECT 'job_execution_history_v2', COUNT(*) FROM [dbo].[job_execution_history_v2
 -- Display final summary
 PRINT ''
 PRINT '============================================='
-PRINT 'Windows Job Scheduler V2.0 Database Setup'
+PRINT 'Windows Job Scheduler V2.1 Database Setup'
 PRINT 'INSTALLATION COMPLETED SUCCESSFULLY!'
+PRINT '(Includes Agent Management & Passive Agent Support)'
 PRINT '============================================='
 PRINT ''
 PRINT 'Database: sreutil'
@@ -578,11 +776,14 @@ PRINT 'Server: SUMEETGILL7E47\MSSQLSERVER01'
 PRINT ''
 PRINT 'TABLES CREATED:'
 PRINT '  ✓ user_connections (4 indexes)'
+PRINT '  ✓ agent_registry (8 indexes) [Agent Management]'
+PRINT '  ✓ agent_job_assignments (6 indexes + 1 FK) [Job Assignment Tracking]'
 PRINT '  ✓ job_configurations_v2 (7 indexes) [V2 Schema]'
-PRINT '  ✓ job_execution_history_v2 (9 indexes + FK) [V2 Schema]'
+PRINT '  ✓ job_execution_history_v2 (11 indexes + 3 FKs) [V2 Schema + Agent Support]'
 PRINT ''
 PRINT 'INITIAL DATA:'
 PRINT '  ✓ 3 default database connections'
+PRINT '  ✓ 2 sample agent configurations (1 passive, 1 active)'
 PRINT '  ✓ 3 sample job configurations'
 PRINT ''
 PRINT 'MAINTENANCE FEATURES:'

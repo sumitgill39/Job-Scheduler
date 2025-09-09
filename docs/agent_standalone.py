@@ -367,35 +367,14 @@ class JobSchedulerAgent:
             self.logger.warning(f"Heartbeat error: {e}")
             return False
     
-    def poll_for_jobs(self):
-        """Poll for available jobs"""
-        if not self.auth_token:
-            return []
+    def wait_for_job_assignment(self):
+        """Wait passively for job assignment from Job Executor"""
+        self.logger.info(f"Agent {self.agent_id} waiting for job assignments...")
         
-        poll_data = {
-            "agent_id": self.agent_id,
-            "agent_pool": self.agent_pool,
-            "max_jobs": self.max_parallel_jobs - len(self.active_jobs)
-        }
-        
-        try:
-            response = requests.post(
-                f"{self.scheduler_url}/api/agent/jobs/poll",
-                json=poll_data,
-                headers={"Authorization": f"Bearer {self.auth_token}"},
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                jobs = response.json().get("jobs", [])
-                return jobs
-            else:
-                self.logger.warning(f"Job polling failed: {response.status_code}")
-                return []
-                
-        except requests.exceptions.RequestException as e:
-            self.logger.warning(f"Job polling error: {e}")
-            return []
+        # Agent stays idle and only responds to direct job assignments
+        # The Job Executor will call the /api/agent/jobs/assign endpoint
+        # This method just keeps the agent alive and maintains heartbeat
+        return []
     
     def update_job_status(self, job_id, status, output="", error_message=""):
         """Update job status on master server"""

@@ -1,0 +1,13 @@
+# Simple PowerShell Script Execution
+# Basic example for running PowerShell scripts on Windows agents
+
+steps:
+  - name: Basic PowerShell Script
+    action: powershell
+    script: |
+      Write-Host "Hello from PowerShell on Agent: $env:AGENT_ID" -ForegroundColor Green
+      Write-Host "Current Date: $(Get-Date)" -ForegroundColor Cyan
+      Write-Host "Computer Name: $env:COMPUTERNAME" -ForegroundColor Yellow
+      Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Magenta
+      Write-Host "Script executed successfully!" -ForegroundColor Green
+    timeout: 60

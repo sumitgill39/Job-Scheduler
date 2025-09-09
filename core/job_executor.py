@@ -207,6 +207,8 @@ class JobExecutor:
                     result = self._execute_powershell_job(parsed_config, execution_id)
                 elif job_type == 'sql':
                     result = self._execute_sql_job(parsed_config, execution_id)
+                elif job_type == 'agent_job' or job_type == 'agent':
+                    result = self._execute_agent_job(parsed_config, execution_id)
                 else:
                     result = {
                         'success': False,
@@ -371,17 +373,125 @@ class JobExecutor:
             'return_code': 0
         }
     
+    def _execute_agent_job(self, config: Dict[str, Any], execution_id: str) -> Dict[str, Any]:
+        """Execute agent job from V2 YAML config by assigning to passive agent"""
+        print(f"CLEAN V2: Executing agent job")
+        
+        agent_pool = config.get('agent_pool', 'default')
+        execution_strategy = config.get('execution_strategy', 'default_pool')
+        job_steps = config.get('steps', [])
+        
+        print(f"CLEAN V2: Agent job for pool '{agent_pool}' with strategy '{execution_strategy}'")
+        print(f"CLEAN V2: Job has {len(job_steps)} steps")
+        
+        # Try to assign job to a passive agent immediately
+        from core.agent_job_handler import agent_job_handler
+        
+        try:
+            # Get job_id from the execution context
+            job_id = None
+            
+            # Find the job_id by looking up the execution_id in the database
+            with get_db_session() as session:
+                execution_record = session.query(JobExecutionHistoryV2).filter_by(
+                    execution_id=execution_id
+                ).first()
+                
+                if execution_record:
+                    job_id = execution_record.job_id
+                else:
+                    # If no execution record yet, we need the job_id from context
+                    # This should be passed in - for now, log warning and queue
+                    print(f"CLEAN V2 WARNING: No execution record found for {execution_id}")
+                    return {
+                        'success': True,
+                        'output': f'CLEAN V2: Agent job queued for pool "{agent_pool}" (no execution record)',
+                        'message': f'Agent job queued for execution (pool: {agent_pool})',
+                        'return_code': 0,
+                        'queued_for_agent': True,
+                        'agent_pool': agent_pool,
+                        'execution_strategy': execution_strategy
+                    }
+            
+            if job_id:
+                # Try to assign to passive agent
+                assignment_id = agent_job_handler.assign_job_to_passive_agent(
+                    job_id=job_id,
+                    execution_id=execution_id,
+                    pool_id=agent_pool
+                )
+                
+                if assignment_id:
+                    print(f"CLEAN V2: Successfully assigned job {job_id} to passive agent (assignment: {assignment_id})")
+                    return {
+                        'success': True,
+                        'output': f'CLEAN V2: Agent job assigned to passive agent in pool "{agent_pool}"',
+                        'message': f'Agent job assigned for execution (pool: {agent_pool}, assignment: {assignment_id})',
+                        'return_code': 0,
+                        'assigned_to_agent': True,
+                        'assignment_id': assignment_id,
+                        'agent_pool': agent_pool,
+                        'execution_strategy': execution_strategy
+                    }
+                else:
+                    # No passive agent available - job remains queued
+                    print(f"CLEAN V2: No passive agent available in pool '{agent_pool}', job queued")
+                    return {
+                        'success': True,
+                        'output': f'CLEAN V2: No passive agent available, job queued for pool "{agent_pool}"',
+                        'message': f'Agent job queued for execution - no agents available (pool: {agent_pool})',
+                        'return_code': 0,
+                        'queued_for_agent': True,
+                        'agent_pool': agent_pool,
+                        'execution_strategy': execution_strategy
+                    }
+            else:
+                # Fallback - queue for later assignment
+                return {
+                    'success': True,
+                    'output': f'CLEAN V2: Agent job queued for pool "{agent_pool}"',
+                    'message': f'Agent job queued for execution (pool: {agent_pool})',
+                    'return_code': 0,
+                    'queued_for_agent': True,
+                    'agent_pool': agent_pool,
+                    'execution_strategy': execution_strategy
+                }
+                
+        except Exception as e:
+            print(f"CLEAN V2 ERROR: Failed to assign agent job: {e}")
+            # Fallback to queuing
+            return {
+                'success': True,
+                'output': f'CLEAN V2: Agent job queued for pool "{agent_pool}" (assignment failed: {str(e)})',
+                'message': f'Agent job queued for execution - assignment error (pool: {agent_pool})',
+                'return_code': 0,
+                'queued_for_agent': True,
+                'agent_pool': agent_pool,
+                'execution_strategy': execution_strategy
+            }
+    
     def _record_execution(self, job_config: Dict[str, Any], execution_id: str, 
                          start_time: datetime, end_time: datetime, duration: float, 
                          result: Dict[str, Any]):
         """Record execution in database"""
         try:
             with get_db_session() as session:
+                # For agent jobs, set appropriate status based on assignment result
+                if result.get('assigned_to_agent'):
+                    status = 'assigned'
+                    executed_by = f"assigned_to_agent_{result.get('assignment_id', 'unknown')}"
+                elif result.get('queued_for_agent'):
+                    status = 'queued'
+                    executed_by = f"queued_for_{result.get('agent_pool', 'default')}_pool"
+                else:
+                    status = 'success' if result.get('success') else 'failed'
+                    executed_by = 'clean_v2_executor'
+                
                 execution_record = JobExecutionHistoryV2(
                     execution_id=execution_id,
                     job_id=job_config['job_id'],
                     job_name=job_config.get('name', 'Unknown Job'),
-                    status='success' if result.get('success') else 'failed',
+                    status=status,
                     start_time=start_time,
                     end_time=end_time,
                     duration_seconds=duration,
@@ -389,7 +499,7 @@ class JobExecutor:
                     error_message=result.get('error', ''),
                     return_code=result.get('return_code', 0),
                     execution_mode='manual',
-                    executed_by='clean_v2_executor',
+                    executed_by=executed_by,
                     execution_timezone='UTC'
                 )
                 session.add(execution_record)

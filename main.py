@@ -144,6 +144,27 @@ class JobSchedulerApp:
             self.logger.error(f"Failed to initialize web app: {e}")
             sys.exit(1)
     
+    def _setup_passive_agent_processor(self):
+        """Setup periodic task to process queued jobs for passive agents"""
+        try:
+            from apscheduler.triggers.interval import IntervalTrigger
+            from core.agent_job_handler import agent_job_handler
+            
+            # Add job to process queued jobs every 10 seconds
+            self.scheduler_manager.scheduler.add_job(
+                func=agent_job_handler.process_queued_jobs_for_passive_agents,
+                trigger=IntervalTrigger(seconds=10),
+                id='passive_agent_job_processor',
+                name='Process Queued Jobs for Passive Agents',
+                replace_existing=True
+            )
+            
+            self.logger.info("[PASSIVE_AGENT] Added periodic task to process queued jobs for passive agents")
+        except Exception as e:
+            self.logger.error(f"[PASSIVE_AGENT] Failed to setup passive agent processor: {e}")
+            # Don't fail the startup if this fails
+            pass
+    
     def setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown"""
         def signal_handler(signum, frame):
@@ -175,6 +196,9 @@ class JobSchedulerApp:
             self.logger.info("[SCHEDULER] Starting scheduler manager...")
             self.scheduler_manager.start()
             self.logger.info("[SUCCESS] Scheduler started successfully")
+            
+            # Add periodic task to process queued jobs for passive agents
+            self._setup_passive_agent_processor()
             
             if self.mode == "cli":
                 self.logger.info("[MODE] Running in CLI mode")

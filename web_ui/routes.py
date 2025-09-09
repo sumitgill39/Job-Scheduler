@@ -4,9 +4,17 @@ FIXED VERSION - 2025-09-04 12:00 - Using execute_job_fixed to bypass caching
 """
 
 import time
+import json
 from flask import render_template, request, jsonify, redirect, url_for, flash
 from datetime import datetime
 from utils.logger import get_logger
+from simple_connection_manager import SimpleConnectionManager
+
+
+def get_db_connection():
+    """Helper function to get database connection"""
+    connection_manager = SimpleConnectionManager()
+    return connection_manager._create_new_connection()
 
 
 def create_routes(app):
@@ -25,7 +33,7 @@ def create_routes(app):
         yaml_config = {
             'id': f"{job_type.upper()}-{str(uuid.uuid4())[:8]}",
             'name': data.get('name', 'Unnamed Job'),
-            'type': job_type.title(),
+            'type': 'agent_job' if job_type == 'agent_job' else job_type.title(),  # Keep agent_job lowercase
             'enabled': data.get('enabled', True),
             'timeout': data.get('timeout', 300),
         }
@@ -55,6 +63,27 @@ def create_routes(app):
             yaml_config['query'] = data.get('sql_query', 'SELECT 1')
             if data.get('connection_name'):
                 yaml_config['connection'] = data.get('connection_name')
+                
+        elif job_type == 'agent_job':
+            # For agent jobs, the job_steps contains the raw YAML
+            job_steps = data.get('job_steps', '').strip()
+            if job_steps:
+                try:
+                    # Parse the YAML steps and integrate them
+                    import yaml as yaml_lib
+                    steps_data = yaml_lib.safe_load(job_steps)
+                    if isinstance(steps_data, dict) and 'steps' in steps_data:
+                        yaml_config['steps'] = steps_data['steps']
+                    else:
+                        # If it's just the steps array
+                        yaml_config['steps'] = steps_data if isinstance(steps_data, list) else []
+                except Exception:
+                    # If YAML parsing fails, store as raw YAML
+                    yaml_config['job_yaml'] = job_steps
+            
+            # Add agent-specific fields
+            yaml_config['agent_pool'] = data.get('agent_pool', 'default')
+            yaml_config['execution_strategy'] = data.get('execution_strategy', 'default_pool')
         
         # Add retry policy if specified
         if data.get('max_retries') or data.get('retry_delay'):
@@ -714,6 +743,23 @@ def create_routes(app):
                     return jsonify({
                         'success': False,
                         'error': 'PowerShell script content or script path is required for PowerShell jobs'
+                    }), 400
+            
+            elif data.get('type') == 'agent_job':
+                agent_pool = data.get('agent_pool', 'default')
+                execution_strategy = data.get('execution_strategy', 'default_pool')
+                job_steps = data.get('job_steps', '')
+                
+                logger.info(f"[API_JOB_CREATE] Agent job agent_pool received: '{agent_pool}'")
+                logger.info(f"[API_JOB_CREATE] Agent job execution_strategy received: '{execution_strategy}'")
+                logger.info(f"[API_JOB_CREATE] Agent job steps received (length {len(job_steps)}): '{job_steps[:200]}...' if len(job_steps) > 200 else job_steps")
+                
+                # Validate critical fields for Agent jobs
+                if not job_steps or job_steps.strip() == '':
+                    logger.error(f"[API_JOB_CREATE] CRITICAL: Agent job steps are missing or empty!")
+                    return jsonify({
+                        'success': False,
+                        'error': 'Job steps (YAML configuration) are required for Agent jobs'
                     }), 400
             
             # Use integrated scheduler instead of just job manager
@@ -3097,6 +3143,584 @@ def create_routes(app):
                 
         except Exception as e:
             logger.error(f"[API_V2_JOBS] Error getting sample configs: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    # Agent API Endpoints
+    @app.route('/api/agent/register', methods=['POST'])
+    def api_agent_register():
+        """Register agent with the system"""
+        try:
+            data = request.get_json()
+            agent_id = data.get('agent_id')
+            agent_name = data.get('agent_name', '')
+            hostname = data.get('hostname', '')
+            ip_address = data.get('ip_address', '')
+            agent_pool = data.get('agent_pool', 'default')
+            capabilities = data.get('capabilities', [])
+            max_parallel_jobs = data.get('max_parallel_jobs', 2)
+            agent_version = data.get('agent_version', '1.0.0')
+            os_info = data.get('os_info', '')
+            cpu_cores = data.get('cpu_cores', 0)
+            memory_gb = data.get('memory_gb', 0)
+            disk_space_gb = data.get('disk_space_gb', 0)
+            
+            logger.info(f"[AGENT_API] Agent registration request: {agent_id} from {ip_address}")
+            logger.info(f"[AGENT_API] Registration data: pool={agent_pool}, capabilities={capabilities}")
+            
+            # Store agent in database
+            conn = get_db_connection()
+            if not conn:
+                raise Exception("Could not establish database connection")
+            cursor = conn.cursor()
+            
+            # Check if agent already exists
+            logger.info(f"[AGENT_API] Checking if agent {agent_id} exists in database...")
+            cursor.execute("SELECT agent_id FROM agent_registry WHERE agent_id = ?", agent_id)
+            existing = cursor.fetchone()
+            
+            if existing:
+                logger.info(f"[AGENT_API] Agent {agent_id} exists, updating...")
+                # Update existing agent
+                cursor.execute("""
+                    UPDATE agent_registry 
+                    SET agent_name = ?, hostname = ?, ip_address = ?, 
+                        agent_pool = ?, capabilities = ?, max_parallel_jobs = ?,
+                        agent_version = ?, os_info = ?, cpu_cores = ?, 
+                        memory_gb = ?, disk_space_gb = ?,
+                        status = 'online', last_heartbeat = GETDATE(),
+                        last_updated = GETDATE()
+                    WHERE agent_id = ?
+                """, agent_name, hostname, ip_address, agent_pool, 
+                    json.dumps(capabilities) if isinstance(capabilities, list) else capabilities,
+                    max_parallel_jobs, agent_version, os_info, cpu_cores, 
+                    memory_gb, disk_space_gb, agent_id)
+                logger.info(f"[AGENT_API] Updated existing agent: {agent_id}, rows affected: {cursor.rowcount}")
+            else:
+                logger.info(f"[AGENT_API] Agent {agent_id} not found, inserting new agent...")
+                # Insert new agent (requires approval)
+                cursor.execute("""
+                    INSERT INTO agent_registry 
+                    (agent_id, agent_name, hostname, ip_address, agent_pool, 
+                     capabilities, max_parallel_jobs, agent_version, os_info,
+                     cpu_cores, memory_gb, disk_space_gb, status, is_approved)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'online', 0)
+                """, agent_id, agent_name, hostname, ip_address, agent_pool,
+                    json.dumps(capabilities) if isinstance(capabilities, list) else capabilities,
+                    max_parallel_jobs, agent_version, os_info, cpu_cores, 
+                    memory_gb, disk_space_gb)
+                logger.info(f"[AGENT_API] Registered new agent (pending approval): {agent_id}, rows affected: {cursor.rowcount}")
+            
+            conn.commit()
+            logger.info(f"[AGENT_API] Database commit successful for agent {agent_id}")
+            cursor.close()
+            conn.close()
+            
+            # Generate JWT token
+            import base64
+            token_data = {
+                'agent_id': agent_id,
+                'registered_at': datetime.now().isoformat(),
+                'expires_in': 14400  # 4 hours
+            }
+            token = base64.b64encode(json.dumps(token_data).encode()).decode()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Agent {agent_id} registered successfully',
+                'status': 'registered',
+                'jwt_token': token,
+                'token_expires_in': 14400,
+                'agent_id': agent_id,
+                'agent_pool': agent_pool,
+                'requires_approval': not existing  # New agents need approval
+            })
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"[AGENT_API] Error registering agent: {e}")
+            logger.error(f"[AGENT_API] Registration traceback: {error_details}")
+            
+            # Try to close connection if it's open
+            try:
+                if 'cursor' in locals():
+                    cursor.close()
+                if 'conn' in locals():
+                    conn.close()
+            except:
+                pass
+                
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'details': error_details
+            }), 500
+
+    @app.route('/api/agent/jobs/poll', methods=['POST'])
+    def api_agent_jobs_poll():
+        """Poll for available jobs for agent"""
+        try:
+            # Note: In production, you should validate the JWT token from Authorization header
+            # For now, we'll just accept the request
+            
+            data = request.get_json()
+            agent_id = data.get('agent_id')
+            agent_pool = data.get('agent_pool', 'default')
+            max_jobs = data.get('max_jobs', 1)
+            
+            logger.info(f"[AGENT_API] Job poll request from agent {agent_id} (pool: {agent_pool})")
+            
+            # Check if agent is approved
+            conn = get_db_connection()
+            if not conn:
+                raise Exception("Could not establish database connection")
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT is_approved FROM agent_registry WHERE agent_id = ?
+            """, agent_id)
+            
+            agent_row = cursor.fetchone()
+            if not agent_row or not agent_row[0]:
+                cursor.close()
+                conn.close()
+                logger.warning(f"[AGENT_API] Unapproved agent {agent_id} tried to poll for jobs")
+                return jsonify({
+                    'success': False,
+                    'error': 'Agent not approved',
+                    'jobs': []
+                }), 403  # Forbidden, not unauthorized
+            
+            # Fetch pending/queued jobs for the agent
+            logger.info(f"[AGENT_API] Querying for pending/queued jobs for pool: {agent_pool}")
+            
+            try:
+                # Atomic job assignment - update status to 'assigned' and assign to agent
+                cursor.execute("""
+                    UPDATE job_execution_history_v2
+                    SET status = 'assigned', 
+                        executed_by = ?
+                    OUTPUT inserted.execution_id, inserted.job_name, inserted.job_id, inserted.start_time
+                    WHERE execution_id IN (
+                        SELECT TOP (?) execution_id
+                        FROM job_execution_history_v2
+                        WHERE status IN ('pending', 'queued')
+                        ORDER BY start_time ASC
+                    )
+                """, agent_id, max_jobs)
+                
+                rows = cursor.fetchall()
+                conn.commit()  # Commit the job assignments
+                logger.info(f"[AGENT_API] Assigned {len(rows)} jobs to agent {agent_id}")
+                
+                jobs = []
+                for row in rows:
+                    logger.info(f"[AGENT_API] Assigned job to {agent_id}: {row[0]} - {row[1]}")
+                    
+                    # Get YAML configuration from job_configurations_v2 table
+                    cursor.execute("""
+                        SELECT yaml_configuration FROM job_configurations_v2 
+                        WHERE job_id = ?
+                    """, row[2])  # row[2] is job_id
+                    
+                    yaml_row = cursor.fetchone()
+                    yaml_config = yaml_row[0] if yaml_row and yaml_row[0] else None
+                    
+                    # If we have YAML configuration, extract the steps
+                    if yaml_config:
+                        try:
+                            import yaml
+                            config = yaml.safe_load(yaml_config)
+                            # If it's already in steps format, use it directly
+                            if isinstance(config, dict) and 'steps' in config:
+                                job_yaml = yaml.dump(config)
+                            else:
+                                # Otherwise, wrap it in a steps structure
+                                job_yaml = yaml.dump({'steps': config if isinstance(config, list) else [config]})
+                        except:
+                            # If YAML parsing fails, use the raw YAML
+                            job_yaml = yaml_config
+                    else:
+                        # Default fallback YAML
+                        job_yaml = """steps:
+  - name: Basic PowerShell Script
+    action: powershell
+    script: |
+      Write-Host "Hello from PowerShell on Agent: $env:AGENT_ID" -ForegroundColor Green
+      Write-Host "Current Date: $(Get-Date)" -ForegroundColor Cyan
+      Write-Host "Computer Name: $env:COMPUTERNAME" -ForegroundColor Yellow
+      Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Magenta
+      Write-Host "Script executed successfully!" -ForegroundColor Green
+    timeout: 60"""
+                    
+                    jobs.append({
+                        'id': row[0],  # execution_id
+                        'name': row[1], # job_name
+                        'job_yaml': job_yaml,
+                        'created_at': row[3].isoformat() if row[3] else None
+                    })
+                    
+            except Exception as query_error:
+                logger.error(f"[AGENT_API] Error executing job query: {query_error}")
+                jobs = []
+            
+            cursor.close()
+            conn.close()
+            
+            logger.info(f"[AGENT_API] Returning {len(jobs)} jobs for agent {agent_id}")
+            
+            return jsonify({
+                'success': True,
+                'jobs': jobs,
+                'agent_id': agent_id,
+                'poll_timestamp': datetime.now().isoformat()
+            })
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"[AGENT_API] Error polling jobs: {e}")
+            logger.error(f"[AGENT_API] Traceback: {error_details}")
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'details': error_details
+            }), 500
+
+    @app.route('/api/agent/heartbeat', methods=['POST'])
+    def api_agent_heartbeat():
+        """Receive heartbeat from agent"""
+        try:
+            data = request.get_json()
+            agent_id = data.get('agent_id')
+            status = data.get('status', 'online')
+            active_jobs = data.get('active_jobs', 0)
+            system_status = data.get('system_status', {})
+            
+            logger.debug(f"[AGENT_API] Heartbeat from agent {agent_id}: {status}, active jobs: {active_jobs}")
+            
+            # Update agent status in database
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                UPDATE agent_registry 
+                SET status = ?, 
+                    last_heartbeat = GETDATE(), 
+                    current_jobs = ?,
+                    cpu_percent = ?,
+                    memory_percent = ?,
+                    last_updated = GETDATE()
+                WHERE agent_id = ?
+            """, status, active_jobs, 
+                system_status.get('cpu_percent', 0),
+                system_status.get('memory_percent', 0),
+                agent_id)
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Heartbeat received',
+                'timestamp': datetime.now().isoformat()
+            })
+            
+        except Exception as e:
+            logger.error(f"[AGENT_API] Error processing heartbeat: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/agents', methods=['GET'])
+    @app.route('/api/agent/list', methods=['GET'])
+    def api_get_agents():
+        """Get list of all registered agents"""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT agent_id, agent_name, hostname, ip_address, agent_pool,
+                       capabilities, max_parallel_jobs, agent_version, status,
+                       last_heartbeat, is_approved, is_active, current_jobs,
+                       cpu_percent, memory_percent, os_info, cpu_cores, memory_gb
+                FROM agent_registry
+                ORDER BY is_approved DESC, agent_name
+            """)
+            
+            agents = []
+            for row in cursor.fetchall():
+                agents.append({
+                    'agent_id': row[0],
+                    'agent_name': row[1],
+                    'hostname': row[2],
+                    'ip_address': row[3],
+                    'agent_pool': row[4],
+                    'capabilities': json.loads(row[5]) if row[5] and row[5].startswith('[') else row[5],
+                    'max_parallel_jobs': row[6],
+                    'agent_version': row[7],
+                    'status': row[8],
+                    'last_heartbeat': row[9].isoformat() if row[9] else None,
+                    'is_approved': bool(row[10]),
+                    'is_active': bool(row[11]),
+                    'is_online': row[8] == 'online',  # Add is_online field for HTML compatibility
+                    'current_jobs': row[12],
+                    'cpu_percent': row[13],
+                    'memory_percent': row[14],
+                    'os_info': row[15],
+                    'cpu_cores': row[16],
+                    'memory_gb': row[17]
+                })
+            
+            cursor.close()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'agents': agents,
+                'total': len(agents)
+            })
+            
+        except Exception as e:
+            logger.error(f"[AGENT_API] Error getting agents: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/agent/pools', methods=['GET'])
+    def api_get_agent_pools():
+        """Get list of agent pools"""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Get unique pools from agents
+            cursor.execute("""
+                SELECT DISTINCT agent_pool, COUNT(*) as agent_count
+                FROM agent_registry
+                GROUP BY agent_pool
+                ORDER BY agent_pool
+            """)
+            
+            pools = []
+            for row in cursor.fetchall():
+                pools.append({
+                    'pool_name': row[0],
+                    'agent_count': row[1]
+                })
+            
+            cursor.close()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'pools': pools
+            })
+            
+        except Exception as e:
+            logger.error(f"[AGENT_API] Error getting agent pools: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/agents/<agent_id>/approve', methods=['POST'])
+    @app.route('/api/agent/<agent_id>/approve', methods=['POST'])
+    def api_approve_agent(agent_id):
+        """Approve an agent for job execution"""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                UPDATE agent_registry 
+                SET is_approved = 1,
+                    last_updated = GETDATE()
+                WHERE agent_id = ?
+            """, agent_id)
+            
+            conn.commit()
+            rows_affected = cursor.rowcount
+            cursor.close()
+            conn.close()
+            
+            if rows_affected > 0:
+                logger.info(f"[AGENT_API] Agent {agent_id} approved")
+                return jsonify({
+                    'success': True,
+                    'message': f'Agent {agent_id} approved successfully'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': f'Agent {agent_id} not found'
+                }), 404
+                
+        except Exception as e:
+            logger.error(f"[AGENT_API] Error approving agent {agent_id}: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/agents/<agent_id>/reject', methods=['POST'])
+    @app.route('/api/agent/<agent_id>/reject', methods=['POST']) 
+    @app.route('/api/agent/<agent_id>/deactivate', methods=['POST'])
+    def api_reject_agent(agent_id):
+        """Reject or deactivate an agent"""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                UPDATE agent_registry 
+                SET is_approved = 0,
+                    is_active = 0,
+                    status = 'rejected',
+                    last_updated = GETDATE()
+                WHERE agent_id = ?
+            """, agent_id)
+            
+            conn.commit()
+            rows_affected = cursor.rowcount
+            cursor.close()
+            conn.close()
+            
+            if rows_affected > 0:
+                logger.info(f"[AGENT_API] Agent {agent_id} rejected")
+                return jsonify({
+                    'success': True,
+                    'message': f'Agent {agent_id} rejected successfully'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': f'Agent {agent_id} not found'
+                }), 404
+                
+        except Exception as e:
+            logger.error(f"[AGENT_API] Error rejecting agent {agent_id}: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/agent/jobs/<job_id>/status', methods=['POST'])
+    def api_agent_job_status(job_id):
+        """Update job status from agent"""
+        try:
+            data = request.get_json()
+            status = data.get('status')
+            output = data.get('output', '')
+            error_message = data.get('error_message', '')
+            updated_by = data.get('updated_by', '')
+            
+            logger.info(f"[AGENT_API] Job {job_id} status update: {status} by {updated_by}")
+            
+            # Get database connection
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Update job execution status
+            if status == 'running':
+                cursor.execute("""
+                    UPDATE job_execution_history_v2 
+                    SET status = ?
+                    WHERE execution_id = ?
+                """, status, job_id)
+            else:
+                cursor.execute("""
+                    UPDATE job_execution_history_v2 
+                    SET status = ?, output_log = ?, error_message = ?
+                    WHERE execution_id = ?
+                """, status, output, error_message, job_id)
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Job {job_id} status updated to {status}'
+            })
+            
+        except Exception as e:
+            logger.error(f"[AGENT_API] Error updating job {job_id} status: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/agent/jobs/<job_id>/complete', methods=['POST'])
+    def api_agent_job_complete(job_id):
+        """Mark job as completed from agent"""
+        try:
+            data = request.get_json()
+            success = data.get('success', False)
+            output = data.get('output', '')
+            error_message = data.get('error_message', '')
+            completed_by = data.get('completed_by', '')
+            completed_at = data.get('completed_at')
+            
+            status = 'completed' if success else 'failed'
+            logger.info(f"[AGENT_API] Job {job_id} completed: {status} by {completed_by}")
+            
+            # Get database connection
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Update job execution with completion details
+            # Handle datetime conversion - use current time if conversion fails
+            try:
+                from datetime import datetime
+                if completed_at:
+                    # Try to parse the datetime string
+                    if isinstance(completed_at, str):
+                        # Try common datetime formats
+                        for fmt in ['%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']:
+                            try:
+                                parsed_time = datetime.strptime(completed_at, fmt)
+                                completed_at = parsed_time
+                                break
+                            except ValueError:
+                                continue
+                        else:
+                            # If no format worked, use current time
+                            completed_at = datetime.now()
+                    else:
+                        completed_at = datetime.now()
+                else:
+                    completed_at = datetime.now()
+            except:
+                completed_at = datetime.now()
+                
+            cursor.execute("""
+                UPDATE job_execution_history_v2 
+                SET status = ?, 
+                    output_log = ?, 
+                    error_message = ?,
+                    end_time = ?
+                WHERE execution_id = ?
+            """, status, output, error_message, completed_at, job_id)
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Job {job_id} marked as {status}'
+            })
+            
+        except Exception as e:
+            logger.error(f"[AGENT_API] Error completing job {job_id}: {e}")
             return jsonify({
                 'success': False,
                 'error': str(e)

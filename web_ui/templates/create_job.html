@@ -610,12 +610,6 @@
                     <div id="agentJobActions" class="mt-4 pt-3 border-top agent-job-actions" style="display: none;">
                         <div class="row">
                             <div class="col-md-6">
-                                <button type="button" class="btn btn-outline-secondary me-2" onclick="validateAgentJob()">
-                                    <i class="fas fa-check me-1"></i>Validate Configuration
-                                </button>
-                                <button type="button" class="btn btn-outline-info me-2" onclick="previewAgentYAML()">
-                                    <i class="fas fa-eye me-1"></i>Preview YAML
-                                </button>
                                 <a href="/agents" class="btn btn-outline-success" target="_blank">
                                     <i class="fas fa-server me-1"></i>Manage Agents
                                 </a>
@@ -1661,47 +1655,84 @@ finally {
         }
     }
     
-    // Create agent job
+    // Create agent job (with integrated validation)
     function createAgentJob() {
-        if (!validateAgentJob()) {
+        // Integrated validation before creating job
+        const form = document.getElementById('createJobForm');
+        const formData = new FormData(form);
+        
+        // Basic validation
+        if (!formData.get('name')) {
+            showError('Job name is required');
             return;
         }
         
-        const formData = new FormData(document.getElementById('createJobForm'));
-        const jobData = {
-            type: 'agent',
+        if (!formData.get('agent_pool')) {
+            showError('Agent pool selection is required');
+            return;
+        }
+        
+        const jobSteps = document.getElementById('agentJobSteps').value.trim(); // Fixed: correct ID
+        if (!jobSteps) {
+            showError('Job steps YAML is required');
+            return;
+        }
+        
+        // Validate YAML syntax
+        try {
+            // Basic YAML validation (check for common issues)
+            if (!jobSteps.includes('steps:') && !jobSteps.includes('- name:')) {
+                throw new Error('Job steps should contain "steps:" section with step definitions');
+            }
+        } catch (error) {
+            showError('Invalid YAML syntax in job steps: ' + error.message);
+            return;
+        }
+        
+        // Strategy-specific validation
+        const strategy = formData.get('execution_strategy');
+        if (strategy === 'multi_configuration') {
+            const configs = formData.get('configurations');
+            if (configs) {
+                try {
+                    const configArray = JSON.parse(configs);
+                    if (!Array.isArray(configArray) || configArray.length === 0) {
+                        throw new Error('Configurations must be a non-empty array');
+                    }
+                } catch (error) {
+                    showError('Invalid configurations JSON: ' + error.message);
+                    return;
+                }
+            }
+        } else if (strategy === 'multi_agent') {
+            const agentCount = parseInt(formData.get('agent_count'));
+            if (isNaN(agentCount) || agentCount < 2 || agentCount > 20) {
+                showError('Agent count must be between 2 and 20 for multi-agent execution');
+                return;
+            }
+        }
+        
+        // Show validation success message
+        showSuccess('Agent job configuration validated successfully!');
+        
+        // Validation passed - proceed with job creation
+        setTimeout(() => {
+            // Use the existing formData from validation
+            const jobData = {
+                type: 'agent_job',
             name: formData.get('name'),
             description: formData.get('description'),
             enabled: formData.get('enabled') === 'true',
             timeout: parseInt(formData.get('timeout')) || 300,
             max_retries: parseInt(formData.get('max_retries')) || 3,
             retry_delay: parseInt(formData.get('retry_delay')) || 60,
-            run_as: formData.get('run_as')
-        };
-        
-        // Agent-specific configuration
-        jobData.agent_config = {
+            // Agent-specific fields (flattened to match backend expectations)
             agent_pool: formData.get('agent_pool'),
-            execution_strategy: formData.get('execution_strategy') || 'default_pool',
+            execution_strategy: formData.get('execution_strategy') || 'default_pool', 
+            job_steps: document.getElementById('agentJobSteps').value,  // Fixed: correct ID
             agent_capabilities: formData.get('agent_capabilities') ? 
-                formData.get('agent_capabilities').split(',').map(s => s.trim()) : [],
-            job_steps: document.getElementById('jobStepsYaml').value,
-            environment_variables: formData.get('environment_variables') ? 
-                JSON.parse(formData.get('environment_variables')) : {},
-            working_directory: formData.get('working_directory'),
-            isolation_mode: formData.get('isolation_mode') || 'process'
+                formData.get('agent_capabilities').split(',').map(s => s.trim()) : []
         };
-        
-        // Handle execution strategy specific options
-        if (jobData.agent_config.execution_strategy === 'multi_configuration') {
-            jobData.agent_config.configurations = formData.get('configurations') ? 
-                JSON.parse(formData.get('configurations')) : [];
-            jobData.agent_config.max_parallel = parseInt(formData.get('max_parallel_configs')) || 4;
-        } else if (jobData.agent_config.execution_strategy === 'multi_agent') {
-            jobData.agent_config.agent_count = parseInt(formData.get('agent_count')) || 2;
-            jobData.agent_config.max_parallel = parseInt(formData.get('max_parallel_agents')) || 4;
-            jobData.agent_config.failure_threshold = parseInt(formData.get('failure_threshold')) || 50;
-        }
         
         // Handle scheduling
         const enableSchedule = document.getElementById('enableSchedule').checked;
@@ -1751,13 +1782,17 @@ finally {
             }
         }
         
-        // Show preview
-        const jsonConfig = JSON.stringify(jobData, null, 2);
-        const confirmed = confirm(`Agent Job Configuration:\n\n${jsonConfig}\n\nDo you want to create this agent job?`);
+        // Simple confirmation for YAML-focused approach
+        const yamlContent = document.getElementById('agentJobSteps').value.trim();
+        const jobName = jobData.name || 'Unnamed Job';
+        const agentPool = jobData.agent_pool || 'default';
+        
+        const confirmed = confirm(`Create Agent Job?\n\nJob Name: ${jobName}\nAgent Pool: ${agentPool}\nExecution Strategy: ${jobData.execution_strategy}\n\nThis will create an agent job with the YAML configuration you provided.\n\nProceed?`);
         
         if (confirmed) {
             submitAgentJob(jobData);
         }
+        }, 1000); // End setTimeout - brief delay to show validation success
     }
     
     // Submit agent job to API
@@ -1789,89 +1824,7 @@ finally {
         });
     }
     
-    // Validate agent job configuration
-    function validateAgentJob() {
-        const form = document.getElementById('createJobForm');
-        const formData = new FormData(form);
-        
-        // Basic validation
-        if (!formData.get('name')) {
-            showError('Job name is required');
-            return false;
-        }
-        
-        if (!formData.get('agent_pool')) {
-            showError('Agent pool selection is required');
-            return false;
-        }
-        
-        const jobSteps = document.getElementById('jobStepsYaml').value.trim();
-        if (!jobSteps) {
-            showError('Job steps YAML is required');
-            return false;
-        }
-        
-        // Validate YAML syntax
-        try {
-            // Basic YAML validation (check for common issues)
-            if (!jobSteps.includes('steps:') && !jobSteps.includes('- name:')) {
-                throw new Error('Job steps should contain "steps:" section with step definitions');
-            }
-        } catch (error) {
-            showError('Invalid YAML syntax in job steps: ' + error.message);
-            return false;
-        }
-        
-        // Strategy-specific validation
-        const strategy = formData.get('execution_strategy');
-        if (strategy === 'multi_configuration') {
-            const configs = formData.get('configurations');
-            if (configs) {
-                try {
-                    const configArray = JSON.parse(configs);
-                    if (!Array.isArray(configArray) || configArray.length === 0) {
-                        throw new Error('Configurations must be a non-empty array');
-                    }
-                } catch (error) {
-                    showError('Invalid configurations JSON: ' + error.message);
-                    return false;
-                }
-            }
-        } else if (strategy === 'multi_agent') {
-            const agentCount = parseInt(formData.get('agent_count'));
-            if (isNaN(agentCount) || agentCount < 2 || agentCount > 20) {
-                showError('Agent count must be between 2 and 20 for multi-agent execution');
-                return false;
-            }
-        }
-        
-        showSuccess('Agent job configuration is valid');
-        return true;
-    }
     
-    // Preview agent job configuration
-    function previewAgentJob() {
-        if (!validateAgentJob()) {
-            return;
-        }
-        
-        const formData = new FormData(document.getElementById('createJobForm'));
-        const jobData = {
-            type: 'agent',
-            name: formData.get('name'),
-            description: formData.get('description'),
-            enabled: formData.get('enabled') === 'true',
-            timeout: parseInt(formData.get('timeout')) || 300,
-            agent_pool: formData.get('agent_pool'),
-            execution_strategy: formData.get('execution_strategy'),
-            job_steps: document.getElementById('jobStepsYaml').value,
-            agent_capabilities: formData.get('agent_capabilities') ? 
-                formData.get('agent_capabilities').split(',').map(s => s.trim()) : []
-        };
-        
-        const jsonConfig = JSON.stringify(jobData, null, 2);
-        alert(`Agent Job Preview:\n\n${jsonConfig}`);
-    }
     
     // Update selectJobType function to handle agent jobs
     const originalSelectJobType = selectJobType;

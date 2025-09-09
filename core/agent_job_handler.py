@@ -6,9 +6,10 @@ Handles job assignment to agents and execution tracking
 import uuid
 import json
 import yaml
+import requests
 from datetime import datetime
 from typing import Dict, Any, Optional, List
-from database.agent_models import AgentManager, get_agent_session
+from database.agent_models import AgentManager, get_agent_session, AgentRegistry
 from database.sqlalchemy_models import (
     JobConfigurationV2, JobExecutionHistoryV2, 
     get_db_session
@@ -328,6 +329,226 @@ class AgentJobHandler:
                 operation="retry_queued_jobs",
                 error=str(e)
             )
+            session.rollback()
+        finally:
+            session.close()
+        
+        return assigned_count
+    
+    def push_job_to_passive_agent(self, agent_id: str, job_id: str, 
+                                  execution_id: str, job_yaml: str) -> bool:
+        """
+        Push a job to a passive agent via HTTP POST
+        Returns True if successful, False otherwise
+        """
+        agent_session = get_agent_session()
+        try:
+            # Get agent details
+            agent = agent_session.query(AgentRegistry).filter_by(agent_id=agent_id).first()
+            if not agent:
+                self.logger.error(f"Agent {agent_id} not found")
+                return False
+            
+            # Build agent endpoint URL
+            agent_endpoint = None
+            if agent.ip_address and agent.agent_port:
+                agent_endpoint = f"http://{agent.ip_address}:{agent.agent_port}"
+            elif hasattr(agent, 'agent_endpoint') and agent.agent_endpoint:
+                agent_endpoint = agent.agent_endpoint
+            
+            if not agent_endpoint:
+                self.logger.error(f"No endpoint found for agent {agent_id}")
+                return False
+            
+            # Get job details
+            session = get_db_session()
+            job = session.query(JobConfigurationV2).filter_by(job_id=job_id).first()
+            if not job:
+                self.logger.error(f"Job {job_id} not found")
+                session.close()
+                return False
+            
+            # Prepare job assignment data
+            assignment_data = {
+                'execution_id': execution_id,
+                'job_id': job_id,
+                'job_name': job.name,
+                'job_yaml': job_yaml or job.yaml_configuration
+            }
+            
+            # Send job to passive agent
+            try:
+                response = requests.post(
+                    f"{agent_endpoint}/api/job/assign",
+                    json=assignment_data,
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('success'):
+                        self.logger.info(f"Successfully pushed job {job_id} to passive agent {agent_id}")
+                        agent_logger.log_job_assignment(
+                            job_id=job_id,
+                            execution_id=execution_id,
+                            agent_id=agent_id,
+                            assignment_id=execution_id,  # Use execution_id as assignment_id for passive agents
+                            pool_id=agent.agent_pool
+                        )
+                        return True
+                    else:
+                        self.logger.error(f"Agent {agent_id} rejected job: {result.get('error')}")
+                        return False
+                else:
+                    self.logger.error(f"Failed to push job to agent {agent_id}: HTTP {response.status_code}")
+                    return False
+                    
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Failed to connect to passive agent {agent_id}: {e}")
+                return False
+            finally:
+                session.close()
+                
+        except Exception as e:
+            self.logger.error(f"Error pushing job to passive agent {agent_id}: {e}")
+            return False
+        finally:
+            agent_session.close()
+    
+    def assign_job_to_passive_agent(self, job_id: str, execution_id: str,
+                                   pool_id: str = None) -> Optional[str]:
+        """
+        Assign a job to a passive agent and push it via HTTP
+        Returns assignment_id if successful, None otherwise
+        """
+        session = get_db_session()
+        agent_session = get_agent_session()
+        try:
+            # Get job configuration
+            job = session.query(JobConfigurationV2).filter_by(job_id=job_id).first()
+            if not job:
+                logger.error(f"Job {job_id} not found")
+                return None
+            
+            # Parse configuration
+            parsed = self.parse_job_configuration(job.yaml_configuration)
+            config = parsed['config']
+            
+            # Determine agent pool
+            if not pool_id:
+                pool_id = parsed['agent_pool']
+                if hasattr(job, 'preferred_agent_pool') and job.preferred_agent_pool:
+                    pool_id = job.preferred_agent_pool
+            
+            # Find available passive agent
+            query = agent_session.query(AgentRegistry).filter(
+                AgentRegistry.agent_pool == pool_id,
+                AgentRegistry.is_active == True,
+                AgentRegistry.is_approved == True,
+                AgentRegistry.status == 'online'
+            )
+            
+            # Filter for passive agents (those with ip_address and agent_port)
+            agents = query.all()
+            passive_agent = None
+            
+            for agent in agents:
+                # Check if this is a passive agent
+                if agent.ip_address and agent.agent_port:
+                    # Check if agent has capacity
+                    if hasattr(agent, 'current_jobs') and hasattr(agent, 'max_parallel_jobs'):
+                        if agent.current_jobs < agent.max_parallel_jobs:
+                            passive_agent = agent
+                            break
+                    else:
+                        passive_agent = agent
+                        break
+            
+            if not passive_agent:
+                self.logger.warning(f"No available passive agent in pool '{pool_id}' for job {job_id}")
+                return None
+            
+            # Push job to passive agent
+            if self.push_job_to_passive_agent(
+                agent_id=passive_agent.agent_id,
+                job_id=job_id,
+                execution_id=execution_id,
+                job_yaml=job.yaml_configuration
+            ):
+                # Create assignment record
+                from database.agent_models import AgentJobAssignment
+                assignment = AgentJobAssignment(
+                    assignment_id=str(uuid.uuid4()),
+                    execution_id=execution_id,
+                    job_id=job_id,
+                    agent_id=passive_agent.agent_id,
+                    pool_id=pool_id,
+                    assignment_status='assigned',
+                    assigned_at=datetime.utcnow()
+                )
+                agent_session.add(assignment)
+                agent_session.commit()
+                
+                # Update execution history
+                execution = session.query(JobExecutionHistoryV2).filter_by(
+                    execution_id=execution_id
+                ).first()
+                
+                if execution:
+                    execution.status = 'assigned'
+                    execution.executed_on_agent = passive_agent.agent_id
+                    execution.assignment_id = assignment.assignment_id
+                    session.commit()
+                
+                return assignment.assignment_id
+            else:
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error assigning job {job_id} to passive agent: {e}")
+            session.rollback()
+            agent_session.rollback()
+            return None
+        finally:
+            session.close()
+            agent_session.close()
+    
+    def process_queued_jobs_for_passive_agents(self) -> int:
+        """
+        Process queued jobs and try to assign them to passive agents
+        Returns number of jobs assigned
+        """
+        session = get_db_session()
+        assigned_count = 0
+        
+        try:
+            # Find queued executions for passive agent pools
+            queued = session.query(JobExecutionHistoryV2).filter_by(
+                status='queued'
+            ).all()
+            
+            for execution in queued:
+                # Check if this is for a passive agent pool
+                if 'Paasive Agent Pool' in execution.executed_by or 'passive' in execution.executed_by.lower():
+                    # Extract pool name from executed_by field
+                    pool_id = execution.executed_by.replace('queued_for_', '').replace('_pool', '')
+                    
+                    # Try to assign to passive agent
+                    assignment_id = self.assign_job_to_passive_agent(
+                        job_id=execution.job_id,
+                        execution_id=execution.execution_id,
+                        pool_id=pool_id
+                    )
+                    
+                    if assignment_id:
+                        assigned_count += 1
+                        self.logger.info(f"Assigned queued job {execution.job_id} to passive agent")
+            
+            if assigned_count > 0:
+                session.commit()
+                
+        except Exception as e:
+            self.logger.error(f"Error processing queued jobs for passive agents: {e}")
             session.rollback()
         finally:
             session.close()

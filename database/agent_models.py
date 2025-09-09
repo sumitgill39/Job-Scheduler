@@ -25,6 +25,10 @@ class AgentRegistry(Base):
     hostname = Column(String(255), nullable=False)
     ip_address = Column(String(50), nullable=False)
     
+    # Passive agent connection info
+    agent_port = Column(Integer, nullable=True)  # Port for passive agents
+    agent_endpoint = Column(String(255), nullable=True)  # Full endpoint URL for passive agents
+    
     # Agent capabilities and pool assignment
     agent_pool = Column(String(100), default='default')
     capabilities = Column(Text)  # JSON array of capabilities
@@ -76,6 +80,8 @@ class AgentRegistry(Base):
             'agent_name': self.agent_name,
             'hostname': self.hostname,
             'ip_address': self.ip_address,
+            'agent_port': self.agent_port,
+            'agent_endpoint': self.agent_endpoint,
             'agent_pool': self.agent_pool,
             'capabilities': json.loads(self.capabilities) if self.capabilities else [],
             'max_parallel_jobs': self.max_parallel_jobs,
@@ -140,6 +146,7 @@ class AgentJobAssignment(Base):
     agent_id = Column(String(50), ForeignKey('agent_registry.agent_id', ondelete='SET NULL'))
     
     # Assignment details
+    pool_id = Column(String(100))  # Agent pool ID
     assignment_type = Column(String(20), default='local')  # local, agent
     assignment_strategy = Column(String(50))  # default_pool, specific_agent
     
@@ -180,6 +187,7 @@ class AgentJobAssignment(Base):
             'execution_id': self.execution_id,
             'job_id': self.job_id,
             'agent_id': self.agent_id,
+            'pool_id': self.pool_id,
             'assignment_type': self.assignment_type,
             'assignment_strategy': self.assignment_strategy,
             'assignment_status': self.assignment_status,
@@ -372,6 +380,7 @@ class AgentManager:
                 execution_id=execution_id,
                 job_id=job_id,
                 agent_id=agent_id,
+                pool_id=pool_id,
                 assignment_type='agent',
                 assignment_strategy='default_pool'
             )
